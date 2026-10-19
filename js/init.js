@@ -14,11 +14,10 @@ try{
   if(savedLayout==='sidebar'||savedLayout==='compact')layoutMode=savedLayout;
   const savedTheme=localStorage.getItem(THEME_KEY);
   if(savedTheme==='dark')themeMode='dark';
-  if(localStorage.getItem(ZEN_KEY)==='1')zenMode=true;
+  // ★ 核心修改：删除了读取 ZEN_KEY 的逻辑，强制刷新后不进入极简模式
 }catch(e){}
 applyLayout();
 setTheme(themeMode);
-if(zenMode)document.body.classList.add('zen-mode');
 
 loadSettings();
 loadStore();

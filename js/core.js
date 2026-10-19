@@ -40,7 +40,7 @@ const DEFAULT_SETTINGS={
   zenFontSize:'normal',
   uiStyle:'modern',
   focusModeCat:'收件箱',
-  saveShortcut:'ctrl-enter' // ★ 新增：保存快捷键，'ctrl-enter' 或 'enter'
+  saveShortcut:'ctrl-enter' // 'ctrl-enter' 或 'enter'
 };
 
 const PALETTE=[
@@ -170,8 +170,9 @@ function toast(msg){
   toastTimer=setTimeout(()=>el.classList.remove('show'),2400);
 }
 
+// ★ 核心修改：复制时自动去除高亮符号
 function copyText(text,source){
-  let finalText=text;
+  let finalText=String(text||'').replace(/[【】]|\*\*|==/g, '');
   if(db.settings.copyWithSource&&source)finalText+='\n—— '+source;
   if(navigator.clipboard&&window.isSecureContext){
     navigator.clipboard.writeText(finalText).then(()=>toast('已复制')).catch(()=>fallbackCopy(finalText));
@@ -275,11 +276,9 @@ function applySettingsToUI(){
   if(srcGroup) srcGroup.style.display = s.sidebarShowSrc !== false ? '' : 'none';
   if(tagGroup) tagGroup.style.display = s.sidebarShowTag !== false ? '' : 'none';
 
-  // ★ 动态更新 Placeholder 提示
   if(inputEl) {
     const hint = s.saveShortcut === 'enter' ? '（Enter 保存，Shift+Enter 换行）' : '（Ctrl+Enter 保存）';
     const basePlaceholder = s.inputPlaceholder || '粘贴句子、段落。用【文字】可高亮。可直接粘贴图片。';
-    // 替换掉原本的快捷提示，防止重复拼接
     inputEl.placeholder = basePlaceholder.replace(/（.*?保存.*?）/g, '') + hint + '。用【文字】可高亮。可直接粘贴图片。';
   }
   

@@ -10,10 +10,32 @@ body.zen-mode .page-head,body.zen-mode .hitokoto-box,body.zen-mode .composer,
 body.zen-mode .cat-manager,body.zen-mode .tabs-row,body.zen-mode .toolbar,
 body.zen-mode .pagination,body.zen-mode .batch-bar,body.zen-mode .sidebar-footer{display:none!important}
 body.zen-mode .main{margin-right:0!important}
-body.zen-mode .main-inner{max-width:680px;padding:72px 28px 140px}
 
-/* 极简栏居中 */
-body.zen-mode .zen-bar{display:flex;justify-content:center;align-items:center;gap:12px;overflow-x:auto;padding:0 0 22px;margin-bottom:6px;scrollbar-width:none;-ms-overflow-style:none;position:relative}
+/* 缩减顶部 padding，让吸顶导航紧贴顶部 */
+body.zen-mode .main-inner{max-width:680px;padding:20px 28px 140px}
+
+/* ★ 核心修改：极简栏吸顶 + 毛玻璃效果 */
+body.zen-mode .zen-bar{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:12px;
+  overflow-x:auto;
+  position:sticky;
+  top:0;
+  z-index:100;
+  background:rgba(251,251,249,.85);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  padding:24px 0 16px;
+  margin-bottom:10px;
+  border-bottom:1px solid var(--line);
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+[data-theme="dark"] body.zen-mode .zen-bar {
+  background:rgba(13,14,19,.85);
+}
 body.zen-mode .zen-bar::-webkit-scrollbar{display:none}
 
 body.zen-mode .zen-bar .zb{padding:6px 16px;border-radius:999px;font-size:13.5px;color:var(--text-3);white-space:nowrap;transition:all .15s;cursor:pointer;border:1px solid transparent;flex:none;user-select:none;background:var(--card)}
@@ -44,12 +66,18 @@ body.zen-mode #zenFilterPanel {
 body.zen-mode .card{border:none;box-shadow:none;background:transparent;padding:0;margin-bottom:0;display:block;animation:none;transform:none!important;border-radius:0}
 body.zen-mode .card::before{display:none}
 body.zen-mode .card-top,body.zen-mode .ops,body.zen-mode .expand-btn,body.zen-mode .card-check,body.zen-mode .card-imgs{display:none!important}
-body.zen-mode .content{font-size:18px;line-height:2;letter-spacing:.02em;color:var(--text);max-height:none!important;overflow:visible;padding:24px 0;cursor:pointer;border-bottom:1px solid var(--line);position:relative}
+body.zen-mode .content{font-size:18px;line-height:2;letter-spacing:.02em;color:var(--text);max-height:none!important;overflow:visible;padding:24px 0;cursor:pointer;border-bottom:1px solid var(--line);position:relative;transition:background .2s;}
 body.zen-mode .content::before{content:'';position:absolute;left:0;top:0;width:28px;height:2px;background:linear-gradient(90deg,#6366f1,#8b5cf6);opacity:.5}
 body.zen-mode .card:first-child .content{padding-top:12px}
 body.zen-mode .content.collapsed::after{display:none}
 body.zen-mode .zen-exit{display:flex}
 body.zen-mode .empty{padding:40px 0}
+
+/* ★ 新增：点击复制时的视觉反馈 */
+body.zen-mode .content:active {
+  background: var(--accent-soft);
+  border-radius: 8px;
+}
 
 body.zen-font-large .content { font-size: 21px !important; }
 body.zen-font-xlarge .content { font-size: 24px !important; }
