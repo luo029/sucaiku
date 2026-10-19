@@ -2,9 +2,9 @@
 
 // 🌟 你的公开数据源配置
 const PUBLIC_OWNER = 'luo029';          
-const PUBLIC_REPO = 'sucaiku';          
+const PUBLIC_REPO = 'sucaiku_data';          
 const PUBLIC_IMG_REPO = 'sucaiku_pictures'; 
-const PUBLIC_PATH = 'data/material-library.json'; 
+const PUBLIC_PATH = 'material-library.json'; 
 
 (async function initApp(){
   try {

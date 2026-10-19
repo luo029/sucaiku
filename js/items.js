@@ -157,15 +157,11 @@ function addOrUpdate(){
   if (wasEditingId) {
     const focusCat = db.settings.focusModeCat || '收件箱';
     
-    // 只要在队列中还能找到一个真正存在的素材
     while (zenQueue.length > 0) {
       const nextId = zenQueue.shift();
       const candidate = db.items.find(i => i.id === nextId);
       
-      // 必须存在，且当前分类还是收件箱（防止被用户中途改走）
       if (candidate && (candidate.type === focusCat || candidate.type === '收件箱')) {
-        
-        // 强行清空搜索框和分类限制，确保跳过去后界面能看到它
         keyword = '';
         if (searchEl) searchEl.value = '';
         currentType = '全部'; 
@@ -178,13 +174,11 @@ function addOrUpdate(){
       }
     }
     
-    // 队列空了，说明整个收件箱的待处理任务都做完了
     cancelEdit();
     toast('该分类已全部整理完毕');
     return;
   }
 
-  // 普通新增，退出编辑
   cancelEdit();
   toast('已加入素材库');
   currentPage=1;
@@ -195,20 +189,17 @@ function startEdit(id){
   const item=db.items.find(i=>i.id===id);
   if(!item)return;
   
-  // ★ 核心突破：如果是手动点击“编辑”进入，就创建一个全新的待办队列
   if (editingId !== id) {
     zenQueue = [];
     const focusCat = db.settings.focusModeCat || '收件箱';
     if (item.type === focusCat || item.type === '收件箱') {
-      // 获取全库所有同类素材，按时间倒序（跟界面一致）
       const sameCats = db.items
         .filter(i => i.type === focusCat || i.type === '收件箱')
-        .sort((a,b) => b.createdAt - a.createdAt) // 新的在前
+        .sort((a,b) => b.createdAt - a.createdAt)
         .map(i => i.id);
         
       const idx = sameCats.indexOf(id);
       if (idx !== -1) {
-        // 把它后面的所有项放入队列，再把它前面的所有项也放入队列（这样无论点哪，都能一路走到黑）
         zenQueue = sameCats.slice(idx + 1).concat(sameCats.slice(0, idx));
       }
     }
@@ -227,7 +218,7 @@ function startEdit(id){
 }
 function cancelEdit(){
   editingId=null;
-  zenQueue = []; // 取消时清空队列
+  zenQueue = [];
   addBtn.textContent='保存';cancelBtn.style.display='none';
   inputEl.value='';
   tagsEl.value=db.fixedTags.length?db.fixedTags.join(', '):'';
@@ -272,22 +263,15 @@ function delCat(idx){
 }
 
 /* =========================================================
-   拖拽移动分类
+   拖拽移动分类（★ 优化：事件委托，只绑一次，不再随 render 重复绑定）
    ========================================================= */
 function bindDragEvents(){
-  const cards=listEl.querySelectorAll('.card');
-  cards.forEach(card=>{
-    card.addEventListener('dragstart',e=>{
-      if(selectMode||zenMode){e.preventDefault();return;}
-      draggedItemId=card.dataset.id;
-      e.dataTransfer.effectAllowed='move';
-      e.dataTransfer.setData('text/plain',draggedItemId);
-      setTimeout(()=>card.style.opacity='0.4',0);
-    });
-    card.addEventListener('dragend',()=>{card.style.opacity='1';draggedItemId=null;});
-  });
+  // ★ 空实现：真正的绑定在 setupDropZones 里对 #list 做事件委托
+  // 保留此函数是为了兼容 render.js 里的调用，避免 ReferenceError
 }
+
 function setupDropZones(){
+  // 侧栏分类导航（容器级绑定，只绑一次）
   $('catNav').addEventListener('dragover',e=>{
     const target=e.target.closest('.nav-item[data-type]');
     if(target){e.preventDefault();target.classList.add('drag-over');}
@@ -300,7 +284,24 @@ function setupDropZones(){
     const target=e.target.closest('.nav-item[data-type]');
     if(target&&draggedItemId){e.preventDefault();target.classList.remove('drag-over');moveItemCategory(draggedItemId,target.dataset.type);}
   });
+
+  // ★ 卡片拖拽（事件委托到 #list，只绑一次，跟 render 频率无关）
+  listEl.addEventListener('dragstart',e=>{
+    if(selectMode||zenMode){e.preventDefault();return;}
+    const card=e.target.closest('.card');
+    if(!card)return;
+    draggedItemId=card.dataset.id;
+    e.dataTransfer.effectAllowed='move';
+    e.dataTransfer.setData('text/plain',draggedItemId);
+    setTimeout(()=>card.style.opacity='0.4',0);
+  });
+  listEl.addEventListener('dragend',e=>{
+    const card=e.target.closest('.card');
+    if(card)card.style.opacity='1';
+    draggedItemId=null;
+  });
 }
+
 function moveItemCategory(itemId,newType){
   const item=db.items.find(i=>i.id===itemId);
   if(item&&item.type!==newType){

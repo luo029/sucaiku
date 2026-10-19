@@ -11,7 +11,7 @@ function render(){
   if(!allTypes.has(currentType))currentType='全部';
 
   renderSidebar();renderTags();renderSourceFilter();renderHeader();renderList();
-  renderCatFilter(); // 渲染新的分类下拉
+  renderCatFilter();
   refreshTypeSelect();updateSourcePickerUI();updateTagPickerUI();
   if(!catManager.hidden)renderCatManager();
 }
@@ -151,7 +151,7 @@ function renderTags(){
   }
 }
 
-// ★ 新增：全部分类下拉的渲染
+/* ★ 修复：分类下拉列表去重，避免 IMG_TYPE / UNCAT 重复出现 */
 function renderCatFilter(){
   if ($('catFilterText')) {
     $('catFilterText').textContent = currentType === '全部' ? '全部分类' : currentType;
@@ -171,10 +171,11 @@ function renderCatFilterList() {
   const catCounts={};
   db.items.forEach(i=>catCounts[i.type]=(catCounts[i.type]||0)+1);
   
-  const allCats = ['全部', IMG_TYPE, ...db.cats];
-  if((catCounts[UNCAT]||0)>0) allCats.push(UNCAT);
-
-  let list = allCats.filter(c => (catCounts[c]||0) > 0 || c === '全部' || c === IMG_TYPE);
+  // ★ 用 Set 去重
+  const catSet = new Set(['全部', IMG_TYPE, ...db.cats]);
+  if ((catCounts[UNCAT]||0) > 0) catSet.add(UNCAT);
+  
+  let list = [...catSet].filter(c => (catCounts[c]||0) > 0 || c === '全部' || c === IMG_TYPE);
   if (q) list = list.filter(s => s.toLowerCase().includes(q));
 
   let html = `<div class="sp-item ${currentType === '全部' ? 'sp-selected' : ''}" data-pick="__all__">
@@ -353,7 +354,7 @@ function renderList(){
 
   renderPagination(total,totalPages,start,pageItems.length);
   updateBatchBar(pageItems);
-  bindDragEvents();
+  // ★ 删除了 bindDragEvents() 调用（现在是事件委托，不需要每次重绑）
 }
 
 function renderPagination(total,totalPages,start,pageCount){

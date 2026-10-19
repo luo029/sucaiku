@@ -1,4 +1,4 @@
-/* js / images.js · 图片压缩 / 上传流程 / 瀑布流浏览 */
+/* js / images.js · 图片压缩 / 上传流程 / 瀑布流浏览（分批加载） */
 /* =========================================================
    图片压缩
    ========================================================= */
@@ -51,13 +51,10 @@ function canvasCompress(file,maxDim=1920,quality=0.85){
       const longSide  = Math.max(origW, origH);
       const aspect    = longSide / shortSide;
 
-      // 长宽比 >= 2 视为长图，走「保清晰」策略
       const isLongImage = aspect >= 2;
-
       let scale = 1;
 
       if (isLongImage) {
-        // 长图：短边不低于 720，长边不超过 12000，总像素不超过 12MP
         const SHORT_MIN  = 720;
         const LONG_MAX   = 12000;
         const MAX_PIXELS = 12 * 1000 * 1000;
@@ -68,14 +65,12 @@ function canvasCompress(file,maxDim=1920,quality=0.85){
         if (origW * origH * scale * scale > MAX_PIXELS) {
           scale = Math.min(scale, Math.sqrt(MAX_PIXELS / (origW * origH)));
         }
-        // 短边保底（仅当原图短边本身够大时才触发）
         if (shortSide >= SHORT_MIN && shortSide * scale < SHORT_MIN) {
           const minScaleForShort = SHORT_MIN / shortSide;
           const maxScaleForLong  = longSide > LONG_MAX ? LONG_MAX / longSide : 1;
           scale = Math.min(minScaleForShort, maxScaleForLong);
         }
       } else {
-        // 普通图：最长边不超过 maxDim（保持原逻辑）
         if (longSide > maxDim) {
           scale = maxDim / longSide;
         }
@@ -135,7 +130,6 @@ async function compressImage(file,onProgress){
       toast('TinyPNG 未配置 Key 或代理，改用本地压缩');
     }
   }
-  // fallback to local
   onProgress && onProgress('本地压缩中…');
   try { return await canvasCompress(file); }
   catch (err) {
@@ -266,8 +260,13 @@ async function startUploadPending(){
 }
 
 /* =========================================================
-   图片浏览（瀑布流）
+   图片浏览（瀑布流）· 分批加载
    ========================================================= */
+const IMG_VIEW_BATCH_SIZE = 60;
+let _imgViewFiltered = [];
+let _imgViewRendered = 0;
+let _imgViewObserver = null;
+
 function collectAllImages(){
   const arr=[];
   db.items.forEach(item=>{
@@ -285,6 +284,57 @@ function collectAllImages(){
   return arr;
 }
 
+function _renderMasonryBatch(){
+  if (_imgViewRendered >= _imgViewFiltered.length) {
+    if (_imgViewObserver) {
+      _imgViewObserver.disconnect();
+      _imgViewObserver = null;
+    }
+    const sentinel = document.getElementById('imgMasonrySentinel');
+    if (sentinel) sentinel.style.display = 'none';
+    return;
+  }
+  const next = _imgViewFiltered.slice(_imgViewRendered, _imgViewRendered + IMG_VIEW_BATCH_SIZE);
+  const html = next.map(x => {
+    const cap = (x.itemText || '').slice(0, 40);
+    return `<div class="mi">
+      <img src="${esc(x.src)}" alt="" loading="lazy" data-open-img="${esc(x.src)}" data-img-path="${esc(x.path)}">
+      <span class="mi-cat">${esc(x.cat)}</span>
+      ${cap ? `<div class="mi-cap">${esc(cap)}${x.itemText.length > 40 ? '…' : ''}</div>` : ''}
+    </div>`;
+  }).join('');
+  $('imgMasonry').insertAdjacentHTML('beforeend', html);
+  _imgViewRendered += next.length;
+
+  // 如果第一批还没填满一屏，继续加
+  const wrap = document.querySelector('.img-masonry-wrap');
+  if (wrap && _imgViewRendered < _imgViewFiltered.length && wrap.scrollHeight <= wrap.clientHeight) {
+    _renderMasonryBatch();
+  }
+}
+
+function _setupMasonryObserver(){
+  if (_imgViewObserver) _imgViewObserver.disconnect();
+
+  let sentinel = document.getElementById('imgMasonrySentinel');
+  if (!sentinel) {
+    sentinel = document.createElement('div');
+    sentinel.id = 'imgMasonrySentinel';
+    sentinel.style.cssText = 'height:1px;width:100%;';
+    document.querySelector('.img-masonry-wrap').appendChild(sentinel);
+  }
+  sentinel.style.display = 'block';
+
+  const wrap = document.querySelector('.img-masonry-wrap');
+  _imgViewObserver = new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting) {
+      _renderMasonryBatch();
+    }
+  }, { root: wrap, rootMargin: '300px' });
+
+  _imgViewObserver.observe(sentinel);
+}
+
 function renderImgView(){
   const all=collectAllImages();
   const counts={};
@@ -297,21 +347,22 @@ function renderImgView(){
     return `<div class="ic-tab ${currentImgViewCat===c?'active':''}" data-ic="${esc(c)}">${esc(c)}<span class="n">${n}</span></div>`;
   }).join('');
 
-  const filtered=currentImgViewCat==='全部'?all:all.filter(x=>x.cat===currentImgViewCat);
-  $('imgViewCount').textContent=`${filtered.length} 张`;
+  const filtered = currentImgViewCat === '全部' ? all : all.filter(x => x.cat === currentImgViewCat);
+  $('imgViewCount').textContent = `${filtered.length} 张`;
 
   if(!filtered.length){
-    $('imgMasonry').innerHTML=`<div class="img-view-empty">还没有图片</div>`;
+    $('imgMasonry').innerHTML = `<div class="img-view-empty">还没有图片</div>`;
+    const s = document.getElementById('imgMasonrySentinel');
+    if (s) s.style.display = 'none';
+    if (_imgViewObserver) { _imgViewObserver.disconnect(); _imgViewObserver = null; }
     return;
   }
-  $('imgMasonry').innerHTML=filtered.map(x=>{
-    const cap=(x.itemText||'').slice(0,40);
-    return `<div class="mi">
-      <img src="${esc(x.src)}" alt="" loading="lazy" data-open-img="${esc(x.src)}" data-img-path="${esc(x.path)}">
-      <span class="mi-cat">${esc(x.cat)}</span>
-      ${cap?`<div class="mi-cap">${esc(cap)}${x.itemText.length>40?'…':''}</div>`:''}
-    </div>`;
-  }).join('');
+
+  _imgViewFiltered = filtered;
+  _imgViewRendered = 0;
+  $('imgMasonry').innerHTML = '';
+  _renderMasonryBatch();
+  _setupMasonryObserver();
 }
 
 function openImgView(){
@@ -319,8 +370,13 @@ function openImgView(){
   renderImgView();
   $('imgView').hidden=false;
   document.body.style.overflow='hidden';
+  // 重置滚动位置
+  const wrap = document.querySelector('.img-masonry-wrap');
+  if (wrap) wrap.scrollTop = 0;
 }
+
 function closeImgView(){
   $('imgView').hidden=true;
   document.body.style.overflow='';
+  if (_imgViewObserver) { _imgViewObserver.disconnect(); _imgViewObserver = null; }
 }

@@ -1,6 +1,7 @@
 /* js / tools.js · 辅助功能：去重 / 统计 / 健康检查 */
+
 /* =========================================================
-   去重
+   字符串相似度（保留原算法）
    ========================================================= */
 function calculateSimilarity(str1,str2){
   if(!str1||!str2)return 0;
@@ -16,37 +17,118 @@ function calculateSimilarity(str1,str2){
   const union=set1.size+set2.size-intersection;
   return intersection/union;
 }
+
+/* =========================================================
+   去重（★ 优化：长度分桶 + 完全重复 Map + 结果上限）
+   ---------------------------------------------------------
+   原算法：所有 i < j 两两对比，1000 条要跑 ~50 万次
+   新算法：
+     1. 先按文本长度排序，只跟「长度差 ≤ 50%」的项比较
+        （因为 calculateSimilarity 里长度差 > 50% 直接返回 0）
+     2. 完全重复的文本用 Map 一遍扫完
+     3. 最多输出 200 对相似结果，避免界面卡死
+   ========================================================= */
 function checkDuplicates(){
-  const listEl=$('dupList');listEl.innerHTML='';
-  const items=db.items.filter(i=>i.text);const pairs=[];
-  for(let i=0;i<items.length;i++){
-    for(let j=i+1;j<items.length;j++){
-      const sim=calculateSimilarity(items[i].text,items[j].text);
-      if(sim>=0.5)pairs.push({item1:items[i],item2:items[j],sim});
+  const listEl=$('dupList');
+  listEl.innerHTML='<div style="text-align:center;padding:24px;color:var(--text-3);font-size:14px;">正在检测相似素材…</div>';
+
+  // 用 setTimeout 让上面的提示先渲染出来，再跑计算
+  setTimeout(()=>{
+    const items = db.items.filter(i => i.text && i.text.trim());
+    
+    // ---- 1. 完全重复：一遍扫描 ----
+    const exactMap = new Map();
+    items.forEach(i => {
+      const key = i.text.trim();
+      if (!exactMap.has(key)) exactMap.set(key, []);
+      exactMap.get(key).push(i);
+    });
+    
+    const pairs = [];
+    const seenPairs = new Set(); // 避免同一对被重复加
+    const pairKey = (a,b) => a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id;
+    const MAX_PAIRS = 200;
+    const MAX_ITEMS_FOR_LOOP = 5000; // 超过 5000 条只检测完全重复 + 抽样近似
+
+    // ---- 2. 完全重复先入列 ----
+    for (const [text, group] of exactMap) {
+      if (group.length < 2) continue;
+      for (let i = 0; i < group.length - 1; i++) {
+        for (let j = i + 1; j < group.length; j++) {
+          const k = pairKey(group[i], group[j]);
+          if (!seenPairs.has(k)) {
+            seenPairs.add(k);
+            pairs.push({ item1: group[i], item2: group[j], sim: 1 });
+            if (pairs.length >= MAX_PAIRS) break;
+          }
+        }
+        if (pairs.length >= MAX_PAIRS) break;
+      }
+      if (pairs.length >= MAX_PAIRS) break;
     }
-  }
-  if(!pairs.length){
-    listEl.innerHTML='<div style="text-align:center;padding:24px;color:var(--text-3);font-size:14px;">太棒了，没有发现相似度超过 50% 的素材！</div>';
-  }else{
-    pairs.sort((a,b)=>b.sim-a.sim);
-    listEl.innerHTML=pairs.map(p=>{
-      const percent=Math.round(p.sim*100);
-      return `<div class="dup-pair">
-        <div class="dup-percent">相似度 ${percent}%</div>
-        <div class="dup-text">${esc(p.item1.text)}</div>
-        <div class="dup-text">${esc(p.item2.text)}</div>
-        <div class="dup-actions">
-          <button class="btn tiny danger" data-del-dup="${p.item2.id}">删除下方</button>
-          <button class="btn tiny danger" data-del-dup="${p.item1.id}">删除上方</button>
-        </div>
-      </div>`;
-    }).join('');
-  }
-  $('dupMask').classList.add('show');
+
+    // ---- 3. 相似度检测（长度分桶） ----
+    if (pairs.length < MAX_PAIRS) {
+      // 按长度排序，每个 item 只跟长度相近的比较
+      const sorted = items.slice().sort((a,b) => a.text.length - b.text.length);
+      const n = sorted.length;
+
+      for (let i = 0; i < n && pairs.length < MAX_PAIRS; i++) {
+        const a = sorted[i];
+        const aLen = a.text.length;
+        // 计算长度上界：maxLen 满足 (maxLen - aLen) / maxLen <= 0.5  →  maxLen <= 2 * aLen
+        const maxLen = aLen * 2;
+
+        for (let j = i + 1; j < n; j++) {
+          const b = sorted[j];
+          const bLen = b.text.length;
+          if (bLen > maxLen) break; // 长度差超 50%，后面的更不可能匹配
+
+          // 完全重复已经在第 2 步处理过，跳过
+          if (a.text.trim() === b.text.trim()) continue;
+
+          const k = pairKey(a, b);
+          if (seenPairs.has(k)) continue;
+
+          // 超过 5000 条时，抽样：只对前 5000 条做近似检测
+          if (n > MAX_ITEMS_FOR_LOOP && i >= MAX_ITEMS_FOR_LOOP) break;
+
+          const sim = calculateSimilarity(a.text, b.text);
+          if (sim >= 0.5) {
+            seenPairs.add(k);
+            pairs.push({ item1: a, item2: b, sim });
+            if (pairs.length >= MAX_PAIRS) break;
+          }
+        }
+      }
+    }
+
+    // ---- 4. 渲染 ----
+    if (!pairs.length) {
+      listEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-3);font-size:14px;">太棒了，没有发现相似度超过 50% 的素材！</div>';
+    } else {
+      pairs.sort((a, b) => b.sim - a.sim);
+      const truncated = pairs.length >= MAX_PAIRS;
+      listEl.innerHTML = pairs.map(p => {
+        const percent = Math.round(p.sim * 100);
+        return `<div class="dup-pair">
+          <div class="dup-percent">相似度 ${percent}%</div>
+          <div class="dup-text">${esc(p.item1.text)}</div>
+          <div class="dup-text">${esc(p.item2.text)}</div>
+          <div class="dup-actions">
+            <button class="btn tiny danger" data-del-dup="${p.item2.id}">删除下方</button>
+            <button class="btn tiny danger" data-del-dup="${p.item1.id}">删除上方</button>
+          </div>
+        </div>`;
+      }).join('') + (truncated ? `<div style="text-align:center;padding:12px;color:var(--text-3);font-size:13px;">仅显示前 ${MAX_PAIRS} 对，清理后可再次检测</div>` : '');
+    }
+
+    $('dupMask').classList.add('show');
+  }, 50);
 }
 
 /* =========================================================
-   统计
+   统计（保持不变）
    ========================================================= */
 function openStats(){
   const total=db.items.length;
@@ -96,7 +178,7 @@ function openStats(){
 }
 
 /* =========================================================
-   健康检查
+   健康检查（保持不变）
    ========================================================= */
 function openHealth(){
   const textItems = db.items.filter(i=>i.text);
