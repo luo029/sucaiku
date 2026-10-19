@@ -1,0 +1,92 @@
+{
+  "items": [
+    {
+      "id": "mvewha70rpmrm",
+      "text": "这是一条测试句子",
+      "type": "句子",
+      "source": "23",
+      "tags": [],
+      "images": [],
+      "createdAt": 1792392943068
+    },
+    {
+      "id": "mvetwewyi0noo",
+      "text": "御旗探紫箓，仙杖辟丹丘。\n捧药芝童下，焚香桂女留。\n【鸾歌无岁月，鹤语记春秋。】\n臣朔真何幸，常陪汉武游。",
+      "type": "句子",
+      "source": "",
+      "tags": [
+        "仙侠"
+      ],
+      "images": [],
+      "createdAt": 1792388610178
+    },
+    {
+      "id": "mveta1514djsg",
+      "text": "",
+      "type": "图片",
+      "source": "",
+      "tags": [],
+      "images": [
+        {
+          "path": "2026/10/梗图-20261019132602-r14ti0.webp",
+          "url": "",
+          "cat": "梗图",
+          "size": 38902,
+          "origSize": 313915
+        }
+      ],
+      "createdAt": 1792387565893
+    }
+  ],
+  "cats": [
+    "句子",
+    "段落",
+    "梗",
+    "情话",
+    "吐槽",
+    "点子"
+  ],
+  "colors": {
+    "句子": 0,
+    "段落": 1,
+    "梗": 2,
+    "情话": 3,
+    "吐槽": 4,
+    "点子": 5
+  },
+  "sources": [
+    "23"
+  ],
+  "fixedSource": "",
+  "fixedTags": [],
+  "imageCategories": [
+    "梗图",
+    "情节",
+    "插画",
+    "其他"
+  ],
+  "settings": {
+    "copyWithSource": false,
+    "trashTtlDays": 30,
+    "statsDims": {
+      "cat": true,
+      "source": true,
+      "tag": true
+    },
+    "statsLimit": 8,
+    "compressMode": "local",
+    "tinypngKey": "Copied to clipboard GV6TFZdRpLBQTMCKW9rrnbVXhd4DgCd1",
+    "tinypngProxy": "",
+    "catLimit": 1,
+    "srcLimit": 3,
+    "tagLimit": 3,
+    "defaultType": "",
+    "collapseLimit": 150,
+    "defaultPageSize": 12,
+    "showHitokoto": true,
+    "enableAnim": true,
+    "fontSizeMode": "normal",
+    "sidebarLimit": 2
+  },
+  "trash": []
+}
