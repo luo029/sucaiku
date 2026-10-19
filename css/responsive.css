@@ -1,0 +1,42 @@
+/* css / responsive.css · 响应式断点 */
+/* 响应式 */
+@media (max-width:960px){
+  body.layout-sidebar .sidebar{transform:translateX(100%)}
+  body.layout-sidebar .sidebar.open{transform:translateX(0)}
+  body.layout-sidebar .main{margin-right:0}
+  body.layout-sidebar .menu-fab{display:flex}
+  .main-inner{padding-top:80px}
+  body.layout-compact .main-inner{padding-top:24px}
+}
+@media (max-width:560px){
+  .main-inner{padding-left:16px;padding-right:16px}
+  .date{display:none}
+  .src{max-width:100%}
+  .ops{opacity:1}
+  .composer-foot{flex-direction:column;align-items:stretch}
+  .field-group{flex-direction:column;min-width:0;width:100%}
+  select{max-width:none}
+  .source-picker,.tag-picker{flex:none;width:100%}
+  .composer-actions{justify-content:flex-end;margin-top:4px}
+  .batch-bar{left:12px;right:12px;transform:translateY(140%);max-width:none;padding:12px 14px;gap:10px;flex-direction:column;align-items:stretch}
+  .batch-bar.show{transform:translateY(0)}
+  .batch-info{font-size:13.5px;text-align:center}
+  .batch-actions{justify-content:center}
+  .batch-actions .btn{flex:1;min-width:70px;padding:9px 8px;font-size:12.5px}
+  #toast.raised{bottom:150px}
+  .card{padding:16px 18px 16px 22px}
+  .pagination{flex-direction:column;align-items:stretch}
+  .page-nav{justify-content:center}
+  .page-size{width:100%}
+  .page-head-row{gap:8px}
+  .layout-btn{width:38px;height:38px}
+  #sourceFilter{max-width:none;width:100%}
+  .source-filter-wrap{flex:1;min-width:0}
+  .dup-pair{padding:12px}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .stat-name{width:64px}
+  body.zen-mode .main-inner{padding:48px 18px 100px}
+  .img-cat-list{grid-template-columns:1fr}
+  .st-grid-2{grid-template-columns:1fr}
+  .st-inline .setting-num{flex:0 0 80px;width:80px}
+}

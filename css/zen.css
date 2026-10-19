@@ -1,0 +1,28 @@
+/* css / zen.css · 极简浏览模式 */
+/* ========== 极简浏览模式（zen） ========== */
+.zen-exit{display:none;position:fixed;top:14px;right:14px;width:40px;height:40px;border-radius:50%;background:rgba(120,120,120,.12);color:var(--text-2);align-items:center;justify-content:center;z-index:90;opacity:.35;transition:opacity .2s}
+.zen-exit:hover{opacity:1}
+.zen-bar{display:none}
+body.zen-mode{background:#fbfbf9}
+[data-theme="dark"] body.zen-mode{background:#0d0e13}
+body.zen-mode .sidebar,body.zen-mode .sidebar-overlay,body.zen-mode .menu-fab,
+body.zen-mode .page-head,body.zen-mode .hitokoto-box,body.zen-mode .composer,
+body.zen-mode .cat-manager,body.zen-mode .tabs-row,body.zen-mode .toolbar,
+body.zen-mode .pagination,body.zen-mode .batch-bar,body.zen-mode .sidebar-footer{display:none!important}
+body.zen-mode .main{margin-right:0!important}
+body.zen-mode .main-inner{max-width:680px;padding:72px 28px 140px}
+body.zen-mode .zen-bar{display:flex;gap:8px;overflow-x:auto;padding:0 0 22px;margin-bottom:6px;scrollbar-width:none;-ms-overflow-style:none}
+body.zen-mode .zen-bar::-webkit-scrollbar{display:none}
+body.zen-mode .zen-bar .zb{padding:5px 13px;border-radius:999px;font-size:13px;color:var(--text-3);white-space:nowrap;transition:all .15s;cursor:pointer;border:1px solid transparent;flex:none;user-select:none}
+body.zen-mode .zen-bar .zb:hover{color:var(--text);background:var(--line)}
+body.zen-mode .zen-bar .zb.active{color:var(--accent);background:var(--accent-soft);font-weight:600}
+body.zen-mode .zen-bar .zb .n{opacity:.6;font-size:11.5px;margin-left:4px}
+body.zen-mode .card{border:none;box-shadow:none;background:transparent;padding:0;margin-bottom:0;display:block;animation:none;transform:none!important;border-radius:0}
+body.zen-mode .card::before{display:none}
+body.zen-mode .card-top,body.zen-mode .ops,body.zen-mode .expand-btn,body.zen-mode .card-check,body.zen-mode .card-imgs{display:none!important}
+body.zen-mode .content{font-size:18px;line-height:2;letter-spacing:.02em;color:var(--text);max-height:none!important;overflow:visible;padding:24px 0;cursor:pointer;border-bottom:1px solid var(--line);position:relative}
+body.zen-mode .content::before{content:'';position:absolute;left:0;top:0;width:28px;height:2px;background:linear-gradient(90deg,#6366f1,#8b5cf6);opacity:.5}
+body.zen-mode .card:first-child .content{padding-top:12px}
+body.zen-mode .content.collapsed::after{display:none}
+body.zen-mode .zen-exit{display:flex}
+body.zen-mode .empty{padding:40px 0}

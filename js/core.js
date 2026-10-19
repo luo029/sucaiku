@@ -1,0 +1,280 @@
+/* js / core.js · 常量 / 状态 / DOM 缓存 / 工具函数 / 一言 / 布局·主题·设置 */
+/* =========================================================
+   常量
+   ========================================================= */
+const UNCAT='未分类';
+const IMG_TYPE='图片';
+const ALL_SOURCES='__all__';
+const DEFAULT_CATS=['句子','段落','梗','情话','吐槽','点子'];
+const DEFAULT_IMG_CATS=['梗图','情节','插画','其他'];
+const STORE_KEY='material-library';
+const SKIP_KEY='material-library.skip-confirm';
+const LAYOUT_KEY='material-library.layout';
+const THEME_KEY='material-library.theme';
+const SETTINGS_KEY='material-library.settings';
+const ZEN_KEY='material-library.zen';
+const GH_KEY='material-library.github';
+const TINY_KEY='material-library.tinypng';
+
+const DEFAULT_SETTINGS={
+  copyWithSource:false,trashTtlDays:30,statsDims:{cat:true,source:true,tag:true},statsLimit:8,
+  compressMode:'local',  // 'none' | 'local' | 'tinypng'
+  tinypngKey:'',tinypngProxy:''
+};
+
+const PALETTE=[
+  {bg:'#eef2ff',fg:'#4f46e5'},{bg:'#ecfdf5',fg:'#059669'},{bg:'#fff7ed',fg:'#ea580c'},
+  {bg:'#fdf2f8',fg:'#db2777'},{bg:'#eff6ff',fg:'#2563eb'},{bg:'#fefce8',fg:'#ca8a04'},
+  {bg:'#f5f3ff',fg:'#7c3aed'},{bg:'#f0fdfa',fg:'#0d9488'},{bg:'#fef2f2',fg:'#dc2626'},
+  {bg:'#f1f5f9',fg:'#475569'},{bg:'#fff0f5',fg:'#e11d48'},{bg:'#f3e8ff',fg:'#9333ea'},
+  {bg:'#e0f2fe',fg:'#0284c7'},{bg:'#dcfce7',fg:'#16a34a'},{bg:'#fef08a',fg:'#854d0e'},
+  {bg:'#ffedd5',fg:'#c2410c'},{bg:'#fce7f3',fg:'#be185d'},{bg:'#e0e7ff',fg:'#3730a3'},
+  {bg:'#ccfbf1',fg:'#0f766e'},{bg:'#fee2e2',fg:'#b91c1c'}
+];
+
+/* =========================================================
+   状态
+   ========================================================= */
+const db={
+  items:[],cats:DEFAULT_CATS.slice(),colors:{},sources:[],fixedSource:'',fixedTags:[],
+  imageCategories:DEFAULT_IMG_CATS.slice(),
+  settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),trash:[]
+};
+
+let currentType='全部';
+let currentSource=ALL_SOURCES;
+let currentTag='';
+let keyword='';
+let editingId=null;
+let selectMode=false;
+const selectedIds=new Set();
+let pendingConfirm=null;
+let exportFormat='json';
+let currentPage=1;
+let pageSize=12;
+
+let layoutMode='sidebar';
+let themeMode='light';
+let zenMode=false;
+
+let pendingImages=[];
+let pendingUploadFiles=[];
+let pendingUploadCat='';
+
+const expandedIds=new Set();
+let draggedItemId=null;
+
+let currentImgViewCat='全部';
+let repoImagesCache = [];
+let imgMgrCurrentFilter = 'all';
+
+function trashTtlMs(){
+  const d=Number(db.settings.trashTtlDays)||30;
+  return Math.max(1,Math.min(365,d))*86400000;
+}
+function fmtSize(n){
+  if(!n||n<0)return '0 B';
+  if(n<1024)return n+' B';
+  if(n<1024*1024)return (n/1024).toFixed(1)+' KB';
+  return (n/1024/1024).toFixed(2)+' MB';
+}
+
+/* =========================================================
+   DOM
+   ========================================================= */
+const $=id=>document.getElementById(id);
+const inputEl=$('input'),typeEl=$('type'),sourceEl=$('source'),tagsEl=$('tags');
+const addBtn=$('addBtn'),cancelBtn=$('cancelBtn');
+const listEl=$('list'),searchEl=$('search');
+const catManager=$('catManager'),catListEl=$('catList');
+const newCatInput=$('newCatInput');
+const batchBar=$('batchBar');
+const sourcePicker=$('sourcePicker'),sourcePanel=$('sourcePanel'),spList=$('spList'),spSearch=$('spSearch');
+const tagPicker=$('tagPicker'),tagPanel=$('tagPanel'),tpList=$('tpList'),tpSearch=$('tpSearch');
+const sourceFilterEl=$('sourceFilter');
+const tabsEl=$('tabs');
+const pendingImgsEl=$('pendingImgs');
+const zenBarEl=$('zenBar');
+
+/* =========================================================
+   工具
+   ========================================================= */
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+
+function getSearchTerms(){return keyword.trim().toLowerCase().split(/\s+/).filter(Boolean);}
+
+function highlightEscaped(escaped,kws){
+  const list=(kws||[]).filter(Boolean);
+  if(!list.length)return escaped;
+  const pat=list.map(k=>esc(k).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
+  if(!pat)return escaped;
+  try{return escaped.replace(new RegExp('('+pat+')','gi'),'<mark class="kw">$1</mark>');}
+  catch(e){return escaped;}
+}
+
+function formatText(text,kws){
+  const raw=String(text==null?'':text);
+  const re=/(\*\*|==|【)(.*?)(\*\*|==|】)/g;
+  let out='',last=0,m;
+  while((m=re.exec(raw))){
+    const ok=(m[1]==='【'&&m[3]==='】')||(m[1]==='**'&&m[3]==='**')||(m[1]==='=='&&m[3]==='==');
+    if(!ok)continue;
+    out+=highlightEscaped(esc(raw.slice(last,m.index)),kws);
+    out+=`<mark class="hl">${esc(m[2])}</mark>`;
+    last=m.index+m[0].length;
+  }
+  out+=highlightEscaped(esc(raw.slice(last)),kws);
+  return out;
+}
+
+function pad2(n){return String(n).padStart(2,'0');}
+function fmtDate(ts){
+  const d=new Date(ts||Date.now());const now=new Date();
+  const hm=`${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  if(d.getFullYear()===now.getFullYear())return `${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${hm}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${hm}`;
+}
+function fmtDateOnly(ts){const d=new Date(ts||Date.now());return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;}
+function fmtFull(ts){const d=new Date(ts||Date.now());return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;}
+
+let toastTimer;
+function toast(msg){
+  const el=$('toast');el.textContent=msg;
+  el.classList.toggle('raised',batchBar.classList.contains('show'));
+  el.classList.add('show');clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2400);
+}
+
+function copyText(text,source){
+  let finalText=text;
+  if(db.settings.copyWithSource&&source)finalText+='\n—— '+source;
+  if(navigator.clipboard&&window.isSecureContext){
+    navigator.clipboard.writeText(finalText).then(()=>toast('已复制')).catch(()=>fallbackCopy(finalText));
+  }else fallbackCopy(finalText);
+}
+function fallbackCopy(t){
+  const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');toast('已复制');}catch(e){toast('复制失败，请手动选择');}
+  ta.remove();
+}
+function download(blob,filename){
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download=filename;a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function scrollTop(){window.scrollTo({top:0,behavior:'smooth'});}
+function utf8ToBase64(str){return btoa(unescape(encodeURIComponent(str)));}
+function base64ToUtf8(b64){return decodeURIComponent(escape(atob(b64)));}
+function blobToBase64(blob){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>{const s=String(r.result);resolve(s.split(',')[1]||'');};
+    r.onerror=reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+/* =========================================================
+   一言
+   ========================================================= */
+function fetchHitokoto(){
+  $('hitokotoText').textContent='正在获取...';$('hitokotoFrom').textContent='';
+  fetch('https://v1.hitokoto.cn/').then(r=>r.json()).then(data=>{
+    if(data.hitokoto){
+      $('hitokotoText').textContent=data.hitokoto;
+      let fromStr=data.from?`—— ${data.from}`:'';
+      if(data.from_who)fromStr+=` · ${data.from_who}`;
+      $('hitokotoFrom').textContent=fromStr;
+    }
+  }).catch(()=>{$('hitokotoText').textContent='获取失败';});
+}
+
+/* =========================================================
+   布局 & 主题 & 设置
+   ========================================================= */
+function applyLayout(){
+  document.body.classList.toggle('layout-sidebar',layoutMode==='sidebar');
+  document.body.classList.toggle('layout-compact',layoutMode==='compact');
+  updateLayoutBtn();
+}
+function updateLayoutBtn(){
+  const btn=$('layoutBtn');
+  if(layoutMode==='sidebar'){
+    btn.title='收起侧栏';
+    btn.innerHTML=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m10 9 3 3-3 3"/></svg>`;
+  }else{
+    btn.title='展开侧栏';
+    btn.innerHTML=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m13 9-3 3 3 3"/></svg>`;
+  }
+}
+function setLayout(mode){
+  layoutMode=mode;localStorage.setItem(LAYOUT_KEY,mode);
+  applyLayout();closeSidebar();catManager.hidden=true;
+  renderTabs();renderSourceFilter();
+}
+function setTheme(mode){
+  themeMode=mode;document.documentElement.setAttribute('data-theme',mode);
+  localStorage.setItem(THEME_KEY,mode);
+  $('themeIconSun').style.display=mode==='dark'?'none':'block';
+  $('themeIconMoon').style.display=mode==='dark'?'block':'none';
+}
+function saveSettings(){localStorage.setItem(SETTINGS_KEY,JSON.stringify(db.settings));}
+function applySettingsToUI(){
+  const s=db.settings;
+  $('copyWithSource').checked=!!s.copyWithSource;
+  $('trashTtlInput').value=Number(s.trashTtlDays)||30;
+  $('statDimCat').checked=!s.statsDims||s.statsDims.cat!==false;
+  $('statDimSource').checked=!s.statsDims||s.statsDims.source!==false;
+  $('statDimTag').checked=!s.statsDims||s.statsDims.tag!==false;
+  $('statLimitInput').value=Number(s.statsLimit)||8;
+  $('tinypngKey').value=s.tinypngKey||'';
+  $('tinypngProxy').value=s.tinypngProxy||'';
+  // 压缩模式
+  const mode=s.compressMode||'local';
+  document.querySelectorAll('#compressMode button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.mode===mode);
+  });
+  $('tinypngFields').style.display = mode==='tinypng' ? 'block' : 'none';
+  updateTinyUsageUI();
+  
+  // 图片分类 UI 渲染
+  if (typeof window.renderImgCatsEditor === 'function') {
+    window.renderImgCatsEditor();
+  }
+}
+function loadSettings(){
+  try{
+    const s=JSON.parse(localStorage.getItem(SETTINGS_KEY));
+    if(s&&typeof s==='object'){
+      db.settings={...DEFAULT_SETTINGS,...s,statsDims:{...DEFAULT_SETTINGS.statsDims,...(s.statsDims||{})}};
+    }
+  }catch(e){}
+  db.settings.trashTtlDays=Math.max(1,Math.min(365,Number(db.settings.trashTtlDays)||30));
+  db.settings.statsLimit=Math.max(3,Math.min(30,Number(db.settings.statsLimit)||8));
+  if(!['none','local','tinypng'].includes(db.settings.compressMode)) db.settings.compressMode='local';
+  applySettingsToUI();
+}
+
+/* TinyPNG 计数 */
+function currentMonth(){const n=new Date();return `${n.getFullYear()}-${pad2(n.getMonth()+1)}`;}
+function loadTinyCount(){
+  try{
+    const d=JSON.parse(localStorage.getItem(TINY_KEY))||{};
+    if(d.month!==currentMonth())return{month:currentMonth(),count:0};
+    return{month:d.month,count:Number(d.count)||0};
+  }catch(e){return{month:currentMonth(),count:0};}
+}
+function bumpTinyCount(){
+  const d=loadTinyCount();d.count+=1;
+  localStorage.setItem(TINY_KEY,JSON.stringify(d));
+  updateTinyUsageUI();
+  return d;
+}
+function updateTinyUsageUI(){
+  const d=loadTinyCount();
+  const el=$('tinyUsage');
+  if(el)el.innerHTML=`本月（${d.month}）已用 <b>${d.count}</b> / 500 次`;
+}
