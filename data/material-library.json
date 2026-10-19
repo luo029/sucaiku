@@ -73,16 +73,5 @@
     "fontSizeMode": "normal",
     "sidebarLimit": 2
   },
-  "trash": [
-    {
-      "id": "mvewha70rpmrm",
-      "text": "这是一条测试句子。",
-      "type": "句子",
-      "source": "23",
-      "tags": [],
-      "images": [],
-      "createdAt": 1792392943068,
-      "deletedAt": 1792393206852
-    }
-  ]
+  "trash": []
 }
