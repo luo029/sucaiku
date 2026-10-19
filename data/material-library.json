@@ -73,6 +73,7 @@
     "fontSizeMode": "normal",
     "syncCheckInterval": 60,
     "autoCheckUpdate": true,
+    "useRelativeTime": true,
     "sidebarLimit": 2
   },
   "trash": []
