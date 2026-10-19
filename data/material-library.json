@@ -99,6 +99,12 @@
     "syncCheckInterval": 60,
     "autoCheckUpdate": true,
     "useRelativeTime": false,
+    "sidebarShowCat": true,
+    "sidebarShowSrc": true,
+    "sidebarShowTag": true,
+    "inputPlaceholder": "粘贴句子、段落（Ctrl+Enter保存）。用【文字】可高亮。可直接粘贴图片。",
+    "cardSpacing": "compact",
+    "zenFontSize": "normal",
     "sidebarLimit": 2
   },
   "trash": [
