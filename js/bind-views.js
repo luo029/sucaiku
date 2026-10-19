@@ -202,10 +202,11 @@ safeBind('settingTabs', 'click', e => {
 });
 
 function openSettings() {
+  renderStyleOptions(); // ★ 打开设置时，自动渲染主题按钮
   applySettingsToUI();
   fillGHForm();
   updateTinyUsageUI();
-  renderSettingsOverview(); // 更新概览数据
+  renderSettingsOverview();
   $('settingMask').classList.add('show');
 }
 safeBind('menuSettingBtn', 'click', openSettings);
@@ -226,6 +227,18 @@ safeBind('inputPlaceholder', 'input', e => {
   db.settings.inputPlaceholder = e.target.value;
   saveSettings();
   if(inputEl) inputEl.placeholder = e.target.value || DEFAULT_SETTINGS.inputPlaceholder;
+});
+
+// ★ 修改：UI 风格切换（改用事件委托，一劳永逸）
+safeBind('uiStyleMode', 'click', e => {
+  const b = e.target.closest('button[data-style]'); if(!b) return;
+  db.settings.uiStyle = b.dataset.style;
+  saveSettings(); 
+  renderStyleOptions(); // 重新渲染按钮高亮
+  applySettingsToUI();
+  
+  const styleName = AVAILABLE_STYLES.find(s => s.id === db.settings.uiStyle)?.name || '新风格';
+  toast('已切换至「' + styleName + '」');
 });
 
 // ★ 新增：卡片间距调整

@@ -2,7 +2,6 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<!-- ★ 改动1：加了 viewport-fit=cover，让 iPhone 底部横条区域也能被正确避让 -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>素材库 · 拆书记录</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -13,7 +12,11 @@
 <link rel="stylesheet" href="css/panels.css">
 <link rel="stylesheet" href="css/images.css">
 <link rel="stylesheet" href="css/zen.css">
+<!-- ★ 新增：复古风格皮肤 -->
+<link rel="stylesheet" href="css/theme-retro.css">
 <link rel="stylesheet" href="css/responsive.css">
+
+<link rel="stylesheet" href="css/theme-bento.css">
 </head>
 <body class="layout-sidebar">
 <div class="app">
@@ -162,8 +165,14 @@
           <input id="search" type="search" placeholder="搜索内容、来源或标签（空格分隔多词）…">
         </div>
         <div class="source-filter-wrap" id="sourceFilterWrap">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          <select id="sourceFilter" title="按来源筛选"><option value="__all__">全部来源</option></select>
+          <button id="sourceFilterBtn" class="custom-source-filter-btn" title="按来源筛选">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span id="sourceFilterText">全部来源</span>
+          </button>
+          <div class="source-panel" id="sourceFilterPanel" hidden style="position:absolute; top:calc(100% + 8px); left:0; width:220px; z-index:80;">
+            <div class="sp-search-wrap"><input id="sourceFilterSearch" placeholder="搜索来源…" autocomplete="off"></div>
+            <div class="sp-list" id="sourceFilterList"></div>
+          </div>
         </div>
         <button class="icon-btn" id="imgViewBtn" title="图片浏览">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -246,7 +255,6 @@
 <script src="js/bind-list.js"></script>
 <script src="js/bind-views.js"></script>
 <script src="js/init.js"></script>
-<!-- ★ 改动2：新增手机端滚动隐藏菜单按钮脚本（必须放在 init.js 之后） -->
 <script src="js/scroll-hide.js"></script>
 </body>
 </html>

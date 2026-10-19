@@ -13,6 +13,13 @@ const ZEN_KEY='material-library.zen';
 const GH_KEY='material-library.github';
 const TINY_KEY='material-library.tinypng';
 
+// ★ 新增：主题中心（以后加主题，只在这里加一行配置）
+const AVAILABLE_STYLES = [
+  { id: 'modern', name: '现代' },
+  { id: 'retro', name: '复古墨水' },
+  { id: 'bento', name: '便当盒' } // ★ 新增
+];
+
 const DEFAULT_SETTINGS={
   copyWithSource:false,trashTtlDays:30,statsDims:{cat:true,source:true,tag:true},statsLimit:8,
   compressMode:'local',tinypngKey:'',tinypngProxy:'',
@@ -29,10 +36,10 @@ const DEFAULT_SETTINGS={
   sidebarShowCat:true,
   sidebarShowSrc:true,
   sidebarShowTag:true,
-  // ★ 新增的三个配置项
   inputPlaceholder:'粘贴句子、段落（Ctrl+Enter保存）。用【文字】可高亮。可直接粘贴图片。',
-  cardSpacing:'standard', // standard, compact, loose
-  zenFontSize:'normal'   // normal, large, xlarge
+  cardSpacing:'standard',
+  zenFontSize:'normal',
+  uiStyle:'modern' // 当前使用的风格 ID
 };
 
 const PALETTE=[
@@ -98,7 +105,6 @@ const newCatInput=$('newCatInput');
 const batchBar=$('batchBar');
 const sourcePicker=$('sourcePicker'),sourcePanel=$('sourcePanel'),spList=$('spList'),spSearch=$('spSearch');
 const tagPicker=$('tagPicker'),tagPanel=$('tagPanel'),tpList=$('tpList'),tpSearch=$('tpSearch');
-const sourceFilterEl=$('sourceFilter');
 const tabsEl=$('tabs');
 const pendingImgsEl=$('pendingImgs');
 const zenBarEl=$('zenBar');
@@ -233,6 +239,11 @@ function saveSettings(){
 
 function applySettingsToUI(){
   const s=db.settings;
+  
+  // ★ 修改：应用 UI 风格
+  document.documentElement.setAttribute('data-style', s.uiStyle || 'modern');
+  document.body.setAttribute('data-style', s.uiStyle || 'modern');
+  
   if($('copyWithSource')) $('copyWithSource').checked=!!s.copyWithSource;
   if($('trashTtlInput')) $('trashTtlInput').value=Number(s.trashTtlDays)||30;
   if($('statDimCat')) $('statDimCat').checked=!s.statsDims||s.statsDims.cat!==false;
@@ -258,11 +269,9 @@ function applySettingsToUI(){
   if(srcGroup) srcGroup.style.display = s.sidebarShowSrc !== false ? '' : 'none';
   if(tagGroup) tagGroup.style.display = s.sidebarShowTag !== false ? '' : 'none';
 
-  // ★ 新增：输入框提示语
   if(inputEl) inputEl.placeholder = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
   if($('inputPlaceholder')) $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
 
-  // ★ 新增：卡片间距
   document.body.classList.remove('spacing-compact', 'spacing-loose');
   if (s.cardSpacing === 'compact') document.body.classList.add('spacing-compact');
   if (s.cardSpacing === 'loose') document.body.classList.add('spacing-loose');
@@ -270,7 +279,6 @@ function applySettingsToUI(){
     b.classList.toggle('active', b.dataset.spacing === (s.cardSpacing || 'standard'));
   });
 
-  // ★ 新增：极简模式字号
   document.body.classList.remove('zen-font-large', 'zen-font-xlarge');
   if (s.zenFontSize === 'large') document.body.classList.add('zen-font-large');
   if (s.zenFontSize === 'xlarge') document.body.classList.add('zen-font-xlarge');

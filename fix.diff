@@ -1,0 +1,44 @@
+--- a/js/bind-core.js
++++ b/js/bind-core.js
+@@ -77,10 +77,36 @@
+-sourceFilterEl.addEventListener('change',e=>{
+-  currentSource=e.target.value==='__all__'?ALL_SOURCES:e.target.value;
+-  currentPage=1;render();
+-});
++if ($('sourceFilterBtn')) {
++  $('sourceFilterBtn').addEventListener('click', e => {
++    e.stopPropagation();
++    const panel = $('sourceFilterPanel');
++    if (panel.hidden) {
++      $('sourceFilterSearch').value = '';
++      renderSourceFilterList();
++      panel.hidden = false;
++      setTimeout(() => $('sourceFilterSearch').focus(), 50);
++    } else {
++      panel.hidden = true;
++    }
++  });
++}
++if ($('sourceFilterSearch')) {
++  $('sourceFilterSearch').addEventListener('input', renderSourceFilterList);
++  $('sourceFilterSearch').addEventListener('keydown', e => { if (e.key === 'Escape') $('sourceFilterPanel').hidden = true; });
++}
++if ($('sourceFilterList')) {
++  $('sourceFilterList').addEventListener('click', e => {
++    const item = e.target.closest('.sp-item'); if (!item) return;
++    const val = item.dataset.pick;
++    currentSource = val === '__all__' ? ALL_SOURCES : val;
++    currentPage = 1;
++    render();
++    $('sourceFilterPanel').hidden = true;
++  });
++}
+
+@@ -98,6 +124,9 @@
+ document.addEventListener('click',e=>{
+   if(!sourcePanel.hidden&&!sourcePicker.contains(e.target))closeSourcePanel();
+   if(!tagPanel.hidden&&!tagPicker.contains(e.target))closeTagPanel();
++  if ($('sourceFilterPanel') && !$('sourceFilterPanel').hidden && !$('sourceFilterWrap').contains(e.target)) {
++    $('sourceFilterPanel').hidden = true;
++  }
+ });

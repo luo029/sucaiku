@@ -93,6 +93,14 @@ tpList.addEventListener('click',e=>{
 document.addEventListener('click',e=>{
   if(!sourcePanel.hidden&&!sourcePicker.contains(e.target))closeSourcePanel();
   if(!tagPanel.hidden&&!tagPicker.contains(e.target))closeTagPanel();
+  if ($('sourceFilterPanel') && !$('sourceFilterPanel').hidden && !$('sourceFilterWrap').contains(e.target)) {
+    $('sourceFilterPanel').hidden = true;
+  }
+  const zenPanel = document.getElementById('zenFilterPanel');
+  // 修改了判断逻辑，适配挂载在 body 上的面板
+  if (zenPanel && !zenPanel.contains(e.target) && !e.target.closest('.zen-filter-btn')) {
+    zenPanel.remove();
+  }
 });
 
 $('hitokotoRefresh').addEventListener('click',fetchHitokoto);
@@ -101,10 +109,36 @@ searchEl.addEventListener('input',()=>{
   clearFilterCache();
   renderList();renderHeader();
 });
-sourceFilterEl.addEventListener('change',e=>{
-  currentSource=e.target.value==='__all__'?ALL_SOURCES:e.target.value;
-  currentPage=1;render();
-});
+
+if ($('sourceFilterBtn')) {
+  $('sourceFilterBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    const panel = $('sourceFilterPanel');
+    if (panel.hidden) {
+      $('sourceFilterSearch').value = '';
+      renderSourceFilterList();
+      panel.hidden = false;
+      setTimeout(() => $('sourceFilterSearch').focus(), 50);
+    } else {
+      panel.hidden = true;
+    }
+  });
+}
+if ($('sourceFilterSearch')) {
+  $('sourceFilterSearch').addEventListener('input', renderSourceFilterList);
+  $('sourceFilterSearch').addEventListener('keydown', e => { if (e.key === 'Escape') $('sourceFilterPanel').hidden = true; });
+}
+if ($('sourceFilterList')) {
+  $('sourceFilterList').addEventListener('click', e => {
+    const item = e.target.closest('.sp-item'); if (!item) return;
+    const val = item.dataset.pick;
+    currentSource = val === '__all__' ? ALL_SOURCES : val;
+    currentPage = 1;
+    render();
+    $('sourceFilterPanel').hidden = true;
+  });
+}
+
 $('catNav').addEventListener('click',e=>{
   const btn=e.target.closest('.nav-item[data-type]');if(!btn)return;
   currentType=btn.dataset.type;currentPage=1;
@@ -156,9 +190,116 @@ tabsEl.addEventListener('click',e=>{
 
 zenBarEl.addEventListener('click',e=>{
   const t=e.target.closest('.zb');if(!t)return;
-  currentType=t.dataset.zt;currentPage=1;
-  renderList();renderHeader();
+  
+  if (t.id === 'zenSrcBtn') {
+    openZenFilterPanel('source');
+    return;
+  }
+  if (t.id === 'zenTagBtn') {
+    openZenFilterPanel('tag');
+    return;
+  }
+  
+  if (t.dataset.zt) {
+    currentType = t.dataset.zt; currentPage = 1;
+    renderList(); renderHeader();
+  }
 });
+
+// ★ 修复：将极简模式的面板挂载到 body，并计算绝对位置防止被裁剪
+function openZenFilterPanel(type) {
+  let panel = document.getElementById('zenFilterPanel');
+  if (panel) {
+    if (panel.dataset.type === type && !panel.hidden) {
+      panel.hidden = true;
+      return;
+    }
+    panel.remove();
+  }
+  
+  panel = document.createElement('div');
+  panel.id = 'zenFilterPanel';
+  panel.className = 'source-panel';
+  panel.dataset.type = type;
+  panel.style.cssText = 'position:absolute; width:240px; z-index:999; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--sh-3);';
+  
+  panel.innerHTML = `
+    <div class="sp-search-wrap"><input id="zenFilterSearch" placeholder="搜索..." autocomplete="off"></div>
+    <div class="sp-list" id="zenFilterList" style="max-height:260px;"></div>
+  `;
+  
+  // 挂载到 body 上，避免被横向滚动条裁剪
+  document.body.appendChild(panel);
+  
+  // 动态计算位置：对齐到按钮正下方
+  const btn = document.getElementById(type === 'source' ? 'zenSrcBtn' : 'zenTagBtn');
+  if (btn) {
+    const rect = btn.getBoundingClientRect();
+    panel.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+    // 靠右对齐限制（防止在小屏幕上超出右侧）
+    let left = rect.left + window.scrollX;
+    const maxLeft = window.innerWidth - 240 - 20; 
+    if (left > maxLeft) left = maxLeft;
+    panel.style.left = left + 'px';
+  }
+  
+  const searchInput = document.getElementById('zenFilterSearch');
+  setTimeout(() => searchInput.focus(), 50);
+  
+  const renderZenList = (q='') => {
+    const listEl = document.getElementById('zenFilterList');
+    if (!listEl) return;
+    const lowerQ = q.toLowerCase();
+    let html = '';
+    
+    if (type === 'source') {
+      const counts={};db.items.forEach(i=>{if(i.source)counts[i.source]=(counts[i.source]||0)+1;});
+      let list = db.sources;
+      if (lowerQ) list = list.filter(s => s.toLowerCase().includes(lowerQ));
+      
+      html += `<div class="sp-item ${currentSource===ALL_SOURCES?'sp-selected':''}" data-pick="__all__"><span class="sp-name">全部来源</span></div>`;
+      list.forEach(s => {
+        const n = counts[s] || 0;
+        html += `<div class="sp-item ${currentSource===s?'sp-selected':''}" data-pick="${esc(s)}">
+          <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${n}</span>` : ''}</span>
+        </div>`;
+      });
+    } else {
+      const counts=collectTags();
+      let list=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]||a.localeCompare(b,'zh'));
+      if (lowerQ) list=list.filter(s=>s.toLowerCase().includes(lowerQ));
+      
+      html += `<div class="sp-item ${!currentTag?'sp-selected':''}" data-pick=""><span class="sp-name">全部标签</span></div>`;
+      list.forEach(s => {
+        const n = counts[s] || 0;
+        html += `<div class="sp-item ${currentTag===s?'sp-selected':''}" data-pick="${esc(s)}">
+          <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${n}</span>` : ''}</span>
+        </div>`;
+      });
+    }
+    listEl.innerHTML = html;
+  };
+  
+  renderZenList();
+  
+  searchInput.addEventListener('input', e => renderZenList(e.target.value));
+  
+  panel.addEventListener('click', e => {
+    const item = e.target.closest('.sp-item'); if(!item) return;
+    e.stopPropagation();
+    
+    const val = item.dataset.pick;
+    if (type === 'source') {
+      currentSource = val === '__all__' ? ALL_SOURCES : val;
+    } else {
+      currentTag = val || '';
+    }
+    
+    currentPage = 1;
+    renderList(); renderHeader();
+    panel.hidden = true;
+  });
+}
 
 /* ★ 优化：图片加载失败 → API 兜底（合并为统一函数） */
 function handleImgFallback(e) {

@@ -171,15 +171,37 @@ function renderTabs(){
 }
 
 function renderSourceFilter(){
+  if ($('sourceFilterText')) {
+    $('sourceFilterText').textContent = currentSource === ALL_SOURCES ? '全部来源' : currentSource;
+  }
+  if ($('sourceFilterBtn')) {
+    $('sourceFilterBtn').classList.toggle('active-filter', currentSource !== ALL_SOURCES);
+  }
+  if ($('sourceFilterPanel') && !$('sourceFilterPanel').hidden) {
+    renderSourceFilterList();
+  }
+}
+
+function renderSourceFilterList() {
+  if (!document.getElementById('sourceFilterList')) return;
+  const q = ($('sourceFilterSearch') ? $('sourceFilterSearch').value : '').trim().toLowerCase();
   const counts={};db.items.forEach(i=>{if(i.source)counts[i.source]=(counts[i.source]||0)+1;});
-  const opts=['<option value="__all__">全部来源</option>'];
-  db.sources.forEach(s=>{
-    const n=counts[s]||0;const fixedMark=db.fixedSource===s?' 📌':'';
-    opts.push(`<option value="${esc(s)}">${esc(s)}${n?`（${n}）`:''}${fixedMark}</option>`);
-  });
-  sourceFilterEl.innerHTML=opts.join('');
-  sourceFilterEl.value=currentSource===ALL_SOURCES?'__all__':currentSource;
-  sourceFilterEl.classList.toggle('active-filter',currentSource!==ALL_SOURCES);
+  let list = db.sources.slice();
+  if (q) list = list.filter(s => s.toLowerCase().includes(q));
+
+  let html = `<div class="sp-item ${currentSource === ALL_SOURCES ? 'sp-selected' : ''}" data-pick="__all__"><span class="sp-name">全部来源</span></div>`;
+  if (!list.length && q) {
+    html += `<div class="sp-empty">没有匹配的来源</div>`;
+  } else {
+    list.forEach(s => {
+      const n = counts[s] || 0;
+      const fixedMark = db.fixedSource === s ? ' 📌' : '';
+      html += `<div class="sp-item ${currentSource === s ? 'sp-selected' : ''}" data-pick="${esc(s)}">
+        <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${n}</span>` : ''}${fixedMark}</span>
+      </div>`;
+    });
+  }
+  $('sourceFilterList').innerHTML = html;
 }
 
 function renderHeader(){
@@ -200,20 +222,35 @@ function renderHeader(){
 function imgCatBadge(img){return img&&img.cat?`<span class="ci-cat">${esc(img.cat)}</span>`:'';}
 
 function renderZenBar(){
+  const textItems = db.items.filter(i => i.text);
   const counts={};
-  db.items.forEach(i=>counts[i.type]=(counts[i.type]||0)+1);
+  textItems.forEach(i=>counts[i.type]=(counts[i.type]||0)+1);
+  
   const list=['全部'];
-  if((counts[IMG_TYPE]||0) > 0) list.push(IMG_TYPE);
   list.push(...db.cats);
   if((counts[UNCAT]||0)>0)list.push(UNCAT);
   if(!list.includes(currentType))currentType='全部';
-  zenBarEl.innerHTML=list.map(t=>{
-    const n=t==='全部'?db.items.length:(counts[t]||0);
+
+  let html = list.map(t=>{
+    const n=t==='全部'?textItems.length:(counts[t]||0);
     return `<div class="zb ${currentType===t?'active':''}" data-zt="${esc(t)}">${esc(t)}<span class="n">${n}</span></div>`;
   }).join('');
+
+  html += `<div style="width:1px;height:16px;background:var(--line);margin:auto 6px;flex:none;"></div>`;
+
+  const srcTxt = currentSource===ALL_SOURCES ? '全部来源' : currentSource;
+  html += `<div class="zb zen-filter-btn ${currentSource!==ALL_SOURCES?'active':''}" id="zenSrcBtn">
+    ${esc(srcTxt)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px;"><path d="m6 9 6 6 6-6"/></svg>
+  </div>`;
+
+  const tagTxt = currentTag ? '#'+currentTag : '全部标签';
+  html += `<div class="zb zen-filter-btn ${currentTag?'active':''}" id="zenTagBtn">
+    ${esc(tagTxt)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px;"><path d="m6 9 6 6 6-6"/></svg>
+  </div>`;
+
+  zenBarEl.innerHTML = html;
 }
 
-// ★ 新增：设置面板数据概览渲染
 function renderSettingsOverview(){
   if(!$('ovTotal')) return;
   let imgCount = 0;
@@ -226,12 +263,23 @@ function renderSettingsOverview(){
   $('ovTags').textContent = tags;
 }
 
+// ★ 全自动渲染主题按钮
+function renderStyleOptions() {
+  const container = document.getElementById('uiStyleMode');
+  if (!container) return;
+  
+  container.innerHTML = AVAILABLE_STYLES.map(style => {
+    const active = db.settings.uiStyle === style.id ? 'active' : '';
+    return `<button type="button" data-style="${style.id}" class="${active}">${style.name}</button>`;
+  }).join('');
+}
+
 function renderList(){
   if(zenMode){
     renderZenBar();
     const filtered=getFilteredItems().filter(i=>i.text);
     if(!filtered.length){
-      listEl.innerHTML=`<div class="empty"><p>没有文字素材</p></div>`;
+      listEl.innerHTML=`<div class="empty"><p>没有找到符合条件的内容</p></div>`;
     }else{
       listEl.innerHTML=filtered.map(i=>`<article class="card" data-id="${i.id}"><div class="content">${formatText(i.text)}</div></article>`).join('');
     }

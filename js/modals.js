@@ -109,20 +109,12 @@ const modalsHtml = `
           <div><div class="st-card-title">编辑与列表</div><div class="st-card-desc">默认分类、长文折叠、分页设置</div></div>
         </div>
         <div class="st-card-body">
-          
-          <div class="st-field" style="margin-bottom:12px;">
+          <div class="st-field">
             <label>默认新建分类</label>
             <select id="defaultTypeSelect" style="width:100%; text-align:left; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:14px; outline:none;"></select>
             <div class="st-hint">新素材默认归入该分类</div>
           </div>
-
-          <div class="st-field" style="margin-bottom:16px;">
-            <label>输入框提示语（Placeholder）</label>
-            <input type="text" id="inputPlaceholder" style="width:100%; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; background:var(--bg); color:var(--text); outline:none;">
-            <div class="st-hint">显示在录入框内的提示文字</div>
-          </div>
-
-          <div class="st-grid-2">
+          <div class="st-grid-2" style="margin-top:16px;">
             <div class="st-field" style="margin-bottom:0;">
               <label>长文本折叠阈值</label>
               <div class="st-inline">
@@ -152,6 +144,14 @@ const modalsHtml = `
           <label class="st-toggle" style="margin-bottom:12px;"><div><div class="st-toggle-title">显示一言（Hitokoto）</div><div class="st-toggle-desc">在页面顶部显示随机句子</div></div><input type="checkbox" id="showHitokoto"></label>
           <label class="st-toggle" style="margin-bottom:16px;"><div><div class="st-toggle-title">开启卡片动画</div><div class="st-toggle-desc">关闭可提升大量数据时的滚动性能</div></div><input type="checkbox" id="enableAnim"></label>
           
+          <div class="st-field" style="margin-bottom:16px;">
+            <label>UI 风格</label>
+            <div class="segmented" id="uiStyleMode">
+              <!-- ★ 注意：这里留空，完全由 JS 自动生成，不再写死 -->
+            </div>
+            <div class="st-hint">切换界面的整体视觉风格</div>
+          </div>
+
           <div class="st-field" style="margin-bottom:16px;">
             <label>全局字号缩放</label>
             <div class="segmented" id="fontSizeMode">

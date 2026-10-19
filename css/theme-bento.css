@@ -1,0 +1,184 @@
+/* css/theme-bento.css · Bento 便当盒 / 新粗野主义 */
+
+html[data-style="bento"] {
+  --font-main: 'LXGW WenKai', -apple-system, sans-serif;
+  
+  /* 极简黑白灰配色，搭配高饱和点缀 */
+  --bg: #f4f4f0;
+  --bg-glow: transparent;
+  --sidebar-bg: #ffffff;
+  --card: #ffffff;
+  
+  --text: #111111;
+  --text-2: #333333;
+  --text-3: #666666;
+  --line: #111111;
+  --line-2: #111111; /* 粗描边 */
+  
+  /* 明黄点缀 */
+  --accent: #ffd600;        
+  --accent-soft: #fff8cc;   
+  --danger: #ff3b30;        
+  --danger-soft: #ffe5e3;
+  
+  --img-accent: #007aff;    
+  --img-soft: #e5f1ff;
+  
+  --highlight-bg: #111;  
+  --highlight-text: #fff;
+  
+  /* 棱角分明 */
+  --r-sm: 0px; --r: 0px; --r-lg: 0px;
+  
+  /* 使用硬阴影（Hover 时偏移） */
+  --sh-1: 2px 2px 0px var(--line);
+  --sh-2: 4px 4px 0px var(--line);
+  --sh-3: 8px 8px 0px rgba(0,0,0,0.8);
+}
+
+/* Bento 暗色模式 */
+html[data-style="bento"][data-theme="dark"] {
+  --bg: #1a1a1a;
+  --sidebar-bg: #222222;    
+  --card: #2a2a2a;          
+  --text: #ffffff;          
+  --text-2: #dddddd;        
+  --text-3: #aaaaaa;        
+  --line: #ffffff;          
+  --line-2: #ffffff;        
+  --accent: #ffd600;        
+  --accent-soft: rgba(255, 214, 0, 0.2); 
+  --danger: #ff453a;        
+  --danger-soft: rgba(255, 69, 58, 0.2);
+  --img-accent: #0a84ff;    
+  --img-soft: rgba(10, 132, 255, 0.2);
+  --highlight-bg: #fff; 
+  --highlight-text: #000;
+  --sh-1: 2px 2px 0px var(--line);
+  --sh-2: 4px 4px 0px var(--line);
+}
+
+/* =========================================================
+   把黑线粗框贯彻到底
+   ========================================================= */
+
+body[data-style="bento"] .brand-logo {
+  background: var(--accent) !important;
+  border: 2px solid var(--line);
+  border-radius: 0;
+  color: var(--line);
+  box-shadow: 2px 2px 0 var(--line);
+}
+
+/* 侧边栏的竖线变方块 */
+body[data-style="bento"] .nav-label::before {
+  content: '';
+  background: var(--line) !important;
+  width: 8px; height: 8px;
+  border-radius: 0;
+}
+
+body[data-style="bento"] .nav-item {
+  border-radius: 0;
+  border: 2px solid transparent;
+}
+body[data-style="bento"] .nav-item:hover {
+  border-color: var(--line);
+  background: var(--accent-soft);
+}
+body[data-style="bento"] .nav-item.active {
+  background: var(--accent) !important;
+  border: 2px solid var(--line) !important;
+  color: var(--line) !important;
+  box-shadow: 2px 2px 0 var(--line);
+}
+
+/* 圆点变方块 */
+body[data-style="bento"] .nav-dot {
+  border-radius: 0;
+  border: 1px solid var(--line);
+}
+
+/* 所有按钮变成硬阴影方块 */
+body[data-style="bento"] .primary,
+body[data-style="bento"] .btn,
+body[data-style="bento"] .icon-btn,
+body[data-style="bento"] .layout-btn,
+body[data-style="bento"] .tab,
+body[data-style="bento"] .page-btn {
+  border-radius: 0;
+  border: 2px solid var(--line);
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 2px 2px 0 var(--line);
+  transition: all 0.1s;
+}
+body[data-style="bento"] .primary {
+  background: var(--accent);
+  color: var(--line);
+  font-weight: 800;
+}
+body[data-style="bento"] .primary:hover,
+body[data-style="bento"] .btn:hover,
+body[data-style="bento"] .icon-btn:hover,
+body[data-style="bento"] .layout-btn:hover,
+body[data-style="bento"] .tab:hover,
+body[data-style="bento"] .page-btn:hover:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0 var(--line);
+}
+body[data-style="bento"] .tab.active {
+  background: var(--accent) !important;
+  color: var(--line) !important;
+  box-shadow: 2px 2px 0 var(--line) !important;
+}
+
+/* 卡片大改：粗边框 + 悬浮位移 */
+body[data-style="bento"] .card {
+  border: 2px solid var(--line);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--line);
+  transform: none;
+}
+body[data-style="bento"] .card:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--line);
+}
+body[data-style="bento"] .card::before {
+  display: none !important; /* 去掉左边彩条 */
+}
+
+/* 标签变成实心方块 */
+body[data-style="bento"] .tag {
+  border-radius: 0;
+  border: 1px solid var(--line);
+  background: var(--line);
+  color: var(--bg);
+}
+body[data-style="bento"] .tag.tag-img {
+  background: var(--img-accent);
+  color: #fff;
+}
+
+/* 搜索框和输入框 */
+body[data-style="bento"] #search,
+body[data-style="bento"] .composer,
+body[data-style="bento"] .source-picker,
+body[data-style="bento"] .tag-picker,
+body[data-style="bento"] select,
+body[data-style="bento"] #tags {
+  border: 2px solid var(--line) !important;
+  border-radius: 0 !important;
+  box-shadow: 2px 2px 0 var(--line);
+  background: var(--card);
+}
+
+body[data-style="bento"] .hitokoto-box {
+  border: 2px solid var(--line);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--line);
+  background: var(--accent-soft);
+}
+body[data-style="bento"] .hitokoto-box::before {
+  display: none;
+}

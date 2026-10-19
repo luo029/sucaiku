@@ -1,0 +1,161 @@
+/* css/theme-retro.css · 复古墨水/报纸主题专属覆盖 */
+
+html[data-style="retro"] {
+  --font-main: 'LXGW WenKai', 'Noto Serif SC', 'Songti SC', -apple-system, sans-serif;
+  
+  /* 报纸纸张色系 */
+  --bg: #f5f2eb;
+  --bg-glow: transparent;
+  --sidebar-bg: #ebe7dd;
+  --card: #fcfbf8;
+  
+  /* 墨水色系 */
+  --text: #2c2c2c;
+  --text-2: #5c5c5c;
+  --text-3: #8c8a86;
+  --line: #d4d0c8;
+  --line-2: #b8b4ac;
+  
+  /* 朱砂红点缀色 */
+  --accent: #a83232;        
+  --accent-soft: #f6ebeb;   
+  --danger: #c0392b;        
+  --danger-soft: #fae9e7;
+  
+  --img-accent: #4a5d71;    
+  --img-soft: #eef2f5;
+  
+  --highlight-bg: #fdf0c1;  
+  --highlight-text: #7a5a00;
+  
+  --r-sm: 2px; --r: 4px; --r-lg: 4px;
+  --sh-1: 0 1px 0 rgba(0,0,0,.04);
+  --sh-2: 0 2px 0 rgba(0,0,0,.06);
+  --sh-3: 0 4px 12px rgba(0,0,0,.08);
+}
+
+/* 复古暗黑模式 */
+html[data-style="retro"][data-theme="dark"] {
+  --bg: #181715;
+  --sidebar-bg: #111110;    
+  --card: #201f1c;          
+  --text: #e0dcd3;          
+  --text-2: #a39f96;        
+  --text-3: #6e6b66;        
+  --line: #33322e;          
+  --line-2: #4a4843;        
+  --accent: #c98686;        
+  --accent-soft: rgba(201,134,134,.15); 
+  --danger: #e74c3c;        
+  --danger-soft: rgba(231,76,60,.15);
+  --img-accent: #8fa7c0;    
+  --img-soft: rgba(143,167,192,.15);
+  --highlight-bg: rgba(253,240,193,.2); 
+  --highlight-text: #fdf0c1;
+  --sh-1: none;
+  --sh-2: none;
+  --sh-3: 0 8px 24px rgba(0,0,0,.6);
+}
+
+/* 复古纸张噪点背景 */
+body[data-style="retro"] {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+}
+
+/* =========================================================
+   干掉所有硬编码的现代渐变色和霓虹灯
+   ========================================================= */
+
+/* 品牌 Logo：从渐变色变为干净的线框 */
+body[data-style="retro"] .brand-logo {
+  background: transparent !important;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  color: var(--accent);
+  box-shadow: none;
+}
+
+/* 侧边栏的竖线装饰：从渐变色变为朱砂红 */
+body[data-style="retro"] .nav-label::before {
+  content: '§';
+  background: transparent !important;
+  color: var(--accent);
+  width: auto; height: auto;
+  border-radius: 0;
+}
+
+/* 侧边栏的圆点：从渐变色变为单色 */
+body[data-style="retro"] .nav-item.nav-all .nav-dot {
+  background: var(--text-2) !important;
+}
+body[data-style="retro"] .nav-item.nav-img .nav-dot {
+  background: var(--img-accent) !important;
+}
+
+/* 一言左侧的装饰竖条 */
+body[data-style="retro"] .hitokoto-box::before {
+  background: var(--accent) !important;
+}
+
+/* 主按钮和当前选中的标签页 */
+body[data-style="retro"] .primary,
+body[data-style="retro"] .tab.active,
+body[data-style="retro"] .page-btn.active {
+  background: var(--accent) !important;
+  box-shadow: none;
+  border-radius: 2px;
+}
+
+/* 让极简模式里的分类按钮也去掉多余的高光 */
+body[data-style="retro"] .zen-bar .zb.active {
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+}
+
+/* =========================================================
+   复古排版与卡片细节
+   ========================================================= */
+
+/* 印章式标签 */
+body[data-style="retro"] .tag {
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  transform: rotate(-1deg);
+  border-radius: 2px;
+}
+body[data-style="retro"] .tag.tag-img {
+  border-color: var(--img-accent);
+  color: var(--img-accent);
+}
+
+/* 报纸文章感卡片 */
+body[data-style="retro"] .card::before {
+  display: none !important; /* 彻底隐藏卡片左侧的紫红条 */
+}
+body[data-style="retro"] .card {
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-1);
+  border-radius: var(--r-sm);
+}
+body[data-style="retro"] .card:hover {
+  border-color: var(--line-2);
+  box-shadow: 0 4px 12px rgba(0,0,0,.05);
+  transform: translateY(-1px);
+}
+
+/* 衬线体正文 */
+body[data-style="retro"] .content {
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  line-height: 1.9;
+  text-align: justify;
+}
+
+/* 极简模式优化 */
+body[data-style="retro"] .zen-bar .zb {
+  font-family: 'Noto Serif SC', serif;
+}
+body[data-style="retro"] .zen-content,
+body[data-style="retro"] .content {
+  letter-spacing: 0.05em;
+}
