@@ -1,4 +1,4 @@
-/* js / io.js · 极简模式 / 导入导出 / 侧边栏开关 */
+/* js / io.js · 极简模式 / 专注模式 / 导入导出 / 侧边栏开关 */
 /* =========================================================
    极简模式
    ========================================================= */
@@ -6,9 +6,23 @@ function setZen(on){
   zenMode=on;
   document.body.classList.toggle('zen-mode',on);
   localStorage.setItem(ZEN_KEY,on?'1':'0');
-  if(on){closeSidebar();selectMode=false;selectedIds.clear();closeImgView();}
+  if(on){closeSidebar();selectMode=false;selectedIds.clear();closeImgView();setFocus(false);}
   renderList();
   if(on)scrollTop();
+}
+
+/* =========================================================
+   专注模式
+   ========================================================= */
+function setFocus(on) {
+  focusMode = on;
+  document.body.classList.toggle('focus-mode', on);
+  if (on) {
+    setZen(false);
+    closeSidebar();
+    inputEl.focus();
+  }
+  renderList();
 }
 
 /* =========================================================

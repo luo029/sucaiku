@@ -6,6 +6,7 @@ const modalsHtml = `
     <button class="btn" id="selectAllBtn">全选本页</button>
     <button class="btn" id="batchMoveBtn">移动分类</button>
     <button class="btn" id="batchTagBtn">加标签</button>
+    <button class="btn" id="batchSourceBtn">设置来源</button>
     <button class="btn" id="batchExportBtn">导出</button>
     <button class="btn" id="batchExit">退出</button>
     <button class="btn danger-solid" id="batchDel">删除</button>
@@ -145,9 +146,18 @@ const modalsHtml = `
           <label class="st-toggle" style="margin-bottom:16px;"><div><div class="st-toggle-title">开启卡片动画</div><div class="st-toggle-desc">关闭可提升大量数据时的滚动性能</div></div><input type="checkbox" id="enableAnim"></label>
           
           <div class="st-field" style="margin-bottom:16px;">
+            <label>安心输入模式</label>
+            <div style="display:flex; gap:10px;">
+              <input type="text" id="focusModeCatInput" placeholder="收件箱" style="flex:1; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; background:var(--bg); color:var(--text); outline:none;">
+              <button class="btn primary" id="openFocusModeBtn" style="padding:0 20px; border-radius:8px;">进入模式</button>
+            </div>
+            <div class="st-hint">进入后隐藏所有列表，保存的素材默认归入上方填写的分类（如：收件箱、日志）。</div>
+          </div>
+
+          <div class="st-field" style="margin-bottom:16px;">
             <label>UI 风格</label>
             <div class="segmented" id="uiStyleMode">
-              <!-- ★ 注意：这里留空，完全由 JS 自动生成，不再写死 -->
+              <!-- 这里的内容将由 JS 自动生成 -->
             </div>
             <div class="st-hint">切换界面的整体视觉风格</div>
           </div>

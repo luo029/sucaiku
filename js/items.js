@@ -1,4 +1,6 @@
 /* js / items.js · 素材增删改：回收站 / 标签管理 / 待上传图 / 拖拽分类 */
+let zenQueue = []; // ★ 核心：专门用于自动跳转的队列
+
 /* =========================================================
    回收站
    ========================================================= */
@@ -116,14 +118,23 @@ function addOrUpdate(){
   const hasImgs=pendingImages.length>0;
   if(!text&&!hasImgs){toast('内容不能为空');inputEl.focus();return;}
 
-  const type=typeEl.value||UNCAT;
-  let source=sourceEl.value.trim();
-  const tagsRaw=tagsEl.value.trim();
-  const tags=tagsRaw?tagsRaw.split(/[,，\s]+/).filter(Boolean):[];
+  let type = typeEl.value || UNCAT;
+  let source = sourceEl.value.trim();
+  let tagsRaw = tagsEl.value.trim();
+  
+  if (focusMode) {
+    type = db.settings.focusModeCat || '收件箱';
+    source = '';
+    tagsRaw = '';
+    if(!db.cats.includes(type)) db.cats.push(type);
+  }
 
+  const tags=tagsRaw?tagsRaw.split(/[,，\s]+/).filter(Boolean):[];
   if(!source&&currentSource!==ALL_SOURCES)source=currentSource;
   if(!source&&db.fixedSource)source=db.fixedSource;
   if(!tags.length&&db.fixedTags.length)tags.push(...db.fixedTags);
+
+  const wasEditingId = editingId;
 
   if(editingId){
     const item=db.items.find(i=>i.id===editingId);
@@ -133,26 +144,76 @@ function addOrUpdate(){
       item.images=pendingImages.slice();
       item.updatedAt=Date.now();
     }
-    cancelEdit();toast('已更新');
   }else{
     db.items.unshift({id:uid(),text,type,source,tags:[...new Set(tags)],images:pendingImages.slice(),createdAt:Date.now()});
-    inputEl.value='';
-    tagsEl.value=db.fixedTags.length?db.fixedTags.join(', '):'';
-    sourceEl.value=db.fixedSource||'';
-    setPendingImages([]);
-    updateSourcePickerUI();updateTagPickerUI();
-    toast('已加入素材库');currentPage=1;
   }
 
   if(source&&!db.sources.includes(source))db.sources.push(source);
   if(currentSource!==ALL_SOURCES&&source!==currentSource)currentSource=ALL_SOURCES;
 
+  save();
+
+  // ★ 队列跳转逻辑
+  if (wasEditingId) {
+    const focusCat = db.settings.focusModeCat || '收件箱';
+    
+    // 只要在队列中还能找到一个真正存在的素材
+    while (zenQueue.length > 0) {
+      const nextId = zenQueue.shift();
+      const candidate = db.items.find(i => i.id === nextId);
+      
+      // 必须存在，且当前分类还是收件箱（防止被用户中途改走）
+      if (candidate && (candidate.type === focusCat || candidate.type === '收件箱')) {
+        
+        // 强行清空搜索框和分类限制，确保跳过去后界面能看到它
+        keyword = '';
+        if (searchEl) searchEl.value = '';
+        currentType = '全部'; 
+        currentPage = 1;
+
+        render(); 
+        startEdit(nextId); 
+        toast('已保存，自动跳至下一条');
+        return;
+      }
+    }
+    
+    // 队列空了，说明整个收件箱的待处理任务都做完了
+    cancelEdit();
+    toast('该分类已全部整理完毕');
+    return;
+  }
+
+  // 普通新增，退出编辑
+  cancelEdit();
+  toast('已加入素材库');
+  currentPage=1;
   save();render();inputEl.focus();
 }
 
 function startEdit(id){
   const item=db.items.find(i=>i.id===id);
   if(!item)return;
+  
+  // ★ 核心突破：如果是手动点击“编辑”进入，就创建一个全新的待办队列
+  if (editingId !== id) {
+    zenQueue = [];
+    const focusCat = db.settings.focusModeCat || '收件箱';
+    if (item.type === focusCat || item.type === '收件箱') {
+      // 获取全库所有同类素材，按时间倒序（跟界面一致）
+      const sameCats = db.items
+        .filter(i => i.type === focusCat || i.type === '收件箱')
+        .sort((a,b) => b.createdAt - a.createdAt) // 新的在前
+        .map(i => i.id);
+        
+      const idx = sameCats.indexOf(id);
+      if (idx !== -1) {
+        // 把它后面的所有项放入队列，再把它前面的所有项也放入队列（这样无论点哪，都能一路走到黑）
+        zenQueue = sameCats.slice(idx + 1).concat(sameCats.slice(0, idx));
+      }
+    }
+  }
+
   editingId=id;
   inputEl.value=item.text;
   refreshTypeSelect(item.type);
@@ -160,11 +221,13 @@ function startEdit(id){
   tagsEl.value=item.tags?item.tags.join(', '):'';
   setPendingImages(item.images||[]);
   updateSourcePickerUI();updateTagPickerUI();
-  addBtn.textContent='更新';cancelBtn.style.display='';
+  addBtn.textContent='更新';
+  cancelBtn.style.display='';
   inputEl.focus();scrollTop();
 }
 function cancelEdit(){
   editingId=null;
+  zenQueue = []; // 取消时清空队列
   addBtn.textContent='保存';cancelBtn.style.display='none';
   inputEl.value='';
   tagsEl.value=db.fixedTags.length?db.fixedTags.join(', '):'';

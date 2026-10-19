@@ -48,3 +48,6 @@ body.zen-mode .card:first-child .content{padding-top:12px}
 body.zen-mode .content.collapsed::after{display:none}
 body.zen-mode .zen-exit{display:flex}
 body.zen-mode .empty{padding:40px 0}
+
+body.zen-font-large .content { font-size: 21px !important; }
+body.zen-font-xlarge .content { font-size: 24px !important; }

@@ -32,24 +32,24 @@ function renderSidebar(){
 
   let html=`
     <button class="nav-item nav-all ${currentType==='全部'?'active':''}" data-type="全部" draggable="false">
-      <span class="nav-dot"></span><span class="nav-name">全部素材</span><span class="nav-count">${db.items.length}</span>
+      <span class="nav-dot"></span><span class="nav-name">全部素材</span><span class="nav-count">${formatCount(db.items.length)}</span>
     </button>`;
 
   if((catCounts[IMG_TYPE]||0) > 0){
     html += `<button class="nav-item nav-img ${currentType===IMG_TYPE?'active':''}" data-type="${IMG_TYPE}" draggable="false">
-      <span class="nav-dot"></span><span class="nav-name">图片</span><span class="nav-count">${catCounts[IMG_TYPE]}</span>
+      <span class="nav-dot"></span><span class="nav-name">图片</span><span class="nav-count">${formatCount(catCounts[IMG_TYPE])}</span>
     </button>`;
   }
 
   displayCats.forEach(c=>{
     const col=catColor(c);
     html+=`<button class="nav-item ${currentType===c?'active':''}" data-type="${esc(c)}" draggable="false">
-      <span class="nav-dot" style="background:${col.fg}"></span><span class="nav-name">${esc(c)}</span><span class="nav-count">${catCounts[c]||0}</span>
+      <span class="nav-dot" style="background:${col.fg}"></span><span class="nav-name">${esc(c)}</span><span class="nav-count">${formatCount(catCounts[c]||0)}</span>
     </button>`;
   });
   if((catCounts[UNCAT]||0)>0){
     html+=`<button class="nav-item ${currentType===UNCAT?'active':''}" data-type="${UNCAT}" draggable="false">
-      <span class="nav-dot" style="background:#94a3b8"></span><span class="nav-name">${UNCAT}</span><span class="nav-count">${catCounts[UNCAT]}</span>
+      <span class="nav-dot" style="background:#94a3b8"></span><span class="nav-name">${UNCAT}</span><span class="nav-count">${formatCount(catCounts[UNCAT])}</span>
     </button>`;
   }
 
@@ -78,7 +78,7 @@ function renderSidebar(){
 
   let srcHtml=`
     <button class="nav-item ${currentSource===ALL_SOURCES?'active':''}" data-source="${ALL_SOURCES}" draggable="false">
-      ${bookIcon}<span class="nav-name">全部来源</span><span class="nav-count">${db.sources.length}</span>
+      ${bookIcon}<span class="nav-name">全部来源</span><span class="nav-count">${formatCount(db.sources.length)}</span>
     </button>`;
   
   if(!db.sources.length){
@@ -89,7 +89,7 @@ function renderSidebar(){
       srcHtml+=`<button class="nav-item ${currentSource===s?'active':''}" data-source="${esc(s)}" draggable="false">
         ${bookIcon}<span class="nav-name" title="${esc(s)}">${esc(s)}</span>
         ${isFixed?pinIcon:''}
-        <span class="nav-count" style="${isFixed?'margin-right:2px':''}">${sourceCounts[s]||0}</span>
+        <span class="nav-count" style="${isFixed?'margin-right:2px':''}">${formatCount(sourceCounts[s]||0)}</span>
         <span class="nav-del-btn" data-del-source="${esc(s)}" title="删除来源">${delIcon}</span>
       </button>`;
     });
@@ -131,7 +131,7 @@ function renderTags(){
     const isFixed=db.fixedTags.includes(t);
     return `<button class="nav-item ${currentTag===t?'active':''}" data-tag="${esc(t)}" draggable="false">
       ${tagIcon}<span class="nav-name" title="${esc(t)}">${esc(t)}</span>
-      ${isFixed?pinIcon:''}<span class="nav-count">${counts[t]}</span>
+      ${isFixed?pinIcon:''}<span class="nav-count">${formatCount(counts[t])}</span>
     </button>`;
   }).join('');
 
@@ -166,7 +166,7 @@ function renderTabs(){
       else if(t===IMG_TYPE)style='background:linear-gradient(135deg,#a855f7,#8b5cf6);';
       else{const c=catColor(t);style=`background:${c.fg};`;}
     }
-    return `<button class="tab${isActive?' active':''}" data-type="${esc(t)}" draggable="false" ${style?` style="${style}"`:''}>${esc(t)}<span class="cnt">${n}</span></button>`;
+    return `<button class="tab${isActive?' active':''}" data-type="${esc(t)}" draggable="false" ${style?` style="${style}"`:''}>${esc(t)}<span class="cnt">${formatCount(n)}</span></button>`;
   }).join('');
 }
 
@@ -197,7 +197,7 @@ function renderSourceFilterList() {
       const n = counts[s] || 0;
       const fixedMark = db.fixedSource === s ? ' 📌' : '';
       html += `<div class="sp-item ${currentSource === s ? 'sp-selected' : ''}" data-pick="${esc(s)}">
-        <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${n}</span>` : ''}${fixedMark}</span>
+        <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${formatCount(n)}</span>` : ''}${fixedMark}</span>
       </div>`;
     });
   }
@@ -210,8 +210,7 @@ function renderHeader(){
   if(currentSource!==ALL_SOURCES)title=currentSource+' · '+title;
   if(currentTag)title='#'+currentTag+' · '+title;
   $('pageTitle').textContent=title;
-  const totalChars=filtered.reduce((s,i)=>s+i.text.length,0);
-  $('pageCount').textContent=`${filtered.length} 条 / ${totalChars} 字`;
+
   const parts=[];
   if(currentSource!==ALL_SOURCES)parts.push(`来自《${currentSource}》`);
   if(currentTag)parts.push(`标签 #${currentTag}`);
@@ -233,7 +232,7 @@ function renderZenBar(){
 
   let html = list.map(t=>{
     const n=t==='全部'?textItems.length:(counts[t]||0);
-    return `<div class="zb ${currentType===t?'active':''}" data-zt="${esc(t)}">${esc(t)}<span class="n">${n}</span></div>`;
+    return `<div class="zb ${currentType===t?'active':''}" data-zt="${esc(t)}">${esc(t)}<span class="n">${formatCount(n)}</span></div>`;
   }).join('');
 
   html += `<div style="width:1px;height:16px;background:var(--line);margin:auto 6px;flex:none;"></div>`;
@@ -263,11 +262,9 @@ function renderSettingsOverview(){
   $('ovTags').textContent = tags;
 }
 
-// ★ 全自动渲染主题按钮
 function renderStyleOptions() {
   const container = document.getElementById('uiStyleMode');
   if (!container) return;
-  
   container.innerHTML = AVAILABLE_STYLES.map(style => {
     const active = db.settings.uiStyle === style.id ? 'active' : '';
     return `<button type="button" data-style="${style.id}" class="${active}">${style.name}</button>`;
@@ -401,7 +398,7 @@ function renderSourcePanelList(query){
     const isFixed=db.fixedSource===s;const isSelected=currentVal===s;const n=counts[s]||0;
     const pinFill=isFixed?'currentColor':'none';
     html+=`<div class="sp-item ${isSelected?'sp-selected':''}" data-pick="${esc(s)}">
-      <span class="sp-name">${esc(s)}${n?`<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${n}</span>`:''}</span>
+      <span class="sp-name">${esc(s)}${n?`<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${formatCount(n)}</span>`:''}</span>
       <span class="sp-pin ${isFixed?'active':''}" data-pin="${esc(s)}" title="${isFixed?'取消固定':'固定为默认来源'}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="${pinFill}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>
       </span>
@@ -423,7 +420,7 @@ function renderTagPanelList(query){
     const isFixed=db.fixedTags.includes(s);const isSelected=currentTags.includes(s);const n=counts[s]||0;
     const pinFill=isFixed?'currentColor':'none';
     html+=`<div class="sp-item ${isSelected?'sp-selected':''}" data-pick="${esc(s)}">
-      <span class="sp-name">${esc(s)}${n?`<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${n}</span>`:''}</span>
+      <span class="sp-name">${esc(s)}${n?`<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${formatCount(n)}</span>`:''}</span>
       <span class="sp-pin ${isFixed?'active':''}" data-pin="${esc(s)}" title="${isFixed?'取消固定':'固定为默认标签'}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="${pinFill}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>
       </span>
@@ -459,7 +456,7 @@ function renderCatManager(){
     return `<div class="cat-row">
       <span class="dot" style="background:${col.fg}"></span>
       <input class="cat-name" data-idx="${idx}" value="${esc(c)}" maxlength="12">
-      <span class="cat-n">${n}</span>
+      <span class="cat-n">${formatCount(n)}</span>
       <button class="btn tiny danger" data-cat-del="${idx}">删除</button>
     </div>`;
   }).join('');

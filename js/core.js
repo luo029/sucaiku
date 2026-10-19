@@ -13,11 +13,10 @@ const ZEN_KEY='material-library.zen';
 const GH_KEY='material-library.github';
 const TINY_KEY='material-library.tinypng';
 
-// ★ 新增：主题中心（以后加主题，只在这里加一行配置）
 const AVAILABLE_STYLES = [
   { id: 'modern', name: '现代' },
   { id: 'retro', name: '复古墨水' },
-  { id: 'bento', name: '便当盒' } // ★ 新增
+  { id: 'bento', name: '便当盒' }
 ];
 
 const DEFAULT_SETTINGS={
@@ -39,7 +38,8 @@ const DEFAULT_SETTINGS={
   inputPlaceholder:'粘贴句子、段落（Ctrl+Enter保存）。用【文字】可高亮。可直接粘贴图片。',
   cardSpacing:'standard',
   zenFontSize:'normal',
-  uiStyle:'modern' // 当前使用的风格 ID
+  uiStyle:'modern',
+  focusModeCat:'收件箱'
 };
 
 const PALETTE=[
@@ -73,6 +73,7 @@ let pageSize=12;
 let layoutMode='sidebar';
 let themeMode='light';
 let zenMode=false;
+let focusMode=false;
 
 let pendingImages=[];
 let pendingUploadFiles=[];
@@ -112,6 +113,11 @@ const zenBarEl=$('zenBar');
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function getSearchTerms(){return keyword.trim().toLowerCase().split(/\s+/).filter(Boolean);}
+
+// ★ 新增：数字缩略显示函数
+function formatCount(num) {
+  return num > 99 ? '99+' : num;
+}
 
 function highlightEscaped(escaped,kws){
   const list=(kws||[]).filter(Boolean);
@@ -240,7 +246,6 @@ function saveSettings(){
 function applySettingsToUI(){
   const s=db.settings;
   
-  // ★ 修改：应用 UI 风格
   document.documentElement.setAttribute('data-style', s.uiStyle || 'modern');
   document.body.setAttribute('data-style', s.uiStyle || 'modern');
   
@@ -257,6 +262,7 @@ function applySettingsToUI(){
   if($('autoCheckUpdateToggle')) $('autoCheckUpdateToggle').checked = s.autoCheckUpdate !== false;
   if($('useRelativeTimeToggle')) $('useRelativeTimeToggle').checked = s.useRelativeTime === true;
   if($('themeDarkToggle')) $('themeDarkToggle').checked = themeMode === 'dark';
+  if($('focusModeCatInput')) $('focusModeCatInput').value = s.focusModeCat || '收件箱';
 
   if($('sidebarShowCat')) $('sidebarShowCat').checked = s.sidebarShowCat !== false;
   if($('sidebarShowSrc')) $('sidebarShowSrc').checked = s.sidebarShowSrc !== false;

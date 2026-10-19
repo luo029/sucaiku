@@ -147,3 +147,26 @@ $('tagAddConfirm').addEventListener('click',()=>{
   $('tagAddMask').classList.remove('show');
   save();render();toast(`已为 ${n} 条素材添加标签`);
 });
+
+// 批量设置来源（安全绑定）
+const batchSourceBtn = $('batchSourceBtn');
+if (batchSourceBtn) {
+  batchSourceBtn.addEventListener('click', () => {
+    if(!selectedIds.size){toast('请先选择素材');return;}
+    const src = prompt(`将选中的 ${selectedIds.size} 条素材来源修改为：\n（直接留空并点确定可清空来源）`);
+    if (src === null) return;
+    const newSource = src.trim();
+    let n = 0;
+    db.items.forEach(i => {
+      if (selectedIds.has(i.id)) {
+        i.source = newSource;
+        i.updatedAt = Date.now();
+        n++;
+      }
+    });
+    if (newSource && !db.sources.includes(newSource)) db.sources.push(newSource);
+    selectedIds.clear(); selectMode = false;
+    save(); render();
+    toast(`已为 ${n} 条素材设置来源`);
+  });
+}

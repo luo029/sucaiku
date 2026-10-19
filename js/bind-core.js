@@ -97,7 +97,6 @@ document.addEventListener('click',e=>{
     $('sourceFilterPanel').hidden = true;
   }
   const zenPanel = document.getElementById('zenFilterPanel');
-  // 修改了判断逻辑，适配挂载在 body 上的面板
   if (zenPanel && !zenPanel.contains(e.target) && !e.target.closest('.zen-filter-btn')) {
     zenPanel.remove();
   }
@@ -206,7 +205,6 @@ zenBarEl.addEventListener('click',e=>{
   }
 });
 
-// ★ 修复：将极简模式的面板挂载到 body，并计算绝对位置防止被裁剪
 function openZenFilterPanel(type) {
   let panel = document.getElementById('zenFilterPanel');
   if (panel) {
@@ -228,15 +226,12 @@ function openZenFilterPanel(type) {
     <div class="sp-list" id="zenFilterList" style="max-height:260px;"></div>
   `;
   
-  // 挂载到 body 上，避免被横向滚动条裁剪
   document.body.appendChild(panel);
   
-  // 动态计算位置：对齐到按钮正下方
   const btn = document.getElementById(type === 'source' ? 'zenSrcBtn' : 'zenTagBtn');
   if (btn) {
     const rect = btn.getBoundingClientRect();
     panel.style.top = (rect.bottom + window.scrollY + 8) + 'px';
-    // 靠右对齐限制（防止在小屏幕上超出右侧）
     let left = rect.left + window.scrollX;
     const maxLeft = window.innerWidth - 240 - 20; 
     if (left > maxLeft) left = maxLeft;
@@ -261,7 +256,7 @@ function openZenFilterPanel(type) {
       list.forEach(s => {
         const n = counts[s] || 0;
         html += `<div class="sp-item ${currentSource===s?'sp-selected':''}" data-pick="${esc(s)}">
-          <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${n}</span>` : ''}</span>
+          <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${formatCount(n)}</span>` : ''}</span>
         </div>`;
       });
     } else {
@@ -273,7 +268,7 @@ function openZenFilterPanel(type) {
       list.forEach(s => {
         const n = counts[s] || 0;
         html += `<div class="sp-item ${currentTag===s?'sp-selected':''}" data-pick="${esc(s)}">
-          <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${n}</span>` : ''}</span>
+          <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${formatCount(n)}</span>` : ''}</span>
         </div>`;
       });
     }
@@ -301,7 +296,6 @@ function openZenFilterPanel(type) {
   });
 }
 
-/* ★ 优化：图片加载失败 → API 兜底（合并为统一函数） */
 function handleImgFallback(e) {
   const img = e.target;
   if(!img || img.tagName !== 'IMG') return;

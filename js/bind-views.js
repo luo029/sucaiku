@@ -1,6 +1,4 @@
 /* js / bind-views.js · 事件绑定：视图切换 / 各弹窗 / 设置表单 */
-
-// 辅助函数：安全绑定事件（防止因为元素找不到导致报错中断）
 const safeBind = (id, event, fn) => {
   const el = document.getElementById(id);
   if (el) el.addEventListener(event, fn);
@@ -20,6 +18,10 @@ safeBind('themeToggleBtn', 'click', () => {
 });
 safeBind('zenBtn', 'click', () => setZen(true));
 safeBind('zenExitBtn', 'click', () => setZen(false));
+
+// ★ 新增：首页安心输入按钮
+safeBind('focusBtn', 'click', () => setFocus(true));
+
 safeBind('imgViewBtn', 'click', openImgView);
 safeBind('imgViewClose', 'click', closeImgView);
 
@@ -35,6 +37,7 @@ safeBind('imgMasonry', 'click', e => {
 
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
+  if(focusMode){setFocus(false);return;}
   if(zenMode){setZen(false);return;}
   if(!$('imgView').hidden){closeImgView();return;}
   if(!$('imgManagerView').hidden){$('imgManagerView').hidden=true;document.body.style.overflow='';return;}
@@ -175,9 +178,7 @@ safeBind('fileInput', 'change', e => {
   handleImportFile(f);e.target.value='';
 });
 
-/* =========================================================
-   设置面板
-   ========================================================= */
+/* 设置面板 */
 safeBind('settingCloseBtn', 'click', () => {
   const mask = $('settingMask');
   if (mask) mask.classList.remove('show');
@@ -202,7 +203,7 @@ safeBind('settingTabs', 'click', e => {
 });
 
 function openSettings() {
-  renderStyleOptions(); // ★ 打开设置时，自动渲染主题按钮
+  renderStyleOptions();
   applySettingsToUI();
   fillGHForm();
   updateTinyUsageUI();
@@ -211,6 +212,22 @@ function openSettings() {
 }
 safeBind('menuSettingBtn', 'click', openSettings);
 safeBind('gearBtn', 'click', openSettings);
+
+// 安心输入模式
+safeBind('focusModeCatInput', 'change', e => {
+  db.settings.focusModeCat = e.target.value.trim() || '收件箱';
+  saveSettings();
+  toast(`专注模式默认分类设为「${db.settings.focusModeCat}」`);
+});
+
+safeBind('openFocusModeBtn', 'click', () => {
+  $('settingMask').classList.remove('show');
+  setFocus(true);
+});
+
+safeBind('focusExitBtn', 'click', () => {
+  setFocus(false);
+});
 
 safeBind('themeDarkToggle', 'change', e => {
   setTheme(e.target.checked ? 'dark' : 'light');
@@ -222,26 +239,16 @@ safeBind('useRelativeTimeToggle', 'change', e => {
   toast(e.target.checked ? '已切换为相对时间' : '已切换为绝对时间');
 });
 
-// ★ 新增：自定义输入框提示语
-safeBind('inputPlaceholder', 'input', e => {
-  db.settings.inputPlaceholder = e.target.value;
-  saveSettings();
-  if(inputEl) inputEl.placeholder = e.target.value || DEFAULT_SETTINGS.inputPlaceholder;
-});
-
-// ★ 修改：UI 风格切换（改用事件委托，一劳永逸）
 safeBind('uiStyleMode', 'click', e => {
   const b = e.target.closest('button[data-style]'); if(!b) return;
   db.settings.uiStyle = b.dataset.style;
   saveSettings(); 
-  renderStyleOptions(); // 重新渲染按钮高亮
+  renderStyleOptions();
   applySettingsToUI();
-  
   const styleName = AVAILABLE_STYLES.find(s => s.id === db.settings.uiStyle)?.name || '新风格';
   toast('已切换至「' + styleName + '」');
 });
 
-// ★ 新增：卡片间距调整
 safeBind('cardSpacing', 'click', e => {
   const b = e.target.closest('button[data-spacing]'); if(!b) return;
   db.settings.cardSpacing = b.dataset.spacing; 
@@ -249,7 +256,6 @@ safeBind('cardSpacing', 'click', e => {
   toast('卡片间距已调整');
 });
 
-// ★ 新增：极简模式字号调整
 safeBind('zenFontSize', 'click', e => {
   const b = e.target.closest('button[data-zfs]'); if(!b) return;
   db.settings.zenFontSize = b.dataset.zfs; 
@@ -257,7 +263,6 @@ safeBind('zenFontSize', 'click', e => {
   toast('极简模式字号已调整');
 });
 
-// 侧边栏内容开关
 safeBind('sidebarShowCat', 'change', e => {
   db.settings.sidebarShowCat = e.target.checked;
   saveSettings(); applySettingsToUI();

@@ -1,0 +1,88 @@
+/* css/focus.css · 安心输入模式（沉浸写作） */
+body.focus-mode {
+  background: var(--bg);
+}
+
+body.focus-mode .sidebar,
+body.focus-mode .sidebar-overlay,
+body.focus-mode .menu-fab,
+body.focus-mode .page-head,
+body.focus-mode .hitokoto-box,
+body.focus-mode .cat-manager,
+body.focus-mode .tabs-row,
+body.focus-mode .toolbar,
+body.focus-mode .batch-bar,
+body.focus-mode .pagination,
+body.focus-mode .sidebar-footer,
+body.focus-mode #list,
+body.focus-mode .zen-bar,
+body.focus-mode #zenExitBtn {
+  display: none !important;
+}
+
+body.focus-mode .main {
+  margin-right: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+body.focus-mode .main-inner {
+  max-width: 860px;
+  width: 100%;
+  padding: 20px;
+  margin: 0 auto;
+}
+
+body.focus-mode .composer {
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.08);
+  border: 1px solid var(--line);
+}
+
+body.focus-mode .composer textarea {
+  min-height: 55vh;
+  font-size: 20px;
+  line-height: 2;
+  padding-bottom: 20px;
+}
+
+body.focus-mode .field-group {
+  display: none !important;
+}
+
+body.focus-mode .composer-foot {
+  border-top: 1px dashed var(--line-2);
+  padding-top: 20px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.focus-exit {
+  display: none;
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-1);
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  cursor: pointer;
+  transition: all .2s;
+}
+.focus-exit:hover {
+  color: var(--text);
+  transform: scale(1.05) rotate(90deg);
+}
+body.focus-mode .focus-exit {
+  display: flex;
+}
