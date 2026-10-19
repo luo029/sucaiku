@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<!-- ★ 改动1：加了 viewport-fit=cover，让 iPhone 底部横条区域也能被正确避让 -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>素材库 · 拆书记录</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -245,5 +246,7 @@
 <script src="js/bind-list.js"></script>
 <script src="js/bind-views.js"></script>
 <script src="js/init.js"></script>
+<!-- ★ 改动2：新增手机端滚动隐藏菜单按钮脚本（必须放在 init.js 之后） -->
+<script src="js/scroll-hide.js"></script>
 </body>
 </html>

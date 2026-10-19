@@ -312,3 +312,26 @@
   .stat-grid { grid-template-columns: 1fr 1fr; }
   .stat-name { width: 64px; }
 }
+
+/* =========================================================
+   ★ 4. env() 兜底（兼容旧安卓内核 / 微信浏览器 / UC）
+   仅当浏览器不支持 env() 时才启用下面这套固定值，
+   避免整条 calc() 被判定无效导致 padding 变 0。
+   ========================================================= */
+@supports not (padding: env(safe-area-inset-bottom)) {
+  @media (max-width: 960px) {
+    .menu-fab { top: 12px; right: 12px; }
+    .main-inner { padding-top: 64px; }
+    body.layout-compact .main-inner { padding-top: 24px; }
+  }
+  @media (max-width: 768px) {
+    .main-inner { padding-bottom: 80px; }
+    .batch-bar { bottom: 14px; }
+    #toast { bottom: 24px; }
+    #toast.raised { bottom: 180px; }
+    .modal { padding-bottom: 20px; }
+    .sidebar-footer { padding-bottom: 10px; }
+    body.zen-mode .main-inner { padding-bottom: 80px; }
+    .zen-exit { top: 10px; right: 10px; }
+  }
+}
