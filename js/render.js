@@ -220,32 +220,23 @@ function renderHeader(){
 
 function imgCatBadge(img){return img&&img.cat?`<span class="ci-cat">${esc(img.cat)}</span>`:'';}
 
+// ★ 改造：极简模式只显示三个居中的下拉按钮
 function renderZenBar(){
-  const textItems = db.items.filter(i => i.text);
-  const counts={};
-  textItems.forEach(i=>counts[i.type]=(counts[i.type]||0)+1);
-  
-  const list=['全部'];
-  list.push(...db.cats);
-  if((counts[UNCAT]||0)>0)list.push(UNCAT);
-  if(!list.includes(currentType))currentType='全部';
-
-  let html = list.map(t=>{
-    const n=t==='全部'?textItems.length:(counts[t]||0);
-    return `<div class="zb ${currentType===t?'active':''}" data-zt="${esc(t)}">${esc(t)}<span class="n">${formatCount(n)}</span></div>`;
-  }).join('');
-
-  html += `<div style="width:1px;height:16px;background:var(--line);margin:auto 6px;flex:none;"></div>`;
-
-  const srcTxt = currentSource===ALL_SOURCES ? '全部来源' : currentSource;
-  html += `<div class="zb zen-filter-btn ${currentSource!==ALL_SOURCES?'active':''}" id="zenSrcBtn">
-    ${esc(srcTxt)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px;"><path d="m6 9 6 6 6-6"/></svg>
-  </div>`;
-
+  const typeTxt = currentType === '全部' ? '全部分类' : currentType;
+  const srcTxt = currentSource === ALL_SOURCES ? '全部来源' : currentSource;
   const tagTxt = currentTag ? '#'+currentTag : '全部标签';
-  html += `<div class="zb zen-filter-btn ${currentTag?'active':''}" id="zenTagBtn">
-    ${esc(tagTxt)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px;"><path d="m6 9 6 6 6-6"/></svg>
-  </div>`;
+
+  let html = `
+    <div class="zb zen-filter-btn ${currentType!=='全部'?'active':''}" id="zenTypeBtn">
+      ${esc(typeTxt)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px;"><path d="m6 9 6 6 6-6"/></svg>
+    </div>
+    <div class="zb zen-filter-btn ${currentSource!==ALL_SOURCES?'active':''}" id="zenSrcBtn">
+      ${esc(srcTxt)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px;"><path d="m6 9 6 6 6-6"/></svg>
+    </div>
+    <div class="zb zen-filter-btn ${currentTag?'active':''}" id="zenTagBtn">
+      ${esc(tagTxt)} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px;"><path d="m6 9 6 6 6-6"/></svg>
+    </div>
+  `;
 
   zenBarEl.innerHTML = html;
 }

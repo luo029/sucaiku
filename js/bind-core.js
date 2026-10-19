@@ -190,6 +190,10 @@ tabsEl.addEventListener('click',e=>{
 zenBarEl.addEventListener('click',e=>{
   const t=e.target.closest('.zb');if(!t)return;
   
+  if (t.id === 'zenTypeBtn') {
+    openZenFilterPanel('type');
+    return;
+  }
   if (t.id === 'zenSrcBtn') {
     openZenFilterPanel('source');
     return;
@@ -197,11 +201,6 @@ zenBarEl.addEventListener('click',e=>{
   if (t.id === 'zenTagBtn') {
     openZenFilterPanel('tag');
     return;
-  }
-  
-  if (t.dataset.zt) {
-    currentType = t.dataset.zt; currentPage = 1;
-    renderList(); renderHeader();
   }
 });
 
@@ -228,7 +227,8 @@ function openZenFilterPanel(type) {
   
   document.body.appendChild(panel);
   
-  const btn = document.getElementById(type === 'source' ? 'zenSrcBtn' : 'zenTagBtn');
+  const btnId = type === 'type' ? 'zenTypeBtn' : (type === 'source' ? 'zenSrcBtn' : 'zenTagBtn');
+  const btn = document.getElementById(btnId);
   if (btn) {
     const rect = btn.getBoundingClientRect();
     panel.style.top = (rect.bottom + window.scrollY + 8) + 'px';
@@ -247,7 +247,25 @@ function openZenFilterPanel(type) {
     const lowerQ = q.toLowerCase();
     let html = '';
     
-    if (type === 'source') {
+    if (type === 'type') {
+      const textItems = db.items.filter(i => i.text);
+      const counts={};
+      textItems.forEach(i=>counts[i.type]=(counts[i.type]||0)+1);
+      const allCats = ['全部', ...db.cats];
+      if((counts[UNCAT]||0)>0) allCats.push(UNCAT);
+      
+      let list = allCats;
+      if (lowerQ) list = list.filter(s => s.toLowerCase().includes(lowerQ));
+      
+      html += `<div class="sp-item ${currentType==='全部'?'sp-selected':''}" data-pick="__all__"><span class="sp-name">全部分类</span></div>`;
+      list.forEach(s => {
+        if (s === '全部') return;
+        const n = counts[s] || 0;
+        html += `<div class="sp-item ${currentType===s?'sp-selected':''}" data-pick="${esc(s)}">
+          <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${formatCount(n)}</span>` : ''}</span>
+        </div>`;
+      });
+    } else if (type === 'source') {
       const counts={};db.items.forEach(i=>{if(i.source)counts[i.source]=(counts[i.source]||0)+1;});
       let list = db.sources;
       if (lowerQ) list = list.filter(s => s.toLowerCase().includes(lowerQ));
@@ -284,7 +302,9 @@ function openZenFilterPanel(type) {
     e.stopPropagation();
     
     const val = item.dataset.pick;
-    if (type === 'source') {
+    if (type === 'type') {
+      currentType = val === '__all__' ? '全部' : val;
+    } else if (type === 'source') {
       currentSource = val === '__all__' ? ALL_SOURCES : val;
     } else {
       currentTag = val || '';
