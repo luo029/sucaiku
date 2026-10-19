@@ -46,12 +46,44 @@ function canvasCompress(file,maxDim=1920,quality=0.85){
   return new Promise((resolve,reject)=>{
     const img=new Image();
     img.onload=()=>{
-      let{width,height}=img;
-      if(width>maxDim||height>maxDim){
-        const ratio=Math.min(maxDim/width,maxDim/height);
-        width=Math.round(width*ratio);
-        height=Math.round(height*ratio);
+      const {width:origW, height:origH} = img;
+      const shortSide = Math.min(origW, origH);
+      const longSide  = Math.max(origW, origH);
+      const aspect    = longSide / shortSide;
+
+      // 长宽比 >= 2 视为长图，走「保清晰」策略
+      const isLongImage = aspect >= 2;
+
+      let scale = 1;
+
+      if (isLongImage) {
+        // 长图：短边不低于 720，长边不超过 12000，总像素不超过 12MP
+        const SHORT_MIN  = 720;
+        const LONG_MAX   = 12000;
+        const MAX_PIXELS = 12 * 1000 * 1000;
+
+        if (longSide > LONG_MAX) {
+          scale = Math.min(scale, LONG_MAX / longSide);
+        }
+        if (origW * origH * scale * scale > MAX_PIXELS) {
+          scale = Math.min(scale, Math.sqrt(MAX_PIXELS / (origW * origH)));
+        }
+        // 短边保底（仅当原图短边本身够大时才触发）
+        if (shortSide >= SHORT_MIN && shortSide * scale < SHORT_MIN) {
+          const minScaleForShort = SHORT_MIN / shortSide;
+          const maxScaleForLong  = longSide > LONG_MAX ? LONG_MAX / longSide : 1;
+          scale = Math.min(minScaleForShort, maxScaleForLong);
+        }
+      } else {
+        // 普通图：最长边不超过 maxDim（保持原逻辑）
+        if (longSide > maxDim) {
+          scale = maxDim / longSide;
+        }
       }
+
+      const width  = Math.round(origW * scale);
+      const height = Math.round(origH * scale);
+
       const canvas=document.createElement('canvas');
       canvas.width=width;canvas.height=height;
       const ctx=canvas.getContext('2d');
