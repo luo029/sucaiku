@@ -95,6 +95,7 @@ function imageSrc(im){
   return im.url || '';
 }
 const imgBlobCache = new Map();
+const IMG_BLOB_CACHE_MAX = 300;
 async function fetchImageBlobUrl(relPath){
   if(imgBlobCache.has(relPath)) return imgBlobCache.get(relPath);
   const rc = ghRepoConfig('img');
@@ -107,6 +108,12 @@ async function fetchImageBlobUrl(relPath){
   if(!res.ok) throw new Error('HTTP ' + res.status);
   const blob = await res.blob();
   const objUrl = URL.createObjectURL(blob);
+  // 缓存上限：超出时释放最早的 blob URL，避免内存持续膨胀
+  if (imgBlobCache.size >= IMG_BLOB_CACHE_MAX) {
+    const firstKey = imgBlobCache.keys().next().value;
+    try { URL.revokeObjectURL(imgBlobCache.get(firstKey)); } catch(e) {}
+    imgBlobCache.delete(firstKey);
+  }
   imgBlobCache.set(relPath, objUrl);
   return objUrl;
 }
@@ -142,9 +149,12 @@ async function ghPull(silent){
     }
     db.items.forEach(i=>{i.images=normalizeImages(i.images);});
     localStorage.setItem(STORE_KEY,JSON.stringify(db));
-    suppressPush=false;
     saveSettings();
-    normalize();save();render();updateTinyUsageUI();applySettingsToUI();
+    normalize();
+    save();
+    // 拉取完成后再解除抑制，避免这次 save() 触发回推
+    suppressPush=false;
+    render();updateTinyUsageUI();applySettingsToUI();
     if(!silent){toast('已拉取远程数据');ghSetStatus('拉取成功 · '+new Date().toLocaleTimeString());}
     return true;
   }catch(err){

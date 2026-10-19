@@ -5,6 +5,18 @@
 let imgMgrCurrentCat = 'all';
 let imgMgrCurrentTime = 'all';
 
+/* 从文件名解析图片分类。
+   文件名格式：${safeCat}-${ts}-${rand}.${ext}
+   优先用已知分类做前缀匹配（分类名可能含 "-"，直接 split('-') 会截断）。 */
+function parseCatFromFilename(filename) {
+  const cats = (db.imageCategories || []).slice().sort((a, b) => b.length - a.length);
+  for (const c of cats) {
+    const safe = sanitizeFilename(c);
+    if (safe && filename.startsWith(safe + '-')) return c;
+  }
+  return filename.split('-')[0] || '图片';
+}
+
 async function openImgManager() {
   const cfg = loadGH();
   if (!ghReady(cfg)) {
@@ -103,7 +115,7 @@ async function loadRepoImages() {
     repoImagesCache = files.map(f => {
       const relPath = f.path.substring(prefix.length);
       const filename = f.path.split('/').pop();
-      const cat = filename.split('-')[0] || '图片';
+      const cat = parseCatFromFilename(filename);
       
       const isUsed = db.items.some(item => 
         item.images && item.images.some(im => {

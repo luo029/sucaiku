@@ -34,12 +34,15 @@ safeBind('imgMasonry', 'click', e => {
 });
 
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){
-    if(zenMode){setZen(false);return;}
-    if(!$('imgView').hidden){closeImgView();return;}
-    if(!$('imgManagerView').hidden){$('imgManagerView').hidden=true;document.body.style.overflow='';return;}
-    // 加上按 Esc 关闭设置弹窗
-    if($('settingMask').classList.contains('show')){ $('settingMask').classList.remove('show'); return; }
+  if(e.key!=='Escape')return;
+  if(zenMode){setZen(false);return;}
+  if(!$('imgView').hidden){closeImgView();return;}
+  if(!$('imgManagerView').hidden){$('imgManagerView').hidden=true;document.body.style.overflow='';return;}
+  const openMask=document.querySelector('.modal-mask.show');
+  if(openMask){
+    if(openMask.id==='modalMask'){closeModal();return;}
+    openMask.classList.remove('show');
+    return;
   }
 });
 
@@ -132,14 +135,6 @@ safeBind('imgMgrCloseBtn', 'click', () => {
 safeBind('imgMgrRefreshBtn', 'click', loadRepoImages);
 safeBind('imgMgrCleanUnusedBtn', 'click', cleanAllUnusedImages);
 
-safeBind('imgMgrFilterTabs', 'click', e => {
-  const b = e.target.closest('button[data-filter]');
-  if (!b) return;
-  $('imgMgrFilterTabs').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
-  imgMgrCurrentFilter = b.dataset.filter;
-  renderImgMgrUI();
-});
-
 safeBind('imgMgrGrid', 'click', e => {
   const delBtn = e.target.closest('[data-del-img-mgr]');
   if (delBtn) {
@@ -214,6 +209,7 @@ safeBind('settingTabs', 'click', e => {
 
 // 绑定打开设置面板的按钮
 function openSettings() {
+  applySettingsToUI();
   fillGHForm();
   updateTinyUsageUI();
   $('settingMask').classList.add('show');
