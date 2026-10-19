@@ -59,7 +59,7 @@
       "tag": true
     },
     "statsLimit": 8,
-    "compressMode": "local",
+    "compressMode": "tinypng",
     "tinypngKey": "Copied to clipboard GV6TFZdRpLBQTMCKW9rrnbVXhd4DgCd1",
     "tinypngProxy": "",
     "catLimit": 1,
