@@ -25,7 +25,14 @@ const DEFAULT_SETTINGS={
   fontSizeMode:'normal',
   syncCheckInterval:60, 
   autoCheckUpdate:true,
-  useRelativeTime:false // ★ 新增：是否使用相对时间
+  useRelativeTime:false,
+  sidebarShowCat:true,
+  sidebarShowSrc:true,
+  sidebarShowTag:true,
+  // ★ 新增的三个配置项
+  inputPlaceholder:'粘贴句子、段落（Ctrl+Enter保存）。用【文字】可高亮。可直接粘贴图片。',
+  cardSpacing:'standard', // standard, compact, loose
+  zenFontSize:'normal'   // normal, large, xlarge
 };
 
 const PALETTE=[
@@ -126,7 +133,6 @@ function formatText(text,kws){
 
 function pad2(n){return String(n).padStart(2,'0');}
 
-// ★ 修改：支持相对时间显示
 function fmtDate(ts){
   if(!ts) return '';
   if(db.settings.useRelativeTime){
@@ -240,6 +246,37 @@ function applySettingsToUI(){
   if($('autoCheckUpdateToggle')) $('autoCheckUpdateToggle').checked = s.autoCheckUpdate !== false;
   if($('useRelativeTimeToggle')) $('useRelativeTimeToggle').checked = s.useRelativeTime === true;
   if($('themeDarkToggle')) $('themeDarkToggle').checked = themeMode === 'dark';
+
+  if($('sidebarShowCat')) $('sidebarShowCat').checked = s.sidebarShowCat !== false;
+  if($('sidebarShowSrc')) $('sidebarShowSrc').checked = s.sidebarShowSrc !== false;
+  if($('sidebarShowTag')) $('sidebarShowTag').checked = s.sidebarShowTag !== false;
+
+  const catGroup = $('catNav')?.closest('.nav-group');
+  const srcGroup = $('sourceNav')?.closest('.nav-group');
+  const tagGroup = $('tagNav')?.closest('.nav-group');
+  if(catGroup) catGroup.style.display = s.sidebarShowCat !== false ? '' : 'none';
+  if(srcGroup) srcGroup.style.display = s.sidebarShowSrc !== false ? '' : 'none';
+  if(tagGroup) tagGroup.style.display = s.sidebarShowTag !== false ? '' : 'none';
+
+  // ★ 新增：输入框提示语
+  if(inputEl) inputEl.placeholder = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
+  if($('inputPlaceholder')) $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
+
+  // ★ 新增：卡片间距
+  document.body.classList.remove('spacing-compact', 'spacing-loose');
+  if (s.cardSpacing === 'compact') document.body.classList.add('spacing-compact');
+  if (s.cardSpacing === 'loose') document.body.classList.add('spacing-loose');
+  document.querySelectorAll('#cardSpacing button').forEach(b => {
+    b.classList.toggle('active', b.dataset.spacing === (s.cardSpacing || 'standard'));
+  });
+
+  // ★ 新增：极简模式字号
+  document.body.classList.remove('zen-font-large', 'zen-font-xlarge');
+  if (s.zenFontSize === 'large') document.body.classList.add('zen-font-large');
+  if (s.zenFontSize === 'xlarge') document.body.classList.add('zen-font-xlarge');
+  document.querySelectorAll('#zenFontSize button').forEach(b => {
+    b.classList.toggle('active', b.dataset.zfs === (s.zenFontSize || 'normal'));
+  });
 
   if ($('catLimitInput')) $('catLimitInput').value = Number(s.catLimit)||3;
   if ($('srcLimitInput')) $('srcLimitInput').value = Number(s.srcLimit)||3;

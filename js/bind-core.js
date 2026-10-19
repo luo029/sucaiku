@@ -98,6 +98,7 @@ document.addEventListener('click',e=>{
 $('hitokotoRefresh').addEventListener('click',fetchHitokoto);
 searchEl.addEventListener('input',()=>{
   keyword=searchEl.value;currentPage=1;
+  clearFilterCache();
   renderList();renderHeader();
 });
 sourceFilterEl.addEventListener('change',e=>{
@@ -159,49 +160,24 @@ zenBarEl.addEventListener('click',e=>{
   renderList();renderHeader();
 });
 
-/* 图片加载失败 → API 兜底（私有仓库 / raw CDN 延迟） */
-listEl.addEventListener('error', async (e)=>{
-  const img=e.target;
-  if(!img || img.tagName!=='IMG') return;
-  const path=img.dataset.imgPath;
+/* ★ 优化：图片加载失败 → API 兜底（合并为统一函数） */
+function handleImgFallback(e) {
+  const img = e.target;
+  if(!img || img.tagName !== 'IMG') return;
+  const path = img.dataset.imgPath;
   if(!path || img.dataset.fallbackDone) return;
-  img.dataset.fallbackDone='1';
-  try{
-    const url=await fetchImageBlobUrl(path);
-    img.src=url;
-    img.dataset.openImg=url;
-  }catch(err){
-    console.warn('图片加载失败',err);
-    img.style.opacity='.4';
-    img.title='图片加载失败（可能是 raw CDN 延迟或权限问题）';
-  }
-}, true);
+  
+  img.dataset.fallbackDone = '1';
+  fetchImageBlobUrl(path).then(url => {
+    img.src = url;
+    if (img.dataset.openImg) img.dataset.openImg = url;
+  }).catch(err => {
+    console.warn('图片加载失败', err);
+    img.style.opacity = '.4';
+    img.title = '图片加载失败（可能是 raw CDN 延迟或权限问题）';
+  });
+}
 
-$('imgMasonry').addEventListener('error', async (e)=>{
-  const img=e.target;
-  if(!img || img.tagName!=='IMG') return;
-  const path=img.dataset.imgPath;
-  if(!path || img.dataset.fallbackDone) return;
-  img.dataset.fallbackDone='1';
-  try{
-    const url=await fetchImageBlobUrl(path);
-    img.src=url;
-    img.dataset.openImg=url;
-  }catch(err){
-    console.warn('图片加载失败',err);
-    img.style.opacity='.4';
-    img.title='图片加载失败';
-  }
-}, true);
-
-pendingImgsEl.addEventListener('error', async (e)=>{
-  const img=e.target;
-  if(!img || img.tagName!=='IMG') return;
-  const path=img.dataset.imgPath;
-  if(!path || img.dataset.fallbackDone) return;
-  img.dataset.fallbackDone='1';
-  try{
-    const url=await fetchImageBlobUrl(path);
-    img.src=url;
-  }catch(err){}
-}, true);
+[listEl, document.getElementById('imgMasonry'), pendingImgsEl].forEach(el => {
+  if (el) el.addEventListener('error', handleImgFallback, true);
+});

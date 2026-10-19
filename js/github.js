@@ -54,11 +54,13 @@ function ghApiUrl(rc,path){
   return `https://api.github.com/repos/${encodeURIComponent(rc.owner)}/${encodeURIComponent(rc.repo)}/contents/${p}`;
 }
 
+// ★ 修复：去掉了 Cache-Control 自定义头，改用纯时间戳防缓存
 async function ghGetRaw(rc,path){
   if(!rc.owner||!rc.repo)throw new Error('未配置 GitHub');
   const headers = { Accept: 'application/vnd.github+json' };
   if (rc.token) headers.Authorization = `Bearer ${rc.token}`;
-  const res=await fetch(`${ghApiUrl(rc,path)}?ref=${encodeURIComponent(rc.branch)}`, { headers });
+  
+  const res=await fetch(`${ghApiUrl(rc,path)}?ref=${encodeURIComponent(rc.branch)}&t=${Date.now()}`, { headers });
   if(res.status===404)return null;
   if(!res.ok){const t=await res.text();throw new Error(`HTTP ${res.status} ${t.slice(0,120)}`);}
   return res.json();
@@ -161,7 +163,6 @@ async function ghPull(silent){
   }
 }
 
-// ★ 修改：支持强制推送
 async function ghPush(silent, force = false){
   const cfg=loadGH();
   if(!ghReady(cfg)){if(!silent)toast('请先在设置中配置 GitHub Token');return false;}
@@ -182,6 +183,7 @@ async function ghPush(silent, force = false){
       if(force) {
         if(!silent) ghSetStatus('正在强制覆盖云端...');
         try {
+          await new Promise(r => setTimeout(r, 1000));
           const rc=ghRepoConfig('data');
           const existing=await ghGetRaw(rc,rc.path);
           const newSha=existing?existing.sha:null;
@@ -191,7 +193,7 @@ async function ghPush(silent, force = false){
           if(!silent){toast('已强制覆盖云端');ghSetStatus('强制推送成功 · '+new Date().toLocaleTimeString());}
           return true;
         } catch(retryErr) {
-          console.error(retryErr);
+          console.error('强制重试失败', retryErr);
           if(!silent)toast('强制推送失败：'+retryErr.message);
           ghSetStatus('强制推送失败');
           return false;
@@ -309,12 +311,11 @@ let _syncTimer = null;
 
 async function checkCloudUpdate() {
   const cfg = loadGH();
-  // 如果没开启巡检，或者没开自动拉取，直接跳过
   if (!ghReady(cfg) || !cfg.autoPull || !db.settings.autoCheckUpdate) return;
 
   try {
     const rc = ghRepoConfig('data');
-    const res = await fetch(`${ghApiUrl(rc, rc.path)}?ref=${encodeURIComponent(rc.branch)}`, {
+    const res = await fetch(`${ghApiUrl(rc, rc.path)}?ref=${encodeURIComponent(rc.branch)}&t=${Date.now()}`, {
       headers: { Authorization: `Bearer ${rc.token}`, Accept: 'application/vnd.github+json' }
     });
     if (!res.ok) return;
@@ -333,7 +334,7 @@ async function checkCloudUpdate() {
 
 function restartSyncTimer() {
   if (_syncTimer) clearInterval(_syncTimer);
-  if (!db.settings.autoCheckUpdate) return; // 如果没开开关，就不启动定时器
+  if (!db.settings.autoCheckUpdate) return;
   const sec = db.settings.syncCheckInterval || 60;
   _syncTimer = setInterval(checkCloudUpdate, sec * 1000);
 }

@@ -3,8 +3,18 @@
    存储
    ========================================================= */
 let suppressPush=false;
+let _filterCacheKey = '';
+let _filterCacheResult = [];
+
+function clearFilterCache() {
+  _filterCacheKey = '';
+}
+
 function save(){
-  try{localStorage.setItem(STORE_KEY,JSON.stringify(db));}catch(e){toast('保存失败');}
+  try{
+    localStorage.setItem(STORE_KEY,JSON.stringify(db));
+    clearFilterCache(); // ★ 数据变动时，主动清除缓存
+  }catch(e){toast('保存失败');}
   if(!suppressPush)scheduleAutoPush();
 }
 function loadStore(){
@@ -106,7 +116,14 @@ function collectTags(){
   db.items.forEach(i=>(i.tags||[]).forEach(t=>{counts[t]=(counts[t]||0)+1;}));
   return counts;
 }
+
+// ★ 优化：加入缓存机制，避免重复计算
 function getFilteredItems(){
+  const cacheKey = `${currentType}|${currentSource}|${currentTag}|${keyword}|${db.items.length}`;
+  if (_filterCacheKey === cacheKey && _filterCacheResult) {
+    return _filterCacheResult;
+  }
+  
   const terms=getSearchTerms();
   const arr=db.items.filter(i=>{
     if(currentType!=='全部'&&i.type!==currentType)return false;
@@ -117,6 +134,9 @@ function getFilteredItems(){
       if(!terms.every(t=>hay.includes(t)))return false;
     }
     return true;
-  });
-  return arr.sort((a,b)=>b.createdAt-a.createdAt);
+  }).sort((a,b)=>b.createdAt-a.createdAt);
+
+  _filterCacheKey = cacheKey;
+  _filterCacheResult = arr;
+  return arr;
 }

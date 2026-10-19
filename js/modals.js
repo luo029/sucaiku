@@ -76,47 +76,53 @@ const modalsHtml = `
         <button class="st-tab" data-target="images" style="padding:6px 16px; border-radius:8px; font-weight:500; font-size:13.5px; color:var(--text-2); background:transparent; cursor:pointer; border:none; transition:all 0.15s; white-space:nowrap;">图片处理</button>
       </div>
       
-      <!-- ★ 新增：数据概览卡片 -->
       <div class="st-card" data-group="general">
         <div class="st-card-head">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
           <div><div class="st-card-title">数据概览</div><div class="st-card-desc">你当前素材库的实时数据</div></div>
         </div>
         <div class="st-card-body">
-          <div id="settingsOverview" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; text-align:center;">
-            <div style="background:var(--bg); padding:12px 0; border-radius:8px;">
-              <div style="font-size:20px; font-weight:700; color:var(--accent);" id="ovTotal">0</div>
-              <div style="font-size:11px; color:var(--text-3);">总素材</div>
+          <div id="settingsOverview" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;">
+            <div class="ov-item">
+              <div class="ov-num" style="color:var(--accent);" id="ovTotal">0</div>
+              <div class="ov-label">总素材</div>
             </div>
-            <div style="background:var(--bg); padding:12px 0; border-radius:8px;">
-              <div style="font-size:20px; font-weight:700; color:var(--text);" id="ovChars">0</div>
-              <div style="font-size:11px; color:var(--text-3);">总字数</div>
+            <div class="ov-item">
+              <div class="ov-num" style="color:var(--text);" id="ovChars">0</div>
+              <div class="ov-label">总字数</div>
             </div>
-            <div style="background:var(--bg); padding:12px 0; border-radius:8px;">
-              <div style="font-size:20px; font-weight:700; color:var(--img-accent);" id="ovImgs">0</div>
-              <div style="font-size:11px; color:var(--text-3);">图片数</div>
+            <div class="ov-item">
+              <div class="ov-num" style="color:var(--img-accent);" id="ovImgs">0</div>
+              <div class="ov-label">图片数</div>
             </div>
-            <div style="background:var(--bg); padding:12px 0; border-radius:8px;">
-              <div style="font-size:20px; font-weight:700; color:#059669;" id="ovTags">0</div>
-              <div style="font-size:11px; color:var(--text-3);">标签数</div>
+            <div class="ov-item">
+              <div class="ov-num" style="color:#059669;" id="ovTags">0</div>
+              <div class="ov-label">标签数</div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- ★ 优化：编辑与列表 -->
       <div class="st-card" data-group="general">
         <div class="st-card-head">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           <div><div class="st-card-title">编辑与列表</div><div class="st-card-desc">默认分类、长文折叠、分页设置</div></div>
         </div>
         <div class="st-card-body">
-          <div class="st-field">
+          
+          <div class="st-field" style="margin-bottom:12px;">
             <label>默认新建分类</label>
             <select id="defaultTypeSelect" style="width:100%; text-align:left; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:14px; outline:none;"></select>
             <div class="st-hint">新素材默认归入该分类</div>
           </div>
-          <div class="st-grid-2" style="margin-top:16px;">
+
+          <div class="st-field" style="margin-bottom:16px;">
+            <label>输入框提示语（Placeholder）</label>
+            <input type="text" id="inputPlaceholder" style="width:100%; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; background:var(--bg); color:var(--text); outline:none;">
+            <div class="st-hint">显示在录入框内的提示文字</div>
+          </div>
+
+          <div class="st-grid-2">
             <div class="st-field" style="margin-bottom:0;">
               <label>长文本折叠阈值</label>
               <div class="st-inline">
@@ -132,7 +138,6 @@ const modalsHtml = `
         </div>
       </div>
 
-      <!-- ★ 优化：外观与显示 -->
       <div class="st-card" data-group="general">
         <div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><div><div class="st-card-title">外观与显示</div><div class="st-card-desc">主题、字号、时间显示格式</div></div></div>
         <div class="st-card-body">
@@ -147,7 +152,7 @@ const modalsHtml = `
           <label class="st-toggle" style="margin-bottom:12px;"><div><div class="st-toggle-title">显示一言（Hitokoto）</div><div class="st-toggle-desc">在页面顶部显示随机句子</div></div><input type="checkbox" id="showHitokoto"></label>
           <label class="st-toggle" style="margin-bottom:16px;"><div><div class="st-toggle-title">开启卡片动画</div><div class="st-toggle-desc">关闭可提升大量数据时的滚动性能</div></div><input type="checkbox" id="enableAnim"></label>
           
-          <div class="st-field">
+          <div class="st-field" style="margin-bottom:16px;">
             <label>全局字号缩放</label>
             <div class="segmented" id="fontSizeMode">
               <button type="button" data-size="normal">标准 A</button>
@@ -155,41 +160,65 @@ const modalsHtml = `
               <button type="button" data-size="xlarge">特大 A++</button>
             </div>
           </div>
+
+          <div class="st-field" style="margin-bottom:16px;">
+            <label>极简模式字号</label>
+            <div class="segmented" id="zenFontSize">
+              <button type="button" data-zfs="normal">标准</button>
+              <button type="button" data-zfs="large">大</button>
+              <button type="button" data-zfs="xlarge">特大</button>
+            </div>
+            <div class="st-hint">极简模式下单独的字号调整，适合沉浸式阅读</div>
+          </div>
+
+          <div class="st-field">
+            <label>卡片列表间距</label>
+            <div class="segmented" id="cardSpacing">
+              <button type="button" data-spacing="compact">紧凑</button>
+              <button type="button" data-spacing="standard">标准</button>
+              <button type="button" data-spacing="loose">宽松</button>
+            </div>
+            <div class="st-hint">调整卡片之间的留白</div>
+          </div>
         </div>
       </div>
 
-      <!-- ★ 优化：侧栏数量与快捷操作 -->
       <div class="st-card" data-group="general">
-        <div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><div><div class="st-card-title">侧栏折叠与快捷辅助</div><div class="st-card-desc">限制侧栏显示数量，以及快捷操作</div></div></div>
+        <div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><div><div class="st-card-title">侧栏设置</div><div class="st-card-desc">自定义侧栏显示内容与折叠数量</div></div></div>
         <div class="st-card-body">
-          <label style="display:block; margin-bottom:10px; font-size:13px; font-weight:600; color:var(--text-2);">侧边栏折叠数量限制</label>
-          <div class="st-grid-3" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:16px;">
-            <div class="st-field" style="margin-bottom:0;">
-              <div style="background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 8px; text-align:center;">
-                <div style="font-size:11px; color:var(--text-3); margin-bottom:6px;">分类</div>
-                <input type="number" class="setting-num" id="catLimitInput" min="1" max="30" step="1" value="3" style="width:100%; text-align:center; padding:4px; font-size:15px; font-weight:700; color:var(--accent); border:none; background:transparent;">
-              </div>
-            </div>
-            <div class="st-field" style="margin-bottom:0;">
-              <div style="background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 8px; text-align:center;">
-                <div style="font-size:11px; color:var(--text-3); margin-bottom:6px;">来源</div>
-                <input type="number" class="setting-num" id="srcLimitInput" min="1" max="30" step="1" value="3" style="width:100%; text-align:center; padding:4px; font-size:15px; font-weight:700; color:var(--accent); border:none; background:transparent;">
-              </div>
-            </div>
-            <div class="st-field" style="margin-bottom:0;">
-              <div style="background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 8px; text-align:center;">
-                <div style="font-size:11px; color:var(--text-3); margin-bottom:6px;">标签</div>
-                <input type="number" class="setting-num" id="tagLimitInput" min="1" max="30" step="1" value="3" style="width:100%; text-align:center; padding:4px; font-size:15px; font-weight:700; color:var(--accent); border:none; background:transparent;">
-              </div>
-            </div>
-          </div>
           
-          <div style="border-top:1px dashed var(--line); margin: 16px 0;"></div>
-          <label style="display:block; margin-bottom:10px; font-size:13px; font-weight:600; color:var(--text-2);">快捷操作</label>
-          <div class="st-actions" style="display:flex; gap:8px;">
-            <button class="btn" id="settingsClearDraftBtn" style="flex:1; font-size:13px;">清空输入框草稿</button>
-            <button class="btn" id="settingsExportBtn" style="flex:1; font-size:13px; border-color:var(--accent); color:var(--accent);">导出当前数据</button>
+          <label style="display:block; margin-bottom:10px; font-size:13px; font-weight:600; color:var(--text-2);">侧边栏内容显示</label>
+          <div style="display:flex; gap:10px; margin-bottom:24px;">
+            <label class="sidebar-toggle-item">
+              <input type="checkbox" id="sidebarShowCat" checked style="display:none;">
+              <span>分类</span>
+            </label>
+            <label class="sidebar-toggle-item">
+              <input type="checkbox" id="sidebarShowSrc" checked style="display:none;">
+              <span>来源</span>
+            </label>
+            <label class="sidebar-toggle-item">
+              <input type="checkbox" id="sidebarShowTag" checked style="display:none;">
+              <span>标签</span>
+            </label>
           </div>
+
+          <label style="display:block; margin-bottom:10px; font-size:13px; font-weight:600; color:var(--text-2);">折叠数量限制</label>
+          <div style="display:flex; gap:10px;">
+            <div style="flex:1; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:12px 8px; text-align:center;">
+              <div style="font-size:12px; color:var(--text-3); margin-bottom:6px;">分类</div>
+              <input type="number" id="catLimitInput" min="1" max="30" step="1" value="3" style="width:100%; text-align:center; padding:0; font-size:16px; font-weight:700; color:var(--accent); border:none; background:transparent; outline:none;">
+            </div>
+            <div style="flex:1; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:12px 8px; text-align:center;">
+              <div style="font-size:12px; color:var(--text-3); margin-bottom:6px;">来源</div>
+              <input type="number" id="srcLimitInput" min="1" max="30" step="1" value="3" style="width:100%; text-align:center; padding:0; font-size:16px; font-weight:700; color:var(--accent); border:none; background:transparent; outline:none;">
+            </div>
+            <div style="flex:1; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:12px 8px; text-align:center;">
+              <div style="font-size:12px; color:var(--text-3); margin-bottom:6px;">标签</div>
+              <input type="number" id="tagLimitInput" min="1" max="30" step="1" value="3" style="width:100%; text-align:center; padding:0; font-size:16px; font-weight:700; color:var(--accent); border:none; background:transparent; outline:none;">
+            </div>
+          </div>
+
         </div>
       </div>
 

@@ -211,19 +211,6 @@ function openSettings() {
 safeBind('menuSettingBtn', 'click', openSettings);
 safeBind('gearBtn', 'click', openSettings);
 
-// 快捷键辅助
-safeBind('settingsClearDraftBtn', 'click', () => {
-  if(!inputEl.value.trim() && !pendingImages.length) { toast('输入框已经是空的了'); return; }
-  if(!confirm('确定清空当前输入框的内容吗？')) return;
-  inputEl.value = '';
-  setPendingImages([]);
-  toast('草稿已清空');
-});
-safeBind('settingsExportBtn', 'click', () => {
-  $('settingMask').classList.remove('show');
-  openExportModal();
-});
-
 safeBind('themeDarkToggle', 'change', e => {
   setTheme(e.target.checked ? 'dark' : 'light');
 });
@@ -232,6 +219,46 @@ safeBind('useRelativeTimeToggle', 'change', e => {
   saveSettings();
   renderList();
   toast(e.target.checked ? '已切换为相对时间' : '已切换为绝对时间');
+});
+
+// ★ 新增：自定义输入框提示语
+safeBind('inputPlaceholder', 'input', e => {
+  db.settings.inputPlaceholder = e.target.value;
+  saveSettings();
+  if(inputEl) inputEl.placeholder = e.target.value || DEFAULT_SETTINGS.inputPlaceholder;
+});
+
+// ★ 新增：卡片间距调整
+safeBind('cardSpacing', 'click', e => {
+  const b = e.target.closest('button[data-spacing]'); if(!b) return;
+  db.settings.cardSpacing = b.dataset.spacing; 
+  saveSettings(); applySettingsToUI();
+  toast('卡片间距已调整');
+});
+
+// ★ 新增：极简模式字号调整
+safeBind('zenFontSize', 'click', e => {
+  const b = e.target.closest('button[data-zfs]'); if(!b) return;
+  db.settings.zenFontSize = b.dataset.zfs; 
+  saveSettings(); applySettingsToUI();
+  toast('极简模式字号已调整');
+});
+
+// 侧边栏内容开关
+safeBind('sidebarShowCat', 'change', e => {
+  db.settings.sidebarShowCat = e.target.checked;
+  saveSettings(); applySettingsToUI();
+  toast(e.target.checked ? '已显示分类' : '已隐藏分类');
+});
+safeBind('sidebarShowSrc', 'change', e => {
+  db.settings.sidebarShowSrc = e.target.checked;
+  saveSettings(); applySettingsToUI();
+  toast(e.target.checked ? '已显示来源' : '已隐藏来源');
+});
+safeBind('sidebarShowTag', 'change', e => {
+  db.settings.sidebarShowTag = e.target.checked;
+  saveSettings(); applySettingsToUI();
+  toast(e.target.checked ? '已显示标签' : '已隐藏标签');
 });
 
 safeBind('copyWithSource', 'change', e => {
