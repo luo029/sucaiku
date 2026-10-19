@@ -180,6 +180,26 @@ async function ghPush(silent){
     return true;
   }catch(err){
     console.error(err);
+    
+    // ★ 核心修复：遇到 409 冲突时，自动抓取最新 SHA 并重试一次
+    if(err.message && err.message.includes('409')){
+      if(!silent) toast('版本冲突，正在自动修复并重试...');
+      try {
+        const rc=ghRepoConfig('data');
+        const existing=await ghGetRaw(rc,rc.path);
+        const sha=existing?existing.sha:null;
+        const payload=JSON.stringify(db,null,2);
+        const b64=utf8ToBase64(payload);
+        // 使用最新的 SHA 重新推送
+        await ghPutRaw(rc,rc.path,b64,sha,`auto-fix sync ${new Date().toISOString()}`);
+        if(!silent){toast('已自动解决冲突并推送');ghSetStatus('推送成功 · '+new Date().toLocaleTimeString());}
+        return true;
+      } catch(retryErr) {
+        console.error('自动重试仍然失败', retryErr);
+        if(!silent)toast('冲突自动修复失败，请尝试手动拉取');
+      }
+    }
+    
     if(!silent)toast('推送失败：'+err.message);
     ghSetStatus('推送失败：'+err.message);
     return false;
