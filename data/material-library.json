@@ -1,6 +1,17 @@
 {
   "items": [
     {
+      "id": "mvflgeoxhrqwv",
+      "text": "初雪落薄衫，赤胆压天寒。\n破虏八百万，酒洒祭长安。",
+      "type": "句子",
+      "source": "",
+      "tags": [
+        "热血"
+      ],
+      "images": [],
+      "createdAt": 1792434892641
+    },
+    {
       "id": "mvetwewyi0noo",
       "text": "御旗探紫箓，仙杖辟丹丘。\n捧药芝童下，焚香桂女留。\n【鸾歌无岁月，鹤语记春秋。】\n臣朔真何幸，常陪汉武游。",
       "type": "句子",
@@ -32,14 +43,14 @@
   "cats": [
     "句子",
     "段落",
-    "点子",
-    "段子"
+    "情话",
+    "点子"
   ],
   "colors": {
     "句子": 0,
     "段落": 1,
-    "点子": 5,
-    "段子": 2
+    "情话": 3,
+    "点子": 5
   },
   "sources": [],
   "fixedSource": "",
@@ -59,9 +70,9 @@
       "tag": true
     },
     "statsLimit": 8,
-    "compressMode": "tinypng",
+    "compressMode": "local",
     "tinypngKey": "Copied to clipboard GV6TFZdRpLBQTMCKW9rrnbVXhd4DgCd1",
-    "tinypngProxy": "https://sucaiku.luo029.workers.dev",
+    "tinypngProxy": "",
     "catLimit": 1,
     "srcLimit": 3,
     "tagLimit": 3,
@@ -76,5 +87,16 @@
     "useRelativeTime": false,
     "sidebarLimit": 2
   },
-  "trash": []
+  "trash": [
+    {
+      "id": "mvewha70rpmrm",
+      "text": "这是一条测试句子",
+      "type": "句子",
+      "source": "23",
+      "tags": [],
+      "images": [],
+      "createdAt": 1792392943068,
+      "deletedAt": 1792393206852
+    }
+  ]
 }
