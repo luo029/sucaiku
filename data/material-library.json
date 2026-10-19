@@ -61,7 +61,7 @@
     "statsLimit": 8,
     "compressMode": "tinypng",
     "tinypngKey": "Copied to clipboard GV6TFZdRpLBQTMCKW9rrnbVXhd4DgCd1",
-    "tinypngProxy": "",
+    "tinypngProxy": "https://sucaiku.luo029.workers.dev",
     "catLimit": 1,
     "srcLimit": 3,
     "tagLimit": 3,
