@@ -1,42 +1,314 @@
-/* css / responsive.css · 响应式断点 */
-/* 响应式 */
-@media (max-width:960px){
-  body.layout-sidebar .sidebar{transform:translateX(100%)}
-  body.layout-sidebar .sidebar.open{transform:translateX(0)}
-  body.layout-sidebar .main{margin-right:0}
-  body.layout-sidebar .menu-fab{display:flex}
-  .main-inner{padding-top:80px}
-  body.layout-compact .main-inner{padding-top:24px}
+/* css / responsive.css · 响应式断点 + 移动端专项优化 */
+
+/* =========================================================
+   0. 触摸设备通用优化（去掉粘滞 hover）
+   ========================================================= */
+@media (hover: none) {
+  .card:hover {
+    transform: none;
+    box-shadow: var(--sh-1);
+    border-color: var(--line);
+  }
+  .card:hover::before {
+    top: 16px; bottom: 16px; width: 4px; opacity: .6;
+  }
+  .icon-btn:hover, .btn:hover, .page-btn:hover, .foot-btn:hover, .tab:hover,
+  .layout-btn:hover, .primary:hover, .menu button:hover {
+    transform: none;
+  }
+  /* 触摸反馈 */
+  .card:active { background: var(--line); }
+  .icon-btn:active, .btn:active, .tab:active { background: var(--line); }
 }
-@media (max-width:560px){
-  .main-inner{padding-left:16px;padding-right:16px}
-  .date{display:none}
-  .src{max-width:100%}
-  .ops{opacity:1}
-  .composer-foot{flex-direction:column;align-items:stretch}
-  .field-group{flex-direction:column;min-width:0;width:100%}
-  select{max-width:none}
-  .source-picker,.tag-picker{flex:none;width:100%}
-  .composer-actions{justify-content:flex-end;margin-top:4px}
-  .batch-bar{left:12px;right:12px;transform:translateY(140%);max-width:none;padding:12px 14px;gap:10px;flex-direction:column;align-items:stretch}
-  .batch-bar.show{transform:translateY(0)}
-  .batch-info{font-size:13.5px;text-align:center}
-  .batch-actions{justify-content:center}
-  .batch-actions .btn{flex:1;min-width:70px;padding:9px 8px;font-size:12.5px}
-  #toast.raised{bottom:150px}
-  .card{padding:16px 18px 16px 22px}
-  .pagination{flex-direction:column;align-items:stretch}
-  .page-nav{justify-content:center}
-  .page-size{width:100%}
-  .page-head-row{gap:8px}
-  .layout-btn{width:38px;height:38px}
-  #sourceFilter{max-width:none;width:100%}
-  .source-filter-wrap{flex:1;min-width:0}
-  .dup-pair{padding:12px}
-  .stat-grid{grid-template-columns:1fr 1fr}
-  .stat-name{width:64px}
-  body.zen-mode .main-inner{padding:48px 18px 100px}
-  .img-cat-list{grid-template-columns:1fr}
-  .st-grid-2{grid-template-columns:1fr}
-  .st-inline .setting-num{flex:0 0 80px;width:80px}
+
+/* =========================================================
+   1. 平板 / 抽屉侧栏（≤960px）
+   ========================================================= */
+@media (max-width: 960px) {
+  /* 侧栏统一变抽屉，两种布局模式都能打开 */
+  .sidebar { transform: translateX(100%); }
+  body.layout-sidebar .sidebar,
+  body.layout-compact .sidebar { transform: translateX(100%); }
+  body.layout-sidebar .sidebar.open,
+  body.layout-compact .sidebar.open { transform: translateX(0); }
+
+  body.layout-sidebar .main,
+  body.layout-compact .main { margin-right: 0; }
+
+  /* 菜单按钮：两种模式都显示 */
+  .menu-fab { display: flex; }
+  body.layout-compact .menu-fab { display: flex; }
+
+  /* 手机上「切换布局」没意义，隐藏，避免和菜单按钮抢位置 */
+  .layout-btn { display: none !important; }
+
+  /* 给右上角固定菜单按钮留空间 */
+  .page-head-text { padding-right: 52px; }
+
+  /* 更多菜单在手机上必须有入口（统计/回收站/健康检查都在这） */
+  .more-wrap { display: block !important; }
+
+  .sidebar { width: min(86vw, 300px); }
+
+  .menu-fab {
+    top: calc(12px + env(safe-area-inset-top));
+    right: calc(12px + env(safe-area-inset-right));
+    width: 42px; height: 42px;
+    border-radius: 12px;
+  }
+
+  .main-inner { padding-top: calc(64px + env(safe-area-inset-top)); }
+  body.layout-compact .main-inner { padding-top: calc(24px + env(safe-area-inset-top)); }
+}
+
+/* =========================================================
+   2. 手机主布局（≤768px）
+   ========================================================= */
+@media (max-width: 768px) {
+  /* ---- 核心：防止 iOS 点击输入框自动放大页面 ---- */
+  input, select, textarea { font-size: 16px !important; }
+
+  body { font-size: 15px; }
+
+  .main-inner {
+    padding: calc(60px + env(safe-area-inset-top)) 14px calc(80px + env(safe-area-inset-bottom));
+  }
+
+  /* ---- 页头 ---- */
+  .page-head { margin-bottom: 14px; }
+  .page-title-row { gap: 8px; }
+  .page-title-row h2 { font-size: 20px; }
+  .count-pill { font-size: 11px; padding: 2px 10px; }
+  .page-sub { font-size: 12px; margin-top: 4px; }
+
+  /* ---- 一言 ---- */
+  .hitokoto-box {
+    padding: 10px 14px; margin-bottom: 14px; font-size: 13px;
+    border-radius: 10px; gap: 10px;
+  }
+  .hitokoto-from { display: none; } /* 来源太长，手机上省空间 */
+  .hitokoto-refresh { width: 26px; height: 26px; }
+
+  /* ---- 录入区：紧凑化，字段两列排 ---- */
+  .composer {
+    padding: 14px 14px 12px;
+    margin-bottom: 14px;
+    border-radius: 14px;
+  }
+  .composer textarea { min-height: 72px; font-size: 16px; line-height: 1.6; }
+  .composer-foot { margin-top: 12px; padding-top: 12px; gap: 8px; }
+
+  .field-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+  }
+  .field-group select { max-width: none; width: 100%; }
+  .source-picker, .tag-picker {
+    flex: none; width: 100%; min-width: 0;
+  }
+  .tag-picker { grid-column: 1 / -1; } /* 标签占一整行 */
+
+  .composer-actions { width: 100%; justify-content: flex-end; margin-top: 4px; gap: 8px; }
+  .composer-actions .btn { padding: 8px 14px; font-size: 13.5px; }
+  .composer-actions .primary { padding: 9px 22px; font-size: 14px; }
+
+  /* ---- 工具栏：搜索占一行，按钮一行 ---- */
+  .toolbar { gap: 8px; margin-bottom: 14px; }
+  .search-wrap { flex: 1 0 100%; }
+  #search { font-size: 16px !important; padding: 11px 14px 11px 40px; }
+  .source-filter-wrap { flex: 1; min-width: 0; }
+  #sourceFilter {
+    width: 100%; max-width: none; min-width: 0;
+    padding: 10px 32px 10px 34px;
+    font-size: 14px !important;
+  }
+  .icon-btn { width: 40px; height: 40px; }
+  .more-wrap { flex: none; }
+
+  /* ---- 分类页签（compact 模式下） ---- */
+  .tabs-row { margin-bottom: 12px; }
+  .tab { padding: 7px 14px; font-size: 13px; }
+  .tab .cnt { font-size: 11px; margin-left: 4px; }
+
+  /* ---- 卡片 ---- */
+  .card {
+    padding: 14px 14px 12px 18px;
+    margin-bottom: 10px;
+    border-radius: 12px;
+    gap: 10px;
+  }
+  .card-top { gap: 6px; margin-bottom: 8px; }
+  .tag { font-size: 11px; padding: 2px 10px; }
+  .tag-chip { font-size: 11px; padding: 2px 6px; }
+  .src { max-width: 65%; font-size: 12px; }
+  .date { display: none; }
+  .content { font-size: 15.5px; line-height: 1.75; }
+  .content.collapsed { max-height: 7.5em; }
+  .expand-btn { font-size: 12.5px; padding: 3px 10px; margin-top: 8px; }
+
+  /* 手机上操作按钮常显（不靠 hover），但更紧凑 */
+  .ops {
+    opacity: 1;
+    margin-top: 10px;
+    margin-left: -8px;
+    gap: 2px;
+    flex-wrap: wrap;
+  }
+  .ops button { padding: 6px 10px; font-size: 12.5px; }
+
+  .card-imgs { gap: 6px; margin-top: 10px; }
+  .card-imgs img { max-width: calc(50% - 3px); max-height: 140px; }
+
+  /* ---- 分页：只留 ‹ ›，去掉页码按钮 ---- */
+  .pagination {
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    margin-top: 16px;
+  }
+  .page-info { font-size: 12px; text-align: center; }
+  .page-nav { justify-content: center; }
+  .page-nav .page-btn:not([data-page="prev"]):not([data-page="next"]) { display: none; }
+  .page-nav .dots { display: none; }
+  .page-btn { min-width: 42px; height: 38px; font-size: 14px; }
+  .page-size { width: 100%; }
+
+  /* ---- 批量栏：贴底，适配安全区 ---- */
+  .batch-bar {
+    left: 10px; right: 10px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    max-width: none;
+    padding: 12px;
+    gap: 10px;
+    flex-direction: column;
+    align-items: stretch;
+    border-radius: 14px;
+    transform: translateY(140%);
+  }
+  .batch-bar.show { transform: translateY(0); }
+  .batch-info { font-size: 13px; text-align: center; }
+  .batch-actions { justify-content: center; flex-wrap: wrap; gap: 6px; }
+  .batch-actions .btn {
+    flex: 1 1 calc(33.33% - 4px);
+    min-width: 0;
+    padding: 9px 8px;
+    font-size: 12.5px;
+  }
+
+  /* ---- Toast ---- */
+  #toast {
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    font-size: 13px;
+    padding: 10px 20px;
+    border-radius: 12px;
+  }
+  #toast.raised { bottom: calc(180px + env(safe-area-inset-bottom)); }
+
+  /* ---- 弹窗：改为从底部弹出（bottom sheet） ---- */
+  .modal-mask {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal, .modal.wide {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
+    max-height: 88vh;
+    overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform .3s cubic-bezier(.2,.8,.2,1);
+  }
+  .modal-mask.show .modal { transform: translateY(0); }
+  .modal-title { font-size: 18px; }
+  .modal-desc { font-size: 14px; margin-bottom: 16px; }
+  .modal-actions { gap: 10px; }
+  .modal-actions .btn, .modal-actions .primary { padding: 12px; font-size: 14.5px; }
+  .modal-check { margin-bottom: 18px; }
+  .modal-input { font-size: 16px !important; }
+
+  /* 设置面板 */
+  .st-scroll { max-height: none; }
+  .st-grid-2 { grid-template-columns: 1fr; gap: 10px; }
+  .st-grid-3 { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .st-field > label { font-size: 12px; }
+  .st-inline .setting-num { flex: 0 0 76px; width: 76px; }
+  .st-field input[type=text],
+  .st-field input[type=password],
+  .st-field input[type=number] { font-size: 16px !important; }
+  .st-toggle-title { font-size: 13px; }
+  .st-toggle-desc { font-size: 11px; }
+  .st-hint { font-size: 11px; }
+
+  /* 图片分类选择弹窗 */
+  .img-cat-list { grid-template-columns: 1fr 1fr; gap: 8px; max-height: 50vh; }
+  .img-cat-opt { padding: 12px 10px; font-size: 14px; }
+
+  /* ---- 图床管理 ---- */
+  .img-view-head { padding: 12px 14px !important; gap: 8px; }
+  .img-view-head .ivh-title { font-size: 15px !important; }
+  .img-view-head .ivh-count { font-size: 11px; padding: 2px 8px; }
+  .img-view-head .btn { padding: 7px 12px; font-size: 13px; }
+  #imgMgrRepoName { font-size: 11px !important; }
+  .img-mgr-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .mgr-info { padding: 8px 10px; gap: 4px; }
+  .mgr-info-top { font-size: 12px; }
+  .mgr-info-bottom { font-size: 10.5px; }
+  .mgr-del-btn { opacity: 1; width: 26px; height: 26px; }
+  #imgMgrToolbar > div { padding: 8px 12px !important; gap: 10px !important; }
+  #imgMgrPills { max-width: none !important; flex: 1; }
+
+  /* ---- 图片浏览瀑布流 ---- */
+  .img-masonry { columns: 2; column-gap: 8px; }
+  .img-masonry .mi { margin-bottom: 8px; border-radius: 8px; }
+  .img-masonry-wrap { padding: 10px; }
+  .img-cat-tabs .ic-tab { padding: 6px 12px; font-size: 12.5px; }
+
+  /* ---- 侧栏抽屉 ---- */
+  .brand { padding: 18px 14px 14px 12px; }
+  .brand-text h1 { font-size: 16px; }
+  .nav-label { font-size: 13px; margin-top: 18px; margin-bottom: 10px; padding: 0 8px; }
+  .nav-item { padding: 10px 12px; font-size: 14px; }
+  .sidebar-footer {
+    padding: 10px;
+    gap: 6px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+  .foot-btn { padding: 8px; font-size: 12px; }
+
+  /* ---- 分类管理面板 ---- */
+  .cat-manager { padding: 16px; border-radius: 14px; margin-bottom: 14px; }
+  .cat-row { gap: 8px; }
+  .cat-name { padding: 8px 10px; font-size: 16px !important; }
+  .cm-add input { font-size: 16px !important; }
+
+  /* ---- 极简模式 ---- */
+  body.zen-mode .main-inner {
+    padding: calc(40px + env(safe-area-inset-top)) 16px calc(80px + env(safe-area-inset-bottom));
+  }
+  body.zen-mode .content { font-size: 17px; line-height: 1.9; padding: 20px 0; }
+  body.zen-mode .zen-bar { padding-bottom: 16px; }
+  .zen-exit {
+    top: calc(10px + env(safe-area-inset-top));
+    right: calc(10px + env(safe-area-inset-right));
+  }
+}
+
+/* =========================================================
+   3. 超小屏补充（≤400px）
+   ========================================================= */
+@media (max-width: 400px) {
+  .main-inner { padding-left: 10px; padding-right: 10px; }
+
+  /* 超窄屏字段改单列，避免挤 */
+  .field-group { grid-template-columns: 1fr; }
+  .tag-picker { grid-column: auto; }
+
+  .batch-actions .btn { flex: 1 1 calc(50% - 4px); }
+
+  .stat-grid { grid-template-columns: 1fr 1fr; }
+  .stat-name { width: 64px; }
 }
