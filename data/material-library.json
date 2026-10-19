@@ -70,7 +70,7 @@
     "defaultPageSize": 12,
     "showHitokoto": true,
     "enableAnim": true,
-    "fontSizeMode": "xlarge",
+    "fontSizeMode": "normal",
     "syncCheckInterval": 60,
     "autoCheckUpdate": true,
     "useRelativeTime": false,
