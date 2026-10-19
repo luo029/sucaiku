@@ -70,10 +70,10 @@
     "defaultPageSize": 12,
     "showHitokoto": true,
     "enableAnim": true,
-    "fontSizeMode": "normal",
+    "fontSizeMode": "xlarge",
     "syncCheckInterval": 60,
     "autoCheckUpdate": true,
-    "useRelativeTime": true,
+    "useRelativeTime": false,
     "sidebarLimit": 2
   },
   "trash": []
