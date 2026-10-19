@@ -230,18 +230,33 @@
   .modal-check { margin-bottom: 18px; }
   .modal-input { font-size: 16px !important; }
 
-  /* 设置面板 */
+  /* =========================================================
+     ★ 设置面板专项适配
+     ========================================================= */
   .st-scroll { max-height: none; }
-  .st-grid-2 { grid-template-columns: 1fr; gap: 10px; }
-  .st-grid-3 { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-  .st-field > label { font-size: 12px; }
-  .st-inline .setting-num { flex: 0 0 76px; width: 76px; }
+  .st-grid-2 { grid-template-columns: 1fr; gap: 12px; }
+  
+  /* 数据概览：手机上变成 2x2 排列，不挤 */
+  #settingsOverview { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+  #settingsOverview > div { padding: 14px 0 !important; }
+
+  /* 侧栏折叠数量限制：三个格子平分 */
+  .st-grid-3 { grid-template-columns: 1fr 1fr 1fr !important; gap: 8px !important; }
+
+  .st-field > label { font-size: 13px; }
+  .st-inline .setting-num { flex: 1; width: 100%; }
   .st-field input[type=text],
   .st-field input[type=password],
-  .st-field input[type=number] { font-size: 16px !important; }
-  .st-toggle-title { font-size: 13px; }
-  .st-toggle-desc { font-size: 11px; }
-  .st-hint { font-size: 11px; }
+  .st-field input[type=number],
+  .st-field select { font-size: 16px !important; padding: 10px 12px !important; }
+  
+  .st-toggle-title { font-size: 14px; }
+  .st-toggle-desc { font-size: 12px; }
+  .st-hint { font-size: 12px; }
+
+  /* 快捷操作按钮上下排布 */
+  .st-card-body .st-actions { flex-direction: column; gap: 10px !important; }
+  .st-card-body .st-actions .btn { width: 100%; justify-content: center; padding: 12px; }
 
   /* 图片分类选择弹窗 */
   .img-cat-list { grid-template-columns: 1fr 1fr; gap: 8px; max-height: 50vh; }
@@ -311,6 +326,9 @@
 
   .stat-grid { grid-template-columns: 1fr 1fr; }
   .stat-name { width: 64px; }
+  
+  /* 超小屏的 3 个折叠框可能太窄，调整字体 */
+  .st-grid-3 .setting-num { font-size: 14px !important; }
 }
 
 /* =========================================================

@@ -23,8 +23,9 @@ const DEFAULT_SETTINGS={
   showHitokoto:true,
   enableAnim:true,
   fontSizeMode:'normal',
-  syncCheckInterval:60, // 云端巡检间隔（秒）
-  autoCheckUpdate:true  // 是否开启云端巡检
+  syncCheckInterval:60, 
+  autoCheckUpdate:true,
+  useRelativeTime:false // ★ 新增：是否使用相对时间
 };
 
 const PALETTE=[
@@ -124,7 +125,17 @@ function formatText(text,kws){
 }
 
 function pad2(n){return String(n).padStart(2,'0');}
+
+// ★ 修改：支持相对时间显示
 function fmtDate(ts){
+  if(!ts) return '';
+  if(db.settings.useRelativeTime){
+    const diff = Date.now() - ts;
+    if(diff < 60000) return '刚刚';
+    if(diff < 3600000) return Math.floor(diff/60000) + ' 分钟前';
+    if(diff < 86400000) return Math.floor(diff/3600000) + ' 小时前';
+    if(diff < 86400000*30) return Math.floor(diff/86400000) + ' 天前';
+  }
   const d=new Date(ts||Date.now());const now=new Date();
   const hm=`${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   if(d.getFullYear()===now.getFullYear())return `${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${hm}`;
@@ -227,6 +238,8 @@ function applySettingsToUI(){
   
   if($('syncCheckIntervalInput')) $('syncCheckIntervalInput').value=Number(s.syncCheckInterval)||60;
   if($('autoCheckUpdateToggle')) $('autoCheckUpdateToggle').checked = s.autoCheckUpdate !== false;
+  if($('useRelativeTimeToggle')) $('useRelativeTimeToggle').checked = s.useRelativeTime === true;
+  if($('themeDarkToggle')) $('themeDarkToggle').checked = themeMode === 'dark';
 
   if ($('catLimitInput')) $('catLimitInput').value = Number(s.catLimit)||3;
   if ($('srcLimitInput')) $('srcLimitInput').value = Number(s.srcLimit)||3;

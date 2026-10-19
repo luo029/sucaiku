@@ -205,10 +205,34 @@ function openSettings() {
   applySettingsToUI();
   fillGHForm();
   updateTinyUsageUI();
+  renderSettingsOverview(); // 更新概览数据
   $('settingMask').classList.add('show');
 }
 safeBind('menuSettingBtn', 'click', openSettings);
 safeBind('gearBtn', 'click', openSettings);
+
+// 快捷键辅助
+safeBind('settingsClearDraftBtn', 'click', () => {
+  if(!inputEl.value.trim() && !pendingImages.length) { toast('输入框已经是空的了'); return; }
+  if(!confirm('确定清空当前输入框的内容吗？')) return;
+  inputEl.value = '';
+  setPendingImages([]);
+  toast('草稿已清空');
+});
+safeBind('settingsExportBtn', 'click', () => {
+  $('settingMask').classList.remove('show');
+  openExportModal();
+});
+
+safeBind('themeDarkToggle', 'change', e => {
+  setTheme(e.target.checked ? 'dark' : 'light');
+});
+safeBind('useRelativeTimeToggle', 'change', e => {
+  db.settings.useRelativeTime = e.target.checked;
+  saveSettings();
+  renderList();
+  toast(e.target.checked ? '已切换为相对时间' : '已切换为绝对时间');
+});
 
 safeBind('copyWithSource', 'change', e => {
   db.settings.copyWithSource=e.target.checked;saveSettings();

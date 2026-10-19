@@ -27,7 +27,6 @@ function renderSidebar(){
   const catHasMore = db.cats.length > catLimit;
   let displayCats = (!catExpanded && catHasMore) ? db.cats.slice(0, catLimit) : db.cats;
   if (!catExpanded && catHasMore && currentType && !displayCats.includes(currentType) && db.cats.includes(currentType)) {
-    // 修复：如果当前选中的被折叠，直接替换最后一个，保证总数绝对不超过限制
     displayCats[displayCats.length - 1] = currentType;
   }
 
@@ -74,7 +73,7 @@ function renderSidebar(){
   const srcHasMore = db.sources.length > srcLimit;
   let displaySrcs = (!srcExpanded && srcHasMore) ? db.sources.slice(0, srcLimit) : db.sources;
   if (!srcExpanded && srcHasMore && currentSource && currentSource !== ALL_SOURCES && !displaySrcs.includes(currentSource)) {
-    displaySrcs[displaySrcs.length - 1] = currentSource; // 来源同理修复
+    displaySrcs[displaySrcs.length - 1] = currentSource;
   }
 
   let srcHtml=`
@@ -122,7 +121,7 @@ function renderTags(){
   let displayTags = (!tagExpanded && hasMore) ? allTags.slice(0, tagLimit) : allTags;
   
   if (!tagExpanded && currentTag && !displayTags.includes(currentTag)) {
-      displayTags[displayTags.length - 1] = currentTag; // 标签同理修复
+      displayTags[displayTags.length - 1] = currentTag;
   }
 
   const tagIcon=`<svg class="nav-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>`;
@@ -212,6 +211,19 @@ function renderZenBar(){
     const n=t==='全部'?db.items.length:(counts[t]||0);
     return `<div class="zb ${currentType===t?'active':''}" data-zt="${esc(t)}">${esc(t)}<span class="n">${n}</span></div>`;
   }).join('');
+}
+
+// ★ 新增：设置面板数据概览渲染
+function renderSettingsOverview(){
+  if(!$('ovTotal')) return;
+  let imgCount = 0;
+  db.items.forEach(i => imgCount += (i.images ? i.images.length : 0));
+  const chars = db.items.reduce((s,i)=>s+i.text.length,0);
+  const tags = Object.keys(collectTags()).length;
+  $('ovTotal').textContent = db.items.length;
+  $('ovChars').textContent = chars > 9999 ? (chars/1000).toFixed(1)+'k' : chars;
+  $('ovImgs').textContent = imgCount;
+  $('ovTags').textContent = tags;
 }
 
 function renderList(){
