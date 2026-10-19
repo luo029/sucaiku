@@ -1,13 +1,7 @@
 /* js / imgbed.js · 图床管理：仓库图片列表 / 删除 / 清理 / 多维筛选 */
-/* =========================================================
-   图床管理 (GitHub 仓库物理文件管理)
-   ========================================================= */
 let imgMgrCurrentCat = 'all';
 let imgMgrCurrentTime = 'all';
 
-/* 从文件名解析图片分类。
-   文件名格式：${safeCat}-${ts}-${rand}.${ext}
-   优先用已知分类做前缀匹配（分类名可能含 "-"，直接 split('-') 会截断）。 */
 function parseCatFromFilename(filename) {
   const cats = (db.imageCategories || []).slice().sort((a, b) => b.length - a.length);
   for (const c of cats) {
@@ -31,7 +25,6 @@ async function openImgManager() {
   
   ensureMgrUI();
 
-  // 如果本地没有素材，尝试静默拉取一次云端数据
   if (db.items.length === 0) {
     $('imgMgrGrid').innerHTML = '<div style="text-align:center; padding:60px; color:var(--text-3);">本地素材库为空，正在尝试从云端同步素材以匹配引用关系...</div>';
     await ghPull(true);
@@ -40,7 +33,6 @@ async function openImgManager() {
   await loadRepoImages();
 }
 
-// 动态组装居中紧凑的筛选工具栏
 function ensureMgrUI() {
   if (document.getElementById('imgMgrToolbar')) return;
 
@@ -264,7 +256,7 @@ function renderImgMgrUI() {
 }
 
 // ==========================================
-// 【核心修改区】物理删除图片时的自愈逻辑
+// 物理删除图片 + 引用自愈（★ 修复：只清受影响素材，不再扫全库）
 // ==========================================
 async function deleteRepoImage(relPath, sha) {
   if (!confirm(`确定要从 GitHub 图床彻底删除这张图片吗？\n\n注意：删除后不可恢复！如果该图片被素材引用，相关素材里的这张图也会被同步清理。`)) return;
@@ -282,11 +274,11 @@ async function deleteRepoImage(relPath, sha) {
     
     if (!res.ok) throw new Error(`HTTP ${res.status} ${await res.text()}`);
     
-    // 1. 先从缓存中移除这张图
+    // 1. 从缓存中移除
     repoImagesCache = repoImagesCache.filter(f => f.relPath !== relPath);
     
-    // 2. 清理本地素材库中的引用
-    let changed = false;
+    // 2. 清理本地引用（★ 用 affectedIds 记录"被改动过的素材"）
+    const affectedIds = new Set();
     let removedImagesCount = 0;
     
     db.items.forEach(item => {
@@ -294,32 +286,36 @@ async function deleteRepoImage(relPath, sha) {
         const beforeLen = item.images.length;
         item.images = item.images.filter(im => {
           if (!im.path) return true;
-          // 宽容匹配：防范因为斜杠或路径前缀导致删不干净
           const ip = String(im.path).trim();
           const rp = String(relPath).trim();
           const isMatch = ip === rp || ip.endsWith(rp) || rp.endsWith(ip);
           if (isMatch) {
             removedImagesCount++;
-            return false; // 剔除
+            return false;
           }
           return true;
         });
-        if (item.images.length !== beforeLen) changed = true;
+        if (item.images.length !== beforeLen) {
+          affectedIds.add(item.id);
+        }
       }
     });
     
-    // 3. 如果素材里既没有文字，图片也被删光了，把整个素材也清掉
+    // 3. ★ 修复：只清理"本次受影响且变空"的素材，不再扫全库
     let removedItemsCount = 0;
-    if (changed) {
+    if (affectedIds.size > 0) {
       const beforeCount = db.items.length;
-      db.items = db.items.filter(i => i.text || (i.images && i.images.length > 0));
+      db.items = db.items.filter(i => {
+        if (!affectedIds.has(i.id)) return true; // 不受影响的原样保留
+        return i.text || (i.images && i.images.length > 0);
+      });
       removedItemsCount = beforeCount - db.items.length;
       
-      save(); // 保存到 localStorage 并触发自动同步
-      render(); // 刷新主页素材列表
+      save();
+      render();
     }
     
-    // 4. 提示并刷新图床管理界面
+    // 4. 提示
     if (removedItemsCount > 0) {
       toast(`图片已删，并清理了 ${removedItemsCount} 条失去所有内容的空素材`);
     } else if (removedImagesCount > 0) {
@@ -328,7 +324,7 @@ async function deleteRepoImage(relPath, sha) {
       toast('已彻底删除物理图片');
     }
     
-    renderImgMgrUI(); // 直接重新渲染，不用再去发一次网络请求了
+    renderImgMgrUI();
     
   } catch (err) {
     console.error(err);

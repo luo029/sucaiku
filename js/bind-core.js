@@ -119,13 +119,21 @@ document.addEventListener('click',e=>{
 });
 
 $('hitokotoRefresh').addEventListener('click',fetchHitokoto);
+
+// ★ 修复：搜索防抖 180ms，避免每次敲字全库重算
+let searchDebounceTimer = null;
 searchEl.addEventListener('input',()=>{
-  keyword=searchEl.value;currentPage=1;
-  clearFilterCache();
-  renderList();renderHeader();
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(()=>{
+    keyword=searchEl.value;
+    currentPage=1;
+    clearFilterCache();
+    renderList();
+    renderHeader();
+  }, 180);
 });
 
-// ★ 新增：分类下拉框事件
+// 分类下拉框
 if ($('catFilterBtn')) {
   $('catFilterBtn').addEventListener('click', e => {
     e.stopPropagation();

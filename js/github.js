@@ -1,7 +1,4 @@
 /* js / github.js · GitHub 同步：配置 / 拉取 / 推送 */
-/* =========================================================
-   GitHub 同步
-   ========================================================= */
 function loadGH(){
   let cfg={};
   try{cfg=JSON.parse(localStorage.getItem(GH_KEY))||{};}catch(e){cfg={};}
@@ -54,7 +51,6 @@ function ghApiUrl(rc,path){
   return `https://api.github.com/repos/${encodeURIComponent(rc.owner)}/${encodeURIComponent(rc.repo)}/contents/${p}`;
 }
 
-// ★ 修复：去掉了 Cache-Control 自定义头，改用纯时间戳防缓存
 async function ghGetRaw(rc,path){
   if(!rc.owner||!rc.repo)throw new Error('未配置 GitHub');
   const headers = { Accept: 'application/vnd.github+json' };
@@ -147,10 +143,10 @@ async function ghPull(silent){
       db.settings={...db.settings,...data.settings,statsDims:{...db.settings.statsDims,...(data.settings.statsDims||{})}};
     }
     db.items.forEach(i=>{i.images=normalizeImages(i.images);});
-    localStorage.setItem(STORE_KEY,JSON.stringify(db));
+    // ★ 不再写 localStorage，直接同步写 IndexedDB
     saveSettings();
     normalize();
-    save();
+    await saveImmediate();
     suppressPush=false;
     render();updateTinyUsageUI();applySettingsToUI();
     if(!silent){toast('已拉取远程数据');ghSetStatus('拉取成功 · '+new Date().toLocaleTimeString());}
@@ -324,7 +320,15 @@ async function checkCloudUpdate() {
 
     if (_lastKnownCloudSha && _lastKnownCloudSha !== currentSha) {
       _lastKnownCloudSha = currentSha;
-      if (confirm('⚠️ 检测到另一台设备更新了数据！\n\n点击“确定”立即刷新拉取最新数据。\n点击“取消”继续浏览（注意：如果继续编辑并推送，可能会产生冲突）。')) {
+      
+      // ★ 修复：有未保存内容时不弹 reload，改用轻提示
+      const hasUnsaved = (typeof inputEl !== 'undefined' && inputEl && inputEl.value.trim()) || (typeof editingId !== 'undefined' && editingId);
+      if (hasUnsaved) {
+        toast('⚠️ 云端已更新，你有未保存内容，请先保存或手动刷新页面');
+        return;
+      }
+      
+      if (confirm('⚠️ 检测到另一台设备更新了数据！\n\n点击"确定"立即刷新拉取最新数据。\n点击"取消"继续浏览（注意：如果继续编辑并推送，可能会产生冲突）。')) {
         window.location.reload();
       }
     }
