@@ -178,7 +178,6 @@ safeBind('fileInput', 'change', e => {
 /* =========================================================
    设置面板
    ========================================================= */
-// 双重保险：点击关闭
 safeBind('settingCloseBtn', 'click', () => {
   const mask = $('settingMask');
   if (mask) mask.classList.remove('show');
@@ -187,27 +186,21 @@ safeBind('settingMask', 'click', e => {
   if(e.target===$('settingMask')) $('settingMask').classList.remove('show');
 });
 
-// Tabs 切换
 safeBind('settingTabs', 'click', e => {
   const btn = e.target.closest('.st-tab');
   if (!btn) return;
-  
-  // 更新按钮激活状态
   $('settingTabs').querySelectorAll('.st-tab').forEach(b => {
     b.style.color = 'var(--text-2)'; b.style.background = 'transparent'; b.style.fontWeight = '500';
     b.classList.remove('active');
   });
   btn.style.color = 'var(--accent)'; btn.style.background = 'var(--accent-soft)'; btn.style.fontWeight = '600';
   btn.classList.add('active');
-
-  // 切换卡片显示
   const target = btn.dataset.target;
   document.querySelectorAll('.st-scroll .st-card').forEach(card => {
     card.style.display = (card.dataset.group === target) ? 'block' : 'none';
   });
 });
 
-// 绑定打开设置面板的按钮
 function openSettings() {
   applySettingsToUI();
   fillGHForm();
@@ -217,7 +210,6 @@ function openSettings() {
 safeBind('menuSettingBtn', 'click', openSettings);
 safeBind('gearBtn', 'click', openSettings);
 
-// 各种表单绑定
 safeBind('copyWithSource', 'change', e => {
   db.settings.copyWithSource=e.target.checked;saveSettings();
   toast(e.target.checked?'已开启复制附带来源':'已关闭');
@@ -305,6 +297,23 @@ safeBind('autoPushDelay', 'change', () => {
   collectGHForm();
   toast(`自动推送间隔 ${v} 秒`);
 });
+
+safeBind('syncCheckIntervalInput', 'change', e => {
+  const v = Math.max(10, Math.min(3600, parseInt(e.target.value, 10) || 60));
+  e.target.value = v;
+  db.settings.syncCheckInterval = v;
+  saveSettings();
+  if(typeof restartSyncTimer === 'function') restartSyncTimer();
+  toast(`检查间隔已设为 ${v} 秒`);
+});
+
+safeBind('autoCheckUpdateToggle', 'change', e => {
+  db.settings.autoCheckUpdate = e.target.checked;
+  saveSettings();
+  if(typeof restartSyncTimer === 'function') restartSyncTimer();
+  toast(e.target.checked ? '已开启云端巡检' : '已关闭云端巡检');
+});
+
 safeBind('ghTestBtn', 'click', () => {collectGHForm();ghTest();});
 safeBind('ghPullBtn', 'click', async () => {
   collectGHForm();
@@ -316,9 +325,14 @@ safeBind('ghPushBtn', 'click', async () => {
   await ghPush(false);
 });
 
-/* =========================================================
-   图片分类 UI
-   ========================================================= */
+safeBind('ghForcePushBtn', 'click', async () => {
+  if(!confirm('⚠️ 危险操作：强制推送将以你当前的本地数据为准，强行覆盖云端的所有数据！\n\n确定要继续吗？')) return;
+  collectGHForm();
+  const ok = await ghPush(false, true);
+  if(ok) toast('已强制覆盖云端数据');
+});
+
+/* 图片分类 UI */
 const oldImgCatsInput = document.getElementById('imgCatsInput');
 if (oldImgCatsInput) {
   const parent = oldImgCatsInput.parentElement.parentElement;

@@ -121,9 +121,44 @@ const modalsHtml = `
           <div class="st-grid-2"><div class="st-field"><label>分支</label><input type="text" id="ghBranch" placeholder="main" autocomplete="off"></div><div class="st-field"><label>数据文件路径</label><input type="text" id="ghDataPath" placeholder="data/material-library.json" autocomplete="off"></div></div>
           <div class="st-field"><label>站点基础 URL（可选）</label><input type="text" id="ghSiteBase" placeholder="https://your-username.github.io/material-library" autocomplete="off"><div class="st-hint">仅用于显示；留空自动推断</div></div>
           <div class="st-toggle-row"><label class="st-toggle"><div><div class="st-toggle-title">保存后自动推送</div><div class="st-toggle-desc">任何增删改都会触发一次同步</div></div><input type="checkbox" id="ghAuto"></label></div>
-          <div class="st-toggle-row"><label class="st-toggle"><div><div class="st-toggle-title">启动时自动拉取（仅本地无数据时）</div><div class="st-toggle-desc">防止刷新时覆盖未推送的本地数据</div></div><input type="checkbox" id="ghAutoPull" checked></label></div>
-          <div class="st-field"><label>自动推送间隔</label><div class="st-inline"><input type="number" class="setting-num" id="autoPushDelay" min="1" max="60" step="1" value="2"><span class="st-suffix">秒</span></div><div class="st-hint">停止操作这么多秒后推送一次</div></div>
-          <div class="st-actions"><button class="btn" id="ghTestBtn">测试</button><button class="btn" id="ghPullBtn">拉取</button><button class="btn primary" id="ghPushBtn">推送</button></div>
+          <div class="st-toggle-row"><label class="st-toggle"><div><div class="st-toggle-title">启动时自动拉取</div><div class="st-toggle-desc">刷新页面时，从云端获取最新数据</div></div><input type="checkbox" id="ghAutoPull" checked></label></div>
+          
+          <div class="st-grid-2" style="margin-top:16px;">
+            <div class="st-field" style="margin-bottom:0;">
+              <label>自动推送间隔</label>
+              <div class="st-inline">
+                <input type="number" class="setting-num" id="autoPushDelay" min="1" max="60" step="1" value="2">
+                <span class="st-suffix">秒</span>
+              </div>
+            </div>
+            <div class="st-field" style="margin-bottom:0;">
+              <label>云端检查间隔</label>
+              <div class="st-inline">
+                <input type="number" class="setting-num" id="syncCheckIntervalInput" min="10" max="3600" step="10" value="60">
+                <span class="st-suffix">秒</span>
+              </div>
+            </div>
+          </div>
+          <div class="st-hint" style="margin-bottom:12px;">停止操作指定时间后推送；闲置指定时间后检查云端更新（不低于10秒）</div>
+          
+          <div class="st-toggle-row">
+            <label class="st-toggle">
+              <div>
+                <div class="st-toggle-title">开启云端更新巡检</div>
+                <div class="st-toggle-desc">开启后，当其他设备更新时，会弹窗提醒你刷新</div>
+              </div>
+              <input type="checkbox" id="autoCheckUpdateToggle" checked>
+            </label>
+          </div>
+
+          <div class="st-actions" style="display:flex; gap:8px; margin-top:16px;">
+            <button class="btn" id="ghTestBtn">测试</button>
+            <button class="btn" id="ghPullBtn">拉取</button>
+            <button class="btn primary" id="ghPushBtn">推送</button>
+          </div>
+          <div class="st-actions" style="display:flex; gap:8px; margin-top:8px; margin-bottom:12px;">
+            <button class="btn danger" id="ghForcePushBtn" style="flex:1; border-color:rgba(239,68,68,.3); background:var(--danger-soft); color:var(--danger); font-size:13px; padding:9px 10px;">强制覆盖云端</button>
+          </div>
           <div class="st-status" id="ghStatus"></div>
         </div>
       </div>

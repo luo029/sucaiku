@@ -22,7 +22,9 @@ const DEFAULT_SETTINGS={
   defaultPageSize:12,
   showHitokoto:true,
   enableAnim:true,
-  fontSizeMode:'normal'
+  fontSizeMode:'normal',
+  syncCheckInterval:60, // 云端巡检间隔（秒）
+  autoCheckUpdate:true  // 是否开启云端巡检
 };
 
 const PALETTE=[
@@ -209,7 +211,6 @@ function setTheme(mode){
 }
 function saveSettings(){
   localStorage.setItem(SETTINGS_KEY,JSON.stringify(db.settings));
-  // 设置改动也参与自动推送，避免「每次刷新拉取」时被云端旧设置覆盖
   if(typeof scheduleAutoPush==='function' && !suppressPush) scheduleAutoPush();
 }
 
@@ -224,6 +225,9 @@ function applySettingsToUI(){
   if($('tinypngKey')) $('tinypngKey').value=s.tinypngKey||'';
   if($('tinypngProxy')) $('tinypngProxy').value=s.tinypngProxy||'';
   
+  if($('syncCheckIntervalInput')) $('syncCheckIntervalInput').value=Number(s.syncCheckInterval)||60;
+  if($('autoCheckUpdateToggle')) $('autoCheckUpdateToggle').checked = s.autoCheckUpdate !== false;
+
   if ($('catLimitInput')) $('catLimitInput').value = Number(s.catLimit)||3;
   if ($('srcLimitInput')) $('srcLimitInput').value = Number(s.srcLimit)||3;
   if ($('tagLimitInput')) $('tagLimitInput').value = Number(s.tagLimit)||3;
@@ -279,6 +283,7 @@ function loadSettings(){
   db.settings.tagLimit=Math.max(1,Math.min(30,Number(db.settings.tagLimit)||3));
   db.settings.collapseLimit=Math.max(50,Math.min(9999,Number(db.settings.collapseLimit)||150));
   db.settings.defaultPageSize=Number(db.settings.defaultPageSize)||12;
+  db.settings.syncCheckInterval=Math.max(10,Math.min(3600,Number(db.settings.syncCheckInterval)||60));
   if(!['none','local','tinypng'].includes(db.settings.compressMode)) db.settings.compressMode='local';
   if(!['normal','large','xlarge'].includes(db.settings.fontSizeMode)) db.settings.fontSizeMode='normal';
   

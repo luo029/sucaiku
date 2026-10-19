@@ -56,10 +56,8 @@ function ghApiUrl(rc,path){
 
 async function ghGetRaw(rc,path){
   if(!rc.owner||!rc.repo)throw new Error('未配置 GitHub');
-  
   const headers = { Accept: 'application/vnd.github+json' };
   if (rc.token) headers.Authorization = `Bearer ${rc.token}`;
-
   const res=await fetch(`${ghApiUrl(rc,path)}?ref=${encodeURIComponent(rc.branch)}`, { headers });
   if(res.status===404)return null;
   if(!res.ok){const t=await res.text();throw new Error(`HTTP ${res.status} ${t.slice(0,120)}`);}
@@ -108,7 +106,6 @@ async function fetchImageBlobUrl(relPath){
   if(!res.ok) throw new Error('HTTP ' + res.status);
   const blob = await res.blob();
   const objUrl = URL.createObjectURL(blob);
-  // 缓存上限：超出时释放最早的 blob URL，避免内存持续膨胀
   if (imgBlobCache.size >= IMG_BLOB_CACHE_MAX) {
     const firstKey = imgBlobCache.keys().next().value;
     try { URL.revokeObjectURL(imgBlobCache.get(firstKey)); } catch(e) {}
@@ -152,7 +149,6 @@ async function ghPull(silent){
     saveSettings();
     normalize();
     save();
-    // 拉取完成后再解除抑制，避免这次 save() 触发回推
     suppressPush=false;
     render();updateTinyUsageUI();applySettingsToUI();
     if(!silent){toast('已拉取远程数据');ghSetStatus('拉取成功 · '+new Date().toLocaleTimeString());}
@@ -165,7 +161,8 @@ async function ghPull(silent){
   }
 }
 
-async function ghPush(silent){
+// ★ 修改：支持强制推送
+async function ghPush(silent, force = false){
   const cfg=loadGH();
   if(!ghReady(cfg)){if(!silent)toast('请先在设置中配置 GitHub Token');return false;}
   try{
@@ -181,22 +178,36 @@ async function ghPush(silent){
   }catch(err){
     console.error(err);
     
-    // ★ 核心修复：遇到 409 冲突时，自动抓取最新 SHA 并重试一次
     if(err.message && err.message.includes('409')){
-      if(!silent) toast('版本冲突，正在自动修复并重试...');
-      try {
-        const rc=ghRepoConfig('data');
-        const existing=await ghGetRaw(rc,rc.path);
-        const sha=existing?existing.sha:null;
-        const payload=JSON.stringify(db,null,2);
-        const b64=utf8ToBase64(payload);
-        // 使用最新的 SHA 重新推送
-        await ghPutRaw(rc,rc.path,b64,sha,`auto-fix sync ${new Date().toISOString()}`);
-        if(!silent){toast('已自动解决冲突并推送');ghSetStatus('推送成功 · '+new Date().toLocaleTimeString());}
-        return true;
-      } catch(retryErr) {
-        console.error('自动重试仍然失败', retryErr);
-        if(!silent)toast('冲突自动修复失败，请尝试手动拉取');
+      if(force) {
+        if(!silent) ghSetStatus('正在强制覆盖云端...');
+        try {
+          const rc=ghRepoConfig('data');
+          const existing=await ghGetRaw(rc,rc.path);
+          const newSha=existing?existing.sha:null;
+          const payload=JSON.stringify(db,null,2);
+          const b64=utf8ToBase64(payload);
+          await ghPutRaw(rc,rc.path,b64,newSha,`force sync ${new Date().toISOString()}`);
+          if(!silent){toast('已强制覆盖云端');ghSetStatus('强制推送成功 · '+new Date().toLocaleTimeString());}
+          return true;
+        } catch(retryErr) {
+          console.error(retryErr);
+          if(!silent)toast('强制推送失败：'+retryErr.message);
+          ghSetStatus('强制推送失败');
+          return false;
+        }
+      }
+      
+      if (silent) {
+        ghSetStatus('冲突：云端已更新，后台静默推送已中止');
+        return false;
+      }
+      
+      if (confirm('⚠️ 版本冲突：云端数据已被其他设备修改！\n\n是否要以本地数据为准，强制覆盖云端？（这会丢失其他设备在此期间修改的数据）')) {
+        return ghPush(false, true);
+      } else {
+        ghSetStatus('推送已中止');
+        return false;
       }
     }
     
@@ -264,7 +275,6 @@ function fillGHForm(){
   $('ghImgSite').value=cfg.imgSite;
   $('ghImgToken').value=cfg.imgToken;
   
-  // 图片分类 UI 渲染
   if (typeof window.renderImgCatsEditor === 'function') {
     window.renderImgCatsEditor();
   }
@@ -290,3 +300,50 @@ function collectGHForm(){
   saveGH(cfg);
   return cfg;
 }
+
+/* =========================================================
+   云端变更巡检
+   ========================================================= */
+let _lastKnownCloudSha = null;
+let _syncTimer = null;
+
+async function checkCloudUpdate() {
+  const cfg = loadGH();
+  // 如果没开启巡检，或者没开自动拉取，直接跳过
+  if (!ghReady(cfg) || !cfg.autoPull || !db.settings.autoCheckUpdate) return;
+
+  try {
+    const rc = ghRepoConfig('data');
+    const res = await fetch(`${ghApiUrl(rc, rc.path)}?ref=${encodeURIComponent(rc.branch)}`, {
+      headers: { Authorization: `Bearer ${rc.token}`, Accept: 'application/vnd.github+json' }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const currentSha = data.sha;
+
+    if (_lastKnownCloudSha && _lastKnownCloudSha !== currentSha) {
+      _lastKnownCloudSha = currentSha;
+      if (confirm('⚠️ 检测到另一台设备更新了数据！\n\n点击“确定”立即刷新拉取最新数据。\n点击“取消”继续浏览（注意：如果继续编辑并推送，可能会产生冲突）。')) {
+        window.location.reload();
+      }
+    }
+    _lastKnownCloudSha = currentSha;
+  } catch(e) {}
+}
+
+function restartSyncTimer() {
+  if (_syncTimer) clearInterval(_syncTimer);
+  if (!db.settings.autoCheckUpdate) return; // 如果没开开关，就不启动定时器
+  const sec = db.settings.syncCheckInterval || 60;
+  _syncTimer = setInterval(checkCloudUpdate, sec * 1000);
+}
+
+setTimeout(() => {
+  const cfg = loadGH();
+  if (ghReady(cfg)) {
+    ghGetRaw(ghRepoConfig('data'), ghRepoConfig('data').path).then(f => {
+      if(f) _lastKnownCloudSha = f.sha;
+    }).catch(()=>{});
+  }
+  restartSyncTimer();
+}, 3000);
