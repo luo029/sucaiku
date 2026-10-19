@@ -300,18 +300,6 @@ function setupDropZones(){
     const target=e.target.closest('.nav-item[data-type]');
     if(target&&draggedItemId){e.preventDefault();target.classList.remove('drag-over');moveItemCategory(draggedItemId,target.dataset.type);}
   });
-  tabsEl.addEventListener('dragover',e=>{
-    const target=e.target.closest('.tab[data-type]');
-    if(target){e.preventDefault();target.classList.add('drag-over');}
-  });
-  tabsEl.addEventListener('dragleave',e=>{
-    const target=e.target.closest('.tab[data-type]');
-    if(target)target.classList.remove('drag-over');
-  });
-  tabsEl.addEventListener('drop',e=>{
-    const target=e.target.closest('.tab[data-type]');
-    if(target&&draggedItemId){e.preventDefault();target.classList.remove('drag-over');moveItemCategory(draggedItemId,target.dataset.type);}
-  });
 }
 function moveItemCategory(itemId,newType){
   const item=db.items.find(i=>i.id===itemId);

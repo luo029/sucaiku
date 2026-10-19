@@ -48,6 +48,9 @@
   /* 更多菜单在手机上必须有入口（统计/回收站/健康检查都在这） */
   .more-wrap { display: block !important; }
 
+  /* ★ 修复：手机端也显示来源筛选下拉框（之前只在 compact 布局才显示） */
+  .source-filter-wrap { display: block; }
+
   .sidebar { width: min(86vw, 300px); }
 
   .menu-fab {

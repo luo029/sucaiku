@@ -10,7 +10,8 @@ function render(){
   if(db.items.some(i=>i.type===UNCAT))allTypes.add(UNCAT);
   if(!allTypes.has(currentType))currentType='全部';
 
-  renderSidebar();renderTags();renderTabs();renderSourceFilter();renderHeader();renderList();
+  renderSidebar();renderTags();renderSourceFilter();renderHeader();renderList();
+  renderCatFilter(); // 渲染新的分类下拉
   refreshTypeSelect();updateSourcePickerUI();updateTagPickerUI();
   if(!catManager.hidden)renderCatManager();
 }
@@ -150,24 +151,44 @@ function renderTags(){
   }
 }
 
-function renderTabs(){
-  const baseItems=currentSource===ALL_SOURCES?db.items:db.items.filter(i=>i.source===currentSource);
-  const counts={};baseItems.forEach(i=>counts[i.type]=(counts[i.type]||0)+1);
-  const tabList=['全部'];
-  if((counts[IMG_TYPE]||0) > 0) tabList.push(IMG_TYPE);
-  tabList.push(...db.cats);
-  if((counts[UNCAT]||0)>0)tabList.push(UNCAT);
-  if(!tabList.includes(currentType))currentType='全部';
-  tabsEl.innerHTML=tabList.map(t=>{
-    const n=t==='全部'?baseItems.length:(counts[t]||0);
-    const isActive=t===currentType;let style='';
-    if(isActive){
-      if(t==='全部')style='background:linear-gradient(135deg,#6366f1,#8b5cf6);';
-      else if(t===IMG_TYPE)style='background:linear-gradient(135deg,#a855f7,#8b5cf6);';
-      else{const c=catColor(t);style=`background:${c.fg};`;}
-    }
-    return `<button class="tab${isActive?' active':''}" data-type="${esc(t)}" draggable="false" ${style?` style="${style}"`:''}>${esc(t)}<span class="cnt">${formatCount(n)}</span></button>`;
-  }).join('');
+// ★ 新增：全部分类下拉的渲染
+function renderCatFilter(){
+  if ($('catFilterText')) {
+    $('catFilterText').textContent = currentType === '全部' ? '全部分类' : currentType;
+  }
+  if ($('catFilterBtn')) {
+    $('catFilterBtn').classList.toggle('active-filter', currentType !== '全部');
+  }
+  if ($('catFilterPanel') && !$('catFilterPanel').hidden) {
+    renderCatFilterList();
+  }
+}
+
+function renderCatFilterList() {
+  if (!document.getElementById('catFilterList')) return;
+  const q = ($('catFilterSearch') ? $('catFilterSearch').value : '').trim().toLowerCase();
+  
+  const catCounts={};
+  db.items.forEach(i=>catCounts[i.type]=(catCounts[i.type]||0)+1);
+  
+  const allCats = ['全部', IMG_TYPE, ...db.cats];
+  if((catCounts[UNCAT]||0)>0) allCats.push(UNCAT);
+
+  let list = allCats.filter(c => (catCounts[c]||0) > 0 || c === '全部' || c === IMG_TYPE);
+  if (q) list = list.filter(s => s.toLowerCase().includes(q));
+
+  let html = `<div class="sp-item ${currentType === '全部' ? 'sp-selected' : ''}" data-pick="__all__">
+    <span class="sp-name">全部分类</span>
+  </div>`;
+  
+  list.forEach(c => {
+    if (c === '全部') return;
+    const n = catCounts[c] || 0;
+    html += `<div class="sp-item ${currentType === c ? 'sp-selected' : ''}" data-pick="${esc(c)}">
+      <span class="sp-name">${esc(c)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${formatCount(n)}</span>` : ''}</span>
+    </div>`;
+  });
+  $('catFilterList').innerHTML = html;
 }
 
 function renderSourceFilter(){
@@ -220,7 +241,6 @@ function renderHeader(){
 
 function imgCatBadge(img){return img&&img.cat?`<span class="ci-cat">${esc(img.cat)}</span>`:'';}
 
-// ★ 改造：极简模式只显示三个居中的下拉按钮
 function renderZenBar(){
   const typeTxt = currentType === '全部' ? '全部分类' : currentType;
   const srcTxt = currentSource === ALL_SOURCES ? '全部来源' : currentSource;

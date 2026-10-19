@@ -1,11 +1,7 @@
 /* js / bind-core.js · 事件绑定：输入区 / 选择器 / 搜索 / 导航 / 图片兜底 */
-/* =========================================================
-   事件绑定
-   ========================================================= */
 addBtn.addEventListener('click',addOrUpdate);
 cancelBtn.addEventListener('click',cancelEdit);
 
-// ★ 修改：根据设置项，动态处理 Enter 键
 inputEl.addEventListener('keydown',e=>{
   if(e.key !== 'Enter') return;
   
@@ -13,13 +9,11 @@ inputEl.addEventListener('keydown',e=>{
   const shortcut = db.settings.saveShortcut || 'ctrl-enter';
 
   if (shortcut === 'enter') {
-    // 如果设置为 Enter 保存，那么没有 Shift 键时触发保存
     if (!e.shiftKey) {
       e.preventDefault();
       addOrUpdate();
     }
   } else {
-    // 默认 Ctrl+Enter 保存
     if (isCtrl) {
       e.preventDefault();
       addOrUpdate();
@@ -115,6 +109,9 @@ document.addEventListener('click',e=>{
   if ($('sourceFilterPanel') && !$('sourceFilterPanel').hidden && !$('sourceFilterWrap').contains(e.target)) {
     $('sourceFilterPanel').hidden = true;
   }
+  if ($('catFilterPanel') && !$('catFilterPanel').hidden && !$('catFilterWrap').contains(e.target)) {
+    $('catFilterPanel').hidden = true;
+  }
   const zenPanel = document.getElementById('zenFilterPanel');
   if (zenPanel && !zenPanel.contains(e.target) && !e.target.closest('.zen-filter-btn')) {
     zenPanel.remove();
@@ -127,6 +124,36 @@ searchEl.addEventListener('input',()=>{
   clearFilterCache();
   renderList();renderHeader();
 });
+
+// ★ 新增：分类下拉框事件
+if ($('catFilterBtn')) {
+  $('catFilterBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    const panel = $('catFilterPanel');
+    if (panel.hidden) {
+      $('catFilterSearch').value = '';
+      renderCatFilterList();
+      panel.hidden = false;
+      setTimeout(() => $('catFilterSearch').focus(), 50);
+    } else {
+      panel.hidden = true;
+    }
+  });
+}
+if ($('catFilterSearch')) {
+  $('catFilterSearch').addEventListener('input', renderCatFilterList);
+  $('catFilterSearch').addEventListener('keydown', e => { if (e.key === 'Escape') $('catFilterPanel').hidden = true; });
+}
+if ($('catFilterList')) {
+  $('catFilterList').addEventListener('click', e => {
+    const item = e.target.closest('.sp-item'); if (!item) return;
+    const val = item.dataset.pick;
+    currentType = val === '__all__' ? '全部' : val;
+    currentPage = 1;
+    render();
+    $('catFilterPanel').hidden = true;
+  });
+}
 
 if ($('sourceFilterBtn')) {
   $('sourceFilterBtn').addEventListener('click', e => {
@@ -199,11 +226,6 @@ $('tagManageList').addEventListener('click',e=>{
   if(pinBtn){toggleFixedTag(pinBtn.dataset.tagPin);renderTagManager();return;}
   const btn=e.target.closest('[data-tag-del]');if(!btn)return;
   delTag(btn.dataset.tagDel);
-});
-
-tabsEl.addEventListener('click',e=>{
-  const b=e.target.closest('.tab');if(!b)return;
-  currentType=b.dataset.type;currentPage=1;render();scrollTop();
 });
 
 zenBarEl.addEventListener('click',e=>{

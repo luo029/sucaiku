@@ -231,7 +231,7 @@ function updateLayoutBtn(){
 function setLayout(mode){
   layoutMode=mode;localStorage.setItem(LAYOUT_KEY,mode);
   applyLayout();closeSidebar();catManager.hidden=true;
-  renderTabs();renderSourceFilter();
+  renderSourceFilter();
 }
 function setTheme(mode){
   themeMode=mode;document.documentElement.setAttribute('data-theme',mode);
@@ -276,10 +276,15 @@ function applySettingsToUI(){
   if(srcGroup) srcGroup.style.display = s.sidebarShowSrc !== false ? '' : 'none';
   if(tagGroup) tagGroup.style.display = s.sidebarShowTag !== false ? '' : 'none';
 
+  // ★ 修复：避免 placeholder 重复拼接
   if(inputEl) {
     const hint = s.saveShortcut === 'enter' ? '（Enter 保存，Shift+Enter 换行）' : '（Ctrl+Enter 保存）';
-    const basePlaceholder = s.inputPlaceholder || '粘贴句子、段落。用【文字】可高亮。可直接粘贴图片。';
-    inputEl.placeholder = basePlaceholder.replace(/（.*?保存.*?）/g, '') + hint + '。用【文字】可高亮。可直接粘贴图片。';
+    const isCustom = s.inputPlaceholder && s.inputPlaceholder !== DEFAULT_SETTINGS.inputPlaceholder;
+    if (isCustom) {
+      inputEl.placeholder = s.inputPlaceholder;
+    } else {
+      inputEl.placeholder = '粘贴句子、段落' + hint + '。用【文字】可高亮。可直接粘贴图片。';
+    }
   }
   
   if($('inputPlaceholder')) $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
