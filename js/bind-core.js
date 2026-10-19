@@ -4,8 +4,27 @@
    ========================================================= */
 addBtn.addEventListener('click',addOrUpdate);
 cancelBtn.addEventListener('click',cancelEdit);
+
+// ★ 修改：根据设置项，动态处理 Enter 键
 inputEl.addEventListener('keydown',e=>{
-  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();addOrUpdate();}
+  if(e.key !== 'Enter') return;
+  
+  const isCtrl = e.ctrlKey || e.metaKey;
+  const shortcut = db.settings.saveShortcut || 'ctrl-enter';
+
+  if (shortcut === 'enter') {
+    // 如果设置为 Enter 保存，那么没有 Shift 键时触发保存
+    if (!e.shiftKey) {
+      e.preventDefault();
+      addOrUpdate();
+    }
+  } else {
+    // 默认 Ctrl+Enter 保存
+    if (isCtrl) {
+      e.preventDefault();
+      addOrUpdate();
+    }
+  }
 });
 
 inputEl.addEventListener('paste',e=>{

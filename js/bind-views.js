@@ -19,7 +19,6 @@ safeBind('themeToggleBtn', 'click', () => {
 safeBind('zenBtn', 'click', () => setZen(true));
 safeBind('zenExitBtn', 'click', () => setZen(false));
 
-// ★ 新增：首页安心输入按钮
 safeBind('focusBtn', 'click', () => setFocus(true));
 
 safeBind('imgViewBtn', 'click', openImgView);
@@ -237,6 +236,13 @@ safeBind('useRelativeTimeToggle', 'change', e => {
   saveSettings();
   renderList();
   toast(e.target.checked ? '已切换为相对时间' : '已切换为绝对时间');
+});
+
+safeBind('saveShortcut', 'click', e => {
+  const b = e.target.closest('button[data-shortcut]'); if(!b) return;
+  db.settings.saveShortcut = b.dataset.shortcut; 
+  saveSettings(); applySettingsToUI();
+  toast('保存快捷键已更新');
 });
 
 safeBind('uiStyleMode', 'click', e => {

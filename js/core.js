@@ -39,7 +39,8 @@ const DEFAULT_SETTINGS={
   cardSpacing:'standard',
   zenFontSize:'normal',
   uiStyle:'modern',
-  focusModeCat:'收件箱'
+  focusModeCat:'收件箱',
+  saveShortcut:'ctrl-enter' // ★ 新增：保存快捷键，'ctrl-enter' 或 'enter'
 };
 
 const PALETTE=[
@@ -114,7 +115,6 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function getSearchTerms(){return keyword.trim().toLowerCase().split(/\s+/).filter(Boolean);}
 
-// ★ 新增：数字缩略显示函数
 function formatCount(num) {
   return num > 99 ? '99+' : num;
 }
@@ -275,7 +275,14 @@ function applySettingsToUI(){
   if(srcGroup) srcGroup.style.display = s.sidebarShowSrc !== false ? '' : 'none';
   if(tagGroup) tagGroup.style.display = s.sidebarShowTag !== false ? '' : 'none';
 
-  if(inputEl) inputEl.placeholder = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
+  // ★ 动态更新 Placeholder 提示
+  if(inputEl) {
+    const hint = s.saveShortcut === 'enter' ? '（Enter 保存，Shift+Enter 换行）' : '（Ctrl+Enter 保存）';
+    const basePlaceholder = s.inputPlaceholder || '粘贴句子、段落。用【文字】可高亮。可直接粘贴图片。';
+    // 替换掉原本的快捷提示，防止重复拼接
+    inputEl.placeholder = basePlaceholder.replace(/（.*?保存.*?）/g, '') + hint + '。用【文字】可高亮。可直接粘贴图片。';
+  }
+  
   if($('inputPlaceholder')) $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
 
   document.body.classList.remove('spacing-compact', 'spacing-loose');
@@ -283,6 +290,10 @@ function applySettingsToUI(){
   if (s.cardSpacing === 'loose') document.body.classList.add('spacing-loose');
   document.querySelectorAll('#cardSpacing button').forEach(b => {
     b.classList.toggle('active', b.dataset.spacing === (s.cardSpacing || 'standard'));
+  });
+
+  document.querySelectorAll('#saveShortcut button').forEach(b => {
+    b.classList.toggle('active', b.dataset.shortcut === (s.saveShortcut || 'ctrl-enter'));
   });
 
   document.body.classList.remove('zen-font-large', 'zen-font-xlarge');

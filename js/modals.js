@@ -146,6 +146,15 @@ const modalsHtml = `
           <label class="st-toggle" style="margin-bottom:16px;"><div><div class="st-toggle-title">开启卡片动画</div><div class="st-toggle-desc">关闭可提升大量数据时的滚动性能</div></div><input type="checkbox" id="enableAnim"></label>
           
           <div class="st-field" style="margin-bottom:16px;">
+            <label>保存快捷键</label>
+            <div class="segmented" id="saveShortcut">
+              <button type="button" data-shortcut="ctrl-enter">Ctrl + Enter 保存</button>
+              <button type="button" data-shortcut="enter">Enter 保存</button>
+            </div>
+            <div class="st-hint">选择 Enter 保存时，需按 Shift+Enter 换行</div>
+          </div>
+
+          <div class="st-field" style="margin-bottom:16px;">
             <label>安心输入模式</label>
             <div style="display:flex; gap:10px;">
               <input type="text" id="focusModeCatInput" placeholder="收件箱" style="flex:1; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; background:var(--bg); color:var(--text); outline:none;">
