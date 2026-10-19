@@ -23,7 +23,7 @@ if(zenMode)document.body.classList.add('zen-mode');
 loadSettings();
 loadStore();
 cleanTrash();
-refreshTypeSelect(db.cats[0]||'');
+refreshTypeSelect(db.settings.defaultType || db.cats[0] || '');
 setupDropZones();
 
 sourceEl.value=db.fixedSource||'';
@@ -48,8 +48,17 @@ fetchHitokoto();
   if (isOwner) {
     document.body.classList.remove('guest-mode');
     if(!cfg.autoPull) return;
-    if(db.items.length > 0) return;
-    ghPull(true).then(ok=>{if(!ok)console.warn('自动拉取失败');});
+
+    // 拉取策略：
+    // - 已开启「保存后自动推送」→ 每次刷新都拉取（本地改动已同步，拉取安全）
+    // - 未开启「保存后自动推送」→ 仅本地无数据时拉取（避免刷新丢失未推送的改动）
+    // 如果你确定要「无条件每次刷新都拉取」，把 shouldPull 改成 true 即可
+    const shouldPull = cfg.autoSync || db.items.length === 0;
+    if(shouldPull){
+      ghPull(true).then(ok => {
+        if(!ok) console.warn('自动拉取失败');
+      });
+    }
     return;
   }
 
@@ -116,10 +125,13 @@ fetchHitokoto();
     });
   }
 
-  // 如果本地没有数据，去拉取公开的默认数据
-  if (db.items.length === 0 && PUBLIC_OWNER && PUBLIC_REPO) {
-    listEl.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="animation: spin 2s linear infinite;"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85 1 6.54 2.66L21 8"/><path d="M21 3v5h-5"/></svg><p>正在加载云端素材库...</p></div>`;
-    
+  // 访客模式：每次刷新都拉取（只读，不会丢数据）
+  if (PUBLIC_OWNER && PUBLIC_REPO) {
+    // 本地无数据时，先显示加载提示；有数据时静默拉取，先显示本地缓存再更新
+    if (db.items.length === 0) {
+      listEl.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="animation: spin 2s linear infinite;"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85 1 6.54 2.66L21 8"/><path d="M21 3v5h-5"/></svg><p>正在加载云端素材库...</p></div>`;
+    }
+
     // 如果本地连目标仓库都没配置过，才注入默认的公开仓库配置
     if (!cfg.owner || !cfg.repo) {
       const guestCfg = {
@@ -129,9 +141,11 @@ fetchHitokoto();
       };
       saveGH(guestCfg);
     }
-    
+
     ghPull(true).then(ok => {
-      if (!ok) listEl.innerHTML = `<div class="empty"><p>加载云端数据失败，请检查网络或配置</p></div>`;
+      if (!ok && db.items.length === 0) {
+        listEl.innerHTML = `<div class="empty"><p>加载云端数据失败，请检查网络或配置</p></div>`;
+      }
     });
   }
 })();

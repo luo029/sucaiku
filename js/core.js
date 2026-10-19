@@ -207,7 +207,11 @@ function setTheme(mode){
   $('themeIconSun').style.display=mode==='dark'?'none':'block';
   $('themeIconMoon').style.display=mode==='dark'?'block':'none';
 }
-function saveSettings(){localStorage.setItem(SETTINGS_KEY,JSON.stringify(db.settings));}
+function saveSettings(){
+  localStorage.setItem(SETTINGS_KEY,JSON.stringify(db.settings));
+  // 设置改动也参与自动推送，避免「每次刷新拉取」时被云端旧设置覆盖
+  if(typeof scheduleAutoPush==='function' && !suppressPush) scheduleAutoPush();
+}
 
 function applySettingsToUI(){
   const s=db.settings;
