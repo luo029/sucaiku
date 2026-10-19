@@ -71,6 +71,8 @@
     "showHitokoto": true,
     "enableAnim": true,
     "fontSizeMode": "normal",
+    "syncCheckInterval": 60,
+    "autoCheckUpdate": true,
     "sidebarLimit": 2
   },
   "trash": []
