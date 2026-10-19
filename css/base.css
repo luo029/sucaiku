@@ -32,3 +32,8 @@ body{margin:0;background:var(--bg);background-image:radial-gradient(1000px 600px
 button{font-family:inherit;cursor:pointer;border:none;background:none}
 input,select,textarea{font-family:inherit}
 .app{display:flex;min-height:100vh}
+
+/* 补充的动画与字号控制（使用 zoom 完美全局缩放） */
+body.no-anim * { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+html.font-large body { zoom: 1.15; }
+html.font-xlarge body { zoom: 1.3; }

@@ -1,7 +1,4 @@
 /* js / core.js · 常量 / 状态 / DOM 缓存 / 工具函数 / 一言 / 布局·主题·设置 */
-/* =========================================================
-   常量
-   ========================================================= */
 const UNCAT='未分类';
 const IMG_TYPE='图片';
 const ALL_SOURCES='__all__';
@@ -18,8 +15,14 @@ const TINY_KEY='material-library.tinypng';
 
 const DEFAULT_SETTINGS={
   copyWithSource:false,trashTtlDays:30,statsDims:{cat:true,source:true,tag:true},statsLimit:8,
-  compressMode:'local',  // 'none' | 'local' | 'tinypng'
-  tinypngKey:'',tinypngProxy:''
+  compressMode:'local',tinypngKey:'',tinypngProxy:'',
+  catLimit:3, srcLimit:3, tagLimit:3,
+  defaultType:'',
+  collapseLimit:150,
+  defaultPageSize:12,
+  showHitokoto:true,
+  enableAnim:true,
+  fontSizeMode:'normal'
 };
 
 const PALETTE=[
@@ -32,9 +35,6 @@ const PALETTE=[
   {bg:'#ccfbf1',fg:'#0f766e'},{bg:'#fee2e2',fg:'#b91c1c'}
 ];
 
-/* =========================================================
-   状态
-   ========================================================= */
 const db={
   items:[],cats:DEFAULT_CATS.slice(),colors:{},sources:[],fixedSource:'',fixedTags:[],
   imageCategories:DEFAULT_IMG_CATS.slice(),
@@ -79,9 +79,6 @@ function fmtSize(n){
   return (n/1024/1024).toFixed(2)+' MB';
 }
 
-/* =========================================================
-   DOM
-   ========================================================= */
 const $=id=>document.getElementById(id);
 const inputEl=$('input'),typeEl=$('type'),sourceEl=$('source'),tagsEl=$('tags');
 const addBtn=$('addBtn'),cancelBtn=$('cancelBtn');
@@ -96,13 +93,8 @@ const tabsEl=$('tabs');
 const pendingImgsEl=$('pendingImgs');
 const zenBarEl=$('zenBar');
 
-/* =========================================================
-   工具
-   ========================================================= */
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
-
 function getSearchTerms(){return keyword.trim().toLowerCase().split(/\s+/).filter(Boolean);}
 
 function highlightEscaped(escaped,kws){
@@ -177,9 +169,6 @@ function blobToBase64(blob){
   });
 }
 
-/* =========================================================
-   一言
-   ========================================================= */
 function fetchHitokoto(){
   $('hitokotoText').textContent='正在获取...';$('hitokotoFrom').textContent='';
   fetch('https://v1.hitokoto.cn/').then(r=>r.json()).then(data=>{
@@ -192,9 +181,6 @@ function fetchHitokoto(){
   }).catch(()=>{$('hitokotoText').textContent='获取失败';});
 }
 
-/* =========================================================
-   布局 & 主题 & 设置
-   ========================================================= */
 function applyLayout(){
   document.body.classList.toggle('layout-sidebar',layoutMode==='sidebar');
   document.body.classList.toggle('layout-compact',layoutMode==='compact');
@@ -222,29 +208,59 @@ function setTheme(mode){
   $('themeIconMoon').style.display=mode==='dark'?'block':'none';
 }
 function saveSettings(){localStorage.setItem(SETTINGS_KEY,JSON.stringify(db.settings));}
+
 function applySettingsToUI(){
   const s=db.settings;
-  $('copyWithSource').checked=!!s.copyWithSource;
-  $('trashTtlInput').value=Number(s.trashTtlDays)||30;
-  $('statDimCat').checked=!s.statsDims||s.statsDims.cat!==false;
-  $('statDimSource').checked=!s.statsDims||s.statsDims.source!==false;
-  $('statDimTag').checked=!s.statsDims||s.statsDims.tag!==false;
-  $('statLimitInput').value=Number(s.statsLimit)||8;
-  $('tinypngKey').value=s.tinypngKey||'';
-  $('tinypngProxy').value=s.tinypngProxy||'';
-  // 压缩模式
+  if($('copyWithSource')) $('copyWithSource').checked=!!s.copyWithSource;
+  if($('trashTtlInput')) $('trashTtlInput').value=Number(s.trashTtlDays)||30;
+  if($('statDimCat')) $('statDimCat').checked=!s.statsDims||s.statsDims.cat!==false;
+  if($('statDimSource')) $('statDimSource').checked=!s.statsDims||s.statsDims.source!==false;
+  if($('statDimTag')) $('statDimTag').checked=!s.statsDims||s.statsDims.tag!==false;
+  if($('statLimitInput')) $('statLimitInput').value=Number(s.statsLimit)||8;
+  if($('tinypngKey')) $('tinypngKey').value=s.tinypngKey||'';
+  if($('tinypngProxy')) $('tinypngProxy').value=s.tinypngProxy||'';
+  
+  if ($('catLimitInput')) $('catLimitInput').value = Number(s.catLimit)||3;
+  if ($('srcLimitInput')) $('srcLimitInput').value = Number(s.srcLimit)||3;
+  if ($('tagLimitInput')) $('tagLimitInput').value = Number(s.tagLimit)||3;
+  if ($('collapseLimitInput')) $('collapseLimitInput').value = Number(s.collapseLimit)||150;
+  if ($('showHitokoto')) $('showHitokoto').checked = s.showHitokoto !== false;
+  if ($('enableAnim')) $('enableAnim').checked = s.enableAnim !== false;
+  if ($('defaultPageSizeSelect')) $('defaultPageSizeSelect').value = String(s.defaultPageSize)||'12';
+
+  if ($('defaultTypeSelect')) {
+    const sel = $('defaultTypeSelect');
+    sel.innerHTML = `<option value="">跟随系统（无）</option>` + 
+      db.cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    sel.value = s.defaultType || '';
+  }
+
   const mode=s.compressMode||'local';
   document.querySelectorAll('#compressMode button').forEach(b=>{
     b.classList.toggle('active', b.dataset.mode===mode);
   });
-  $('tinypngFields').style.display = mode==='tinypng' ? 'block' : 'none';
-  updateTinyUsageUI();
+  if($('tinypngFields')) $('tinypngFields').style.display = mode==='tinypng' ? 'block' : 'none';
   
-  // 图片分类 UI 渲染
-  if (typeof window.renderImgCatsEditor === 'function') {
-    window.renderImgCatsEditor();
-  }
+  document.querySelectorAll('#fontSizeMode button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.size===(s.fontSizeMode||'normal'));
+  });
+  applyFontSize(s.fontSizeMode);
+
+  document.body.classList.toggle('no-anim', s.enableAnim === false);
+  
+  const hitokotoBox = document.querySelector('.hitokoto-box');
+  if (hitokotoBox) hitokotoBox.style.display = (s.showHitokoto !== false) ? 'flex' : 'none';
+
+  updateTinyUsageUI();
+  if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor();
 }
+
+function applyFontSize(mode) {
+  document.documentElement.classList.remove('font-large', 'font-xlarge');
+  if (mode === 'large') document.documentElement.classList.add('font-large');
+  if (mode === 'xlarge') document.documentElement.classList.add('font-xlarge');
+}
+
 function loadSettings(){
   try{
     const s=JSON.parse(localStorage.getItem(SETTINGS_KEY));
@@ -254,11 +270,18 @@ function loadSettings(){
   }catch(e){}
   db.settings.trashTtlDays=Math.max(1,Math.min(365,Number(db.settings.trashTtlDays)||30));
   db.settings.statsLimit=Math.max(3,Math.min(30,Number(db.settings.statsLimit)||8));
+  db.settings.catLimit=Math.max(1,Math.min(30,Number(db.settings.catLimit)||3));
+  db.settings.srcLimit=Math.max(1,Math.min(30,Number(db.settings.srcLimit)||3));
+  db.settings.tagLimit=Math.max(1,Math.min(30,Number(db.settings.tagLimit)||3));
+  db.settings.collapseLimit=Math.max(50,Math.min(9999,Number(db.settings.collapseLimit)||150));
+  db.settings.defaultPageSize=Number(db.settings.defaultPageSize)||12;
   if(!['none','local','tinypng'].includes(db.settings.compressMode)) db.settings.compressMode='local';
+  if(!['normal','large','xlarge'].includes(db.settings.fontSizeMode)) db.settings.fontSizeMode='normal';
+  
+  pageSize = db.settings.defaultPageSize;
   applySettingsToUI();
 }
 
-/* TinyPNG 计数 */
 function currentMonth(){const n=new Date();return `${n.getFullYear()}-${pad2(n.getMonth()+1)}`;}
 function loadTinyCount(){
   try{

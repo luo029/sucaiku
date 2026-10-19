@@ -1,7 +1,8 @@
 /* js / render.js · 渲染管线：侧栏 / 标签 / 页签 / 列表 / 分页 / 选择器面板 */
-/* =========================================================
-   渲染
-   ========================================================= */
+let tagExpanded = false;
+let catExpanded = false;
+let srcExpanded = false;
+
 function render(){
   normalize();
   if(currentSource!==ALL_SOURCES&&!db.sources.includes(currentSource))currentSource=ALL_SOURCES;
@@ -20,6 +21,16 @@ function renderSidebar(){
   const sourceCounts={};
   db.items.forEach(i=>{if(i.source)sourceCounts[i.source]=(sourceCounts[i.source]||0)+1;});
 
+  const catLimit = db.settings.catLimit || 3;
+  const srcLimit = db.settings.srcLimit || 3;
+
+  const catHasMore = db.cats.length > catLimit;
+  let displayCats = (!catExpanded && catHasMore) ? db.cats.slice(0, catLimit) : db.cats;
+  if (!catExpanded && catHasMore && currentType && !displayCats.includes(currentType) && db.cats.includes(currentType)) {
+    // 修复：如果当前选中的被折叠，直接替换最后一个，保证总数绝对不超过限制
+    displayCats[displayCats.length - 1] = currentType;
+  }
+
   let html=`
     <button class="nav-item nav-all ${currentType==='全部'?'active':''}" data-type="全部" draggable="false">
       <span class="nav-dot"></span><span class="nav-name">全部素材</span><span class="nav-count">${db.items.length}</span>
@@ -31,7 +42,7 @@ function renderSidebar(){
     </button>`;
   }
 
-  db.cats.forEach(c=>{
+  displayCats.forEach(c=>{
     const col=catColor(c);
     html+=`<button class="nav-item ${currentType===c?'active':''}" data-type="${esc(c)}" draggable="false">
       <span class="nav-dot" style="background:${col.fg}"></span><span class="nav-name">${esc(c)}</span><span class="nav-count">${catCounts[c]||0}</span>
@@ -42,19 +53,39 @@ function renderSidebar(){
       <span class="nav-dot" style="background:#94a3b8"></span><span class="nav-name">${UNCAT}</span><span class="nav-count">${catCounts[UNCAT]}</span>
     </button>`;
   }
+
+  if (catHasMore) {
+    html += `<button class="nav-item nav-manage" id="toggleCatsBtn" style="margin-top:4px; padding:6px 12px; font-size:12px; justify-content:center;">
+      ${catExpanded ? '收起分类' : `展开更多分类 (${db.cats.length - catLimit})`}
+    </button>`;
+  }
   $('catNav').innerHTML=html;
+  if (catHasMore) {
+    document.getElementById('toggleCatsBtn').addEventListener('click', () => {
+      catExpanded = !catExpanded;
+      renderSidebar();
+    });
+  }
 
   const bookIcon=`<svg class="nav-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`;
   const pinIcon=`<svg class="nav-fixed-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>`;
   const delIcon=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
 
+  const srcHasMore = db.sources.length > srcLimit;
+  let displaySrcs = (!srcExpanded && srcHasMore) ? db.sources.slice(0, srcLimit) : db.sources;
+  if (!srcExpanded && srcHasMore && currentSource && currentSource !== ALL_SOURCES && !displaySrcs.includes(currentSource)) {
+    displaySrcs[displaySrcs.length - 1] = currentSource; // 来源同理修复
+  }
+
   let srcHtml=`
     <button class="nav-item ${currentSource===ALL_SOURCES?'active':''}" data-source="${ALL_SOURCES}" draggable="false">
       ${bookIcon}<span class="nav-name">全部来源</span><span class="nav-count">${db.sources.length}</span>
     </button>`;
-  if(!db.sources.length){srcHtml+=`<div class="nav-empty">还没有保存来源</div>`;}
-  else{
-    db.sources.forEach(s=>{
+  
+  if(!db.sources.length){
+    srcHtml+=`<div class="nav-empty">还没有保存来源</div>`;
+  } else {
+    displaySrcs.forEach(s=>{
       const isFixed=db.fixedSource===s;
       srcHtml+=`<button class="nav-item ${currentSource===s?'active':''}" data-source="${esc(s)}" draggable="false">
         ${bookIcon}<span class="nav-name" title="${esc(s)}">${esc(s)}</span>
@@ -64,24 +95,60 @@ function renderSidebar(){
       </button>`;
     });
   }
+
+  if (srcHasMore) {
+    srcHtml += `<button class="nav-item nav-manage" id="toggleSrcsBtn" style="margin-top:4px; padding:6px 12px; font-size:12px; justify-content:center;">
+      ${srcExpanded ? '收起来源' : `展开更多来源 (${db.sources.length - srcLimit})`}
+    </button>`;
+  }
   $('sourceNav').innerHTML=srcHtml;
+  if (srcHasMore) {
+    document.getElementById('toggleSrcsBtn').addEventListener('click', () => {
+      srcExpanded = !srcExpanded;
+      renderSidebar();
+    });
+  }
 }
 
 function renderTags(){
   const counts=collectTags();
-  const tags=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]||a.localeCompare(b,'zh'));
-  if(currentTag&&!tags.includes(currentTag))currentTag='';
+  const allTags=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]||a.localeCompare(b,'zh'));
+  if(currentTag&&!allTags.includes(currentTag))currentTag='';
   const nav=$('tagNav');
-  if(!tags.length){nav.innerHTML=`<div class="nav-empty">还没有标签</div>`;return;}
+  if(!allTags.length){nav.innerHTML=`<div class="nav-empty">还没有标签</div>`;return;}
+
+  const tagLimit = db.settings.tagLimit || 3;
+  const hasMore = allTags.length > tagLimit;
+  let displayTags = (!tagExpanded && hasMore) ? allTags.slice(0, tagLimit) : allTags;
+  
+  if (!tagExpanded && currentTag && !displayTags.includes(currentTag)) {
+      displayTags[displayTags.length - 1] = currentTag; // 标签同理修复
+  }
+
   const tagIcon=`<svg class="nav-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>`;
   const pinIcon=`<svg class="nav-fixed-icon" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none"><line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>`;
-  nav.innerHTML=tags.map(t=>{
+  
+  let html = displayTags.map(t=>{
     const isFixed=db.fixedTags.includes(t);
     return `<button class="nav-item ${currentTag===t?'active':''}" data-tag="${esc(t)}" draggable="false">
       ${tagIcon}<span class="nav-name" title="${esc(t)}">${esc(t)}</span>
       ${isFixed?pinIcon:''}<span class="nav-count">${counts[t]}</span>
     </button>`;
   }).join('');
+
+  if (hasMore) {
+    html += `<button class="nav-item nav-manage" id="toggleTagsBtn" style="margin-top:4px; padding:6px 12px; font-size:12px; justify-content:center;">
+      ${tagExpanded ? '收起标签' : `展开更多标签 (${allTags.length - tagLimit})`}
+    </button>`;
+  }
+  nav.innerHTML = html;
+
+  if (hasMore) {
+    document.getElementById('toggleTagsBtn').addEventListener('click', () => {
+      tagExpanded = !tagExpanded;
+      renderTags();
+    });
+  }
 }
 
 function renderTabs(){
@@ -169,6 +236,7 @@ function renderList(){
   const start=(currentPage-1)*pageSize;
   const pageItems=filtered.slice(start,start+pageSize);
   const terms=getSearchTerms();
+  const collapseLimit = db.settings.collapseLimit || 150;
 
   if(!pageItems.length){
     if(!db.items.length){
@@ -182,11 +250,12 @@ function renderList(){
   listEl.innerHTML=pageItems.map(i=>{
     const c=catColor(i.type);const sel=selectedIds.has(i.id);
     const isImgItem = (i.type === IMG_TYPE);
-    const isLongText=i.text && (i.text.length>150||i.text.split('\n').length>5);
+    const isLongText=i.text && (i.text.length>collapseLimit||i.text.split('\n').length>5);
     const isExpanded=expandedIds.has(i.id);
     const contentClass=isLongText?(isExpanded?'':'collapsed'):'';
     const expandBtn=isLongText?`<div class="expand-btn" data-expand="${i.id}">${isExpanded?'收起':'展开全文'}</div>`:'';
     const tagsHtml=(i.tags&&i.tags.length)?i.tags.map(t=>`<span class="tag-chip" data-tag="${esc(t)}">#${esc(t)}</span>`).join(''):'';
+    
     const imgsHtml=(i.images&&i.images.length)?`<div class="card-imgs">${i.images.map(im=>{
       const src=imageSrc(im);
       return `<span class="ci"><img src="${esc(src)}" alt="" loading="lazy" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}">${imgCatBadge(im)}</span>`;
