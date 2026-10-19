@@ -89,7 +89,7 @@
     "tinypngProxy": "",
     "catLimit": 1,
     "srcLimit": 3,
-    "tagLimit": 3,
+    "tagLimit": 1,
     "defaultType": "",
     "collapseLimit": 150,
     "defaultPageSize": 12,
