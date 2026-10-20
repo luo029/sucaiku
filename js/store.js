@@ -66,6 +66,8 @@ let suppressPush = false;
 let _filterCacheKey = '';
 let _filterCacheResult = [];
 let _pendingSave = false;
+let _needNormalize = true;
+function markNeedNormalize(){ _needNormalize = true; }
 
 function clearFilterCache() {
   _filterCacheKey = '';
@@ -156,7 +158,6 @@ async function loadStore(){
 
   let data = null;
   if (idbData && lsData) {
-    // 两边都有：谁 _rev 大用谁（localStorage 兜底数据可能更新）
     if (lsRev > idbRev) {
       data = lsData;
       try { await idbPut(IDB_KEY, lsData); } catch(e) {}
@@ -204,6 +205,7 @@ function applyLoadedData(o) {
     db.settings = { ...db.settings, ...o.settings, statsDims: { ...db.settings.statsDims, ...(o.settings.statsDims || {}) } };
   }
   db._rev = Number(o._rev) || 0;
+  markNeedNormalize();
 }
 
 // 图片标签处理
@@ -245,28 +247,43 @@ function ensureColors(){
   return dirty;
 }
 
-/* ★ 修复：加 _rev 守卫，避免每次 render 全量跑（性能优化，不改变行为） */
+/* ★ 重写：快速路径只做 O(cats) 的 ensureColors，全量修复仅在数据来源可疑时跑 */
 function normalize(){
-  // 同一版本号已经规范化过，直接跳过
-  if (db._normalizedRev === (db._rev || 0)) return;
+  if (!_needNormalize) {
+    if (ensureColors()) save();
+    return;
+  }
 
-  const catSet=new Set(db.cats);let dirty=false;
-  db.items.forEach(i=>{
-    if(i.type !== IMG_TYPE && !i.text && Array.isArray(i.images) && i.images.length > 0){
+  const catSet = new Set(db.cats);
+  const sourceSet = new Set(db.sources);
+  let dirty = false;
+
+  db.items.forEach(i => {
+    if (i.type !== IMG_TYPE && !i.text && Array.isArray(i.images) && i.images.length > 0) {
       i.type = IMG_TYPE; dirty = true;
     }
-    if(i.type !== UNCAT && i.type !== IMG_TYPE && !catSet.has(i.type)){catSet.add(i.type);dirty=true;}
-    if(i.source&&!db.sources.includes(i.source)){db.sources.push(i.source);dirty=true;}
-    if(!Array.isArray(i.tags)){i.tags=[];dirty=true;}
-    else{const t=[...new Set(i.tags.map(x=>String(x).trim()).filter(Boolean))];if(t.length!==i.tags.length){i.tags=t;dirty=true;}}
-    const ni=normalizeImages(i.images);
-    if(JSON.stringify(ni)!==JSON.stringify(i.images||[])){i.images=ni;dirty=true;}
+    if (i.type !== UNCAT && i.type !== IMG_TYPE && !catSet.has(i.type)) {
+      catSet.add(i.type); dirty = true;
+    }
+    if (i.source && !sourceSet.has(i.source)) {
+      db.sources.push(i.source); sourceSet.add(i.source); dirty = true;
+    }
+    if (!Array.isArray(i.tags)) {
+      i.tags = []; dirty = true;
+    } else {
+      const t = [...new Set(i.tags.map(x => String(x).trim()).filter(Boolean))];
+      if (t.length !== i.tags.length) { i.tags = t; dirty = true; }
+    }
+    const ni = normalizeImages(i.images);
+    if (JSON.stringify(ni) !== JSON.stringify(i.images || [])) { i.images = ni; dirty = true; }
   });
-  if(dirty)db.cats=[...catSet];
-  if(db.fixedSource&&!db.sources.includes(db.fixedSource)){db.fixedSource='';dirty=true;}
-  if(ensureColors())dirty=true;
-  if(dirty)save();
-  db._normalizedRev = db._rev || 0;
+
+  if (dirty) db.cats = [...catSet];
+  if (db.fixedSource && !db.sources.includes(db.fixedSource)) { db.fixedSource = ''; dirty = true; }
+  if (ensureColors()) dirty = true;
+
+  _needNormalize = false;
+  if (dirty) save();
 }
 
 function cleanupSources(){

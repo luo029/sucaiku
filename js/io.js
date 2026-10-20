@@ -171,6 +171,7 @@ function handleImportFile(file){
           if(typeof idx==='number'&&!used.has(idx)){db.colors[c]=idx;used.add(idx);}
         }
       });
+      markNeedNormalize();
       normalize();
       db.items.sort((a,b)=>b.createdAt-a.createdAt);
       save();render();toast(`导入 ${added} 条`);

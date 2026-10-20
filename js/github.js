@@ -144,6 +144,7 @@ async function ghPull(silent){
     }
     db.items.forEach(i=>{i.images=normalizeImages(i.images);});
     saveSettings();
+    markNeedNormalize();
     normalize();
     await saveImmediate();
     suppressPush=false;
