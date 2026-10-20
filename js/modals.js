@@ -490,6 +490,30 @@ const modalsHtml = `
         </div>
       </div>
 
+      <!-- ★ 新增：专注模式传图设置 -->
+      <div class="st-card" data-group="images" style="display:none;">
+        <div class="st-card-head">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg>
+          <div><div class="st-card-title">专注模式传图设置</div><div class="st-card-desc">在安心输入模式下，减少传图打断</div></div>
+        </div>
+        <div class="st-card-body">
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <label class="st-toggle">
+              <div>
+                <div class="st-toggle-title">专注模式下传图跳过分类选择</div>
+                <div class="st-toggle-desc">开启后，在专注模式下传图将直接静默上传</div>
+              </div>
+              <input type="checkbox" id="focusImgAutoUpload" checked>
+            </label>
+            <div id="focusImgCatWrap" class="st-field" style="margin-bottom:0; margin-top:8px;">
+              <label>默认图片分类</label>
+              <select id="focusImgDefaultCat" class="page-size" style="width:100%; text-align:left; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); font-size:13.5px; outline:none;"></select>
+              <div class="st-hint">静默上传时，图片将归入此分类。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="st-card" data-group="images" style="display:none;">
         <div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg><div><div class="st-card-title">图片分类</div><div class="st-card-desc">上传图片时可选的分类</div></div></div>
         <div class="st-card-body"><div class="st-field"><input type="text" id="imgCatsInput" placeholder="梗图, 情节, 插画, 其他" autocomplete="off"></div></div>

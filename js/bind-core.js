@@ -21,6 +21,23 @@ inputEl.addEventListener('keydown',e=>{
   }
 });
 
+function handleIncomingImages(files) {
+  if (!files.length) return;
+  
+  // ★ 判断是否在专注模式，且开启了跳过分类
+  if (focusMode && db.settings.focusImgAutoUpload !== false) {
+    pendingUploadFiles = files;
+    const cats = db.imageCategories.length ? db.imageCategories : DEFAULT_IMG_CATS;
+    // 校验默认分类是否存在，不存在就用第一个
+    pendingUploadCat = cats.includes(db.settings.focusImgDefaultCat) ? db.settings.focusImgDefaultCat : cats[0];
+    
+    if ($('imgUploadTags')) $('imgUploadTags').value = '';
+    startUploadPending();
+  } else {
+    openImgCatChooser(files);
+  }
+}
+
 inputEl.addEventListener('paste',e=>{
   const items=(e.clipboardData||e.originalEvent.clipboardData).items;
   const files=[];
@@ -30,8 +47,19 @@ inputEl.addEventListener('paste',e=>{
   }
   if(files.length){
     e.preventDefault();
-    openImgCatChooser(files);
+    handleIncomingImages(files);
   }
+});
+
+$('imgBtn').addEventListener('click',()=>{
+  const cfg=loadGH();
+  if(!ghReady(cfg)){toast('请先在设置中配置 GitHub');return;}
+  $('imgFileInput').click();
+});
+$('imgFileInput').addEventListener('change',e=>{
+  const files=Array.from(e.target.files||[]);
+  e.target.value='';
+  handleIncomingImages(files);
 });
 
 // ★ 新增：全局剪贴板粘贴监听（在任何地方按 Ctrl+V 都能吸入输入框）
@@ -63,33 +91,18 @@ document.addEventListener('paste', e => {
   e.preventDefault();
   
   if (inputEl.value.trim()) {
-    // 如果输入框已经有内容，换行追加
     inputEl.value += '\n' + text;
   } else {
     inputEl.value = text;
   }
 
-  // 滚动到顶部、聚焦、光标移到末尾
   scrollTop();
   inputEl.focus();
   inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
   
-  // 仅在非专注模式下提示（专注模式容易打断心流）
   if (!document.body.classList.contains('focus-mode')) {
     toast('已自动吸入剪贴板');
   }
-});
-
-$('imgBtn').addEventListener('click',()=>{
-  const cfg=loadGH();
-  if(!ghReady(cfg)){toast('请先在设置中配置 GitHub');return;}
-  $('imgFileInput').click();
-});
-$('imgFileInput').addEventListener('change',e=>{
-  const files=Array.from(e.target.files||[]);
-  e.target.value='';
-  if(!files.length)return;
-  openImgCatChooser(files);
 });
 
 $('imgCatList').addEventListener('click',e=>{

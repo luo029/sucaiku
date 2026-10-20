@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS={
   sidebarShowSrc:true,
   sidebarShowTag:true,
   inputPlaceholder:'粘贴句子、段落（Ctrl+Enter保存）。用【文字】可高亮。可直接粘贴图片。',
-  cardSpacing:'standard', // 已废弃，但保留字段兼容老数据
+  cardSpacing:'standard', 
   listStyle:'card', 
   zenFontSize:'normal',
   uiStyle:'modern',
@@ -46,7 +46,10 @@ const DEFAULT_SETTINGS={
   saveShortcut:'ctrl-enter',
   enableMarkdown:true,
   copyWithoutMarks:true,
-  copyKeepBlankLines:true
+  copyKeepBlankLines:true,
+  // ★ 新增：专注模式传图配置
+  focusImgAutoUpload:true,
+  focusImgDefaultCat:'其他'
 };
 
 const PALETTE=[
@@ -401,6 +404,19 @@ function applySettingsToUI(){
   
   const hitokotoBox = document.querySelector('.hitokoto-box');
   if (hitokotoBox) hitokotoBox.style.display = (s.showHitokoto !== false) ? 'flex' : 'none';
+
+  // ★ 设置面板：专注模式传图配置
+  if ($('focusImgAutoUpload')) {
+    $('focusImgAutoUpload').checked = s.focusImgAutoUpload !== false;
+  }
+  if ($('focusImgCatWrap')) {
+    $('focusImgCatWrap').style.display = (s.focusImgAutoUpload !== false) ? 'block' : 'none';
+  }
+  if ($('focusImgDefaultCat')) {
+    const sel = $('focusImgDefaultCat');
+    sel.innerHTML = db.imageCategories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    sel.value = s.focusImgDefaultCat || '其他';
+  }
 
   updateTinyUsageUI();
   if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor();

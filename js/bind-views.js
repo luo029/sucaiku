@@ -463,13 +463,11 @@ safeBind('imgMgrBatchTagBtn', 'click', () => {
   $('imgMgrBatchCatWrap').style.display = 'none';
   $('imgMgrBatchTagWrap').style.display = 'block';
   
-  // 重置面板状态
   $('imgMgrBatchTagNewInput').value = '';
   $('imgMgrBatchTagSearch').value = '';
   $('imgMgrBatchTagPoolWrap').style.display = 'none';
   selectedBatchTags.clear();
   
-  // ★ 读取选中图片的原有标签并填入
   repoImagesCache.forEach(f => {
     if (imgMgrSelectedIds.has(f.relPath)) {
       (f.tags || []).forEach(t => selectedBatchTags.add(t));
@@ -481,7 +479,6 @@ safeBind('imgMgrBatchTagBtn', 'click', () => {
 });
 
 function renderBatchTagPool() {
-  // 1. 渲染已选区
   const selectedWrap = $('imgMgrBatchSelectedTags');
   if (selectedWrap) {
     if (selectedBatchTags.size === 0) {
@@ -496,7 +493,6 @@ function renderBatchTagPool() {
     }
   }
 
-  // 2. 渲染可选标签池
   const q = $('imgMgrBatchTagSearch').value.trim().toLowerCase();
   const allTags = Object.keys(collectTags()).sort((a,b) => a.localeCompare(b,'zh'));
   const pool = $('imgMgrBatchTagPool');
@@ -524,7 +520,6 @@ function renderBatchTagPool() {
 
 $('imgMgrBatchTagSearch').addEventListener('input', renderBatchTagPool);
 
-// 点击已选标签区的 × 移除标签
 $('imgMgrBatchSelectedTags').addEventListener('click', e => {
   const btn = e.target.closest('[data-remove-tag]');
   if (!btn) return;
@@ -533,7 +528,6 @@ $('imgMgrBatchSelectedTags').addEventListener('click', e => {
   renderBatchTagPool();
 });
 
-// 点击标签池切换选中状态
 $('imgMgrBatchTagPool').addEventListener('click', e => {
   const item = e.target.closest('.batch-tag-item');
   if (!item) return;
@@ -543,7 +537,6 @@ $('imgMgrBatchTagPool').addEventListener('click', e => {
   renderBatchTagPool();
 });
 
-// ★ 点击搜索图标展开/收起标签池
 safeBind('imgMgrBatchTagSearchBtn', 'click', () => {
   const wrap = $('imgMgrBatchTagPoolWrap');
   if (wrap.style.display === 'none') {
@@ -565,7 +558,6 @@ safeBind('imgMgrBatchTagAddBtn', 'click', () => {
   renderBatchTagPool();
 });
 
-// ★ 支持输入框回车直接添加
 safeBind('imgMgrBatchTagNewInput', 'keydown', e => {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -638,7 +630,6 @@ safeBind('imgMgrBatchEditConfirm', 'click', () => {
   exitImgMgrSelectMode();
 });
 
-/* 批量删除加 try/finally + 限并发 + 进度提示 */
 safeBind('imgMgrBatchDelBtn', 'click', async () => {
   if (!imgMgrSelectedIds.size) return toast('请先选择图片');
   const count = imgMgrSelectedIds.size;
@@ -690,7 +681,6 @@ safeBind('imgMgrBatchDelBtn', 'click', async () => {
     }
     await Promise.all(Array.from({length: Math.min(CONCURRENCY, toDelete.length)}, () => worker()));
     
-    // 清理本地引用
     const affectedIds = new Set();
     let removedImagesCount = 0;
     db.items.forEach(item => {
@@ -1023,6 +1013,18 @@ safeBind('fontSizeMode', 'click', e => {
   const b = e.target.closest('button[data-size]'); if(!b) return;
   db.settings.fontSizeMode = b.dataset.size; saveSettings(); applySettingsToUI();
   toast('字号已调整');
+});
+
+// ★ 设置面板：专注模式传图配置事件
+safeBind('focusImgAutoUpload', 'change', e => {
+  db.settings.focusImgAutoUpload = e.target.checked;
+  saveSettings();
+  if ($('focusImgCatWrap')) $('focusImgCatWrap').style.display = e.target.checked ? 'block' : 'none';
+});
+safeBind('focusImgDefaultCat', 'change', e => {
+  db.settings.focusImgDefaultCat = e.target.value;
+  saveSettings();
+  toast(`专注模式默认传图分类设为「${e.target.value}」`);
 });
 
 safeBind('compressMode', 'click', e => {
