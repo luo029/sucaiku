@@ -360,8 +360,8 @@
   align-items: center; justify-content: center; z-index: 100;
   background: var(--rv-bg, #fdf9ec);
   animation: fadeIn 0.5s;
-  padding: 20px; /* 上下留白 */
-  overflow-y: auto; /* 小屏幕兜底滚动 */
+  padding: 20px;
+  overflow-y: auto;
 }
 
 .review-completed .big-seal {
@@ -370,12 +370,22 @@
   letter-spacing: 8px; font-weight: 900; margin-top: 10px; margin-bottom: 16px;
   box-shadow: 0 10px 30px rgba(185,43,39,0.2);
   font-family: 'KaiTi', serif;
-  flex: none; /* 防止被压缩 */
+  flex: none;
 }
 
 .review-completed .comp-text {
-  font-size: 18px; color: #5d3a1a; letter-spacing: 2px; margin-bottom: 20px;
+  font-size: 18px; color: #5d3a1a; letter-spacing: 2px; margin-bottom: 16px;
   flex: none;
+}
+
+/* ★ 御赐封号徽章 */
+.rv-title-badge {
+  font-size: 16px; font-weight: bold; color: #b92b27;
+  background: #fdf0f0; border: 2px dashed #ecc5c5;
+  padding: 4px 16px; border-radius: 99px; letter-spacing: 2px;
+  margin-bottom: 24px; flex: none;
+  box-shadow: 0 4px 12px rgba(185,43,39,0.08);
+  animation: stamp-fall 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .battle-card {
@@ -411,17 +421,16 @@
 }
 .battle-history-row .hl-red { color: #b92b27; }
 
-/* ★ 新增：战报左右分栏模式 */
+/* ★ 战报左右分栏模式 */
 .battle-card.split-layout {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  max-width: 760px; /* 左右排布需要更宽一点 */
+  max-width: 760px;
   padding: 24px 32px;
   gap: 32px;
 }
 
-/* 左侧主数据（左对齐、居中垂直） */
 .battle-card.split-layout .battle-main-stats {
   flex: 1;
   border-bottom: none;
@@ -433,7 +442,6 @@
   justify-content: center;
 }
 
-/* 右侧统计数据（左侧虚线分割、居中垂直） */
 .battle-card.split-layout .battle-history-stats {
   flex: 1;
   border-left: 1px dashed #d4a59a;
@@ -441,7 +449,6 @@
   justify-content: center;
 }
 
-/* 手机端还原为上下堆叠 */
 @media (max-width: 680px) {
   .battle-card.split-layout {
     flex-direction: column;

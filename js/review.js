@@ -1,4 +1,4 @@
-/* js / review.js · 批阅奏折（终极完全体·帝皇版·古风文言文） */
+/* js / review.js · 批阅奏折（终极完全体·帝皇版） */
 (function() {
   const reviewHTML = `
     <div class="review-mask" id="reviewMask">
@@ -99,7 +99,6 @@
                   <span>启用操作撤销</span>
                 </label>
               </div>
-              
               <div class="rv-form-row" style="margin-top: 4px; padding-left: 24px;">
                 <span class="rv-form-label" style="font-size:12.5px; color:var(--rv-text-3, #888);">撤销条停留</span>
                 <div class="rv-form-inputs">
@@ -107,7 +106,6 @@
                   <span style="font-size:13px;">秒</span>
                 </div>
               </div>
-
               <div class="rv-form-row">
                 <label class="rv-form-label">
                   <input type="checkbox" id="rvEnableSound" style="accent-color:#b92b27;" checked>
@@ -118,6 +116,23 @@
                 <label class="rv-form-label">
                   <input type="checkbox" id="rvEnableAnim" style="accent-color:#b92b27;" checked>
                   <span>卷轴翻页过渡动画</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 进阶玩法 -->
+            <div class="rv-card">
+              <div class="rv-set-title">✨ 进阶玩法</div>
+              <div class="rv-form-row">
+                <label class="rv-form-label">
+                  <input type="checkbox" id="rvEnableNumberKeys" style="accent-color:#b92b27;" checked>
+                  <span>数字键快捷选择分类<br><small style="color:#888;font-weight:normal;">Alt+数字 选分类，Shift+Alt+数字 选标签</small></span>
+                </label>
+              </div>
+              <div class="rv-form-row">
+                <label class="rv-form-label">
+                  <input type="checkbox" id="rvEnableTitle" style="accent-color:#b92b27;" checked>
+                  <span>战报显示“御赐封号”</span>
                 </label>
               </div>
             </div>
@@ -165,7 +180,6 @@
                   <span>显示提示</span>
                 </label>
               </div>
-              
               <div class="rv-form-row">
                 <span class="rv-form-label">准奏：</span>
                 <select class="rv-set-select" id="rvShortcutApprove">
@@ -197,7 +211,6 @@
 
             <div class="rv-card" style="grid-column: 1 / -1;">
               <div class="rv-set-title">⏱ 代批（自动批阅）</div>
-              
               <div class="rv-form-row">
                 <label class="rv-form-label">
                   <input type="checkbox" id="rvAutoApprove" style="accent-color:#b92b27;">
@@ -209,7 +222,6 @@
                   <span style="font-size:13px;">秒后准奏</span>
                 </div>
               </div>
-
               <div class="rv-form-row">
                 <label class="rv-form-label">
                   <input type="checkbox" id="rvShowCountdown" style="accent-color:#b92b27;" checked>
@@ -221,7 +233,6 @@
                   <span style="font-size:13px;">秒才出现</span>
                 </div>
               </div>
-
               <div class="rv-form-row">
                 <span class="rv-form-label" style="color:#8e7962;">倒计时视觉参数</span>
                 <div class="rv-form-inputs">
@@ -232,7 +243,6 @@
                   <span style="font-size:13px;">%</span>
                 </div>
               </div>
-
               <div class="rv-form-row" style="margin-top:10px; border-top:1px dashed #d4a59a; padding-top:14px;">
                 <label class="rv-form-label">
                   <input type="checkbox" id="rvAutoClose" style="accent-color:#b92b27;">
@@ -248,11 +258,13 @@
           </div>
         </div>
 
-        <!-- 阅毕画面与战报（一屏完整显示） -->
+        <!-- 阅毕画面与战报 -->
         <div class="review-completed" id="rvCompleted" style="display:none;">
           <div class="big-seal">已批阅</div>
           <div class="comp-text">启奏陛下，今日奏折已御批完毕。</div>
           
+          <div class="rv-title-badge" id="rvTitleBadge" style="display:none;"></div>
+
           <div class="battle-card" id="rvBattleCard">
             <div class="battle-main-stats" id="rvBattleReport"></div>
             <div class="battle-history-stats" id="rvHistoryStats"></div>
@@ -277,7 +289,6 @@
             <textarea class="review-textarea" id="reviewText" placeholder="在此写下批注..."></textarea>
             <div class="review-imgs" id="reviewImgs"></div>
             
-            <!-- 倒计时与落款印章 -->
             <div class="rv-countdown" id="rvCountdown"></div>
             <div class="rv-corner-stamp" id="rvCornerStamp">准奏</div>
             <div class="rv-word-count" id="rvWordCount"></div>
@@ -285,11 +296,10 @@
           </div>
           
           <div class="review-footer">
-            <!-- 撤销按钮直接在留中左侧 -->
             <button class="review-btn undo-btn" id="rvUndoBtn">撤销</button>
-            <button class="review-btn skip" id="reviewSkipBtn">留中</button>
-            <button class="review-btn del" id="reviewDelBtn">焚毁</button>
-            <button class="review-btn approve" id="reviewApproveBtn">准奏</button>
+            <button class="review-btn skip" id="rvSkipBtn">留中</button>
+            <button class="review-btn del" id="rvDelBtn">焚毁</button>
+            <button class="review-btn approve" id="rvApproveBtn">准奏</button>
           </div>
         </div>
 
@@ -336,7 +346,9 @@
     showWordCount: true, preventAccident: true, enableUndo: true, undoTime: 5, 
     enableSound: true, enableAnim: true, showShortcutHint: true, enableShortcuts: true,
     shortcutApprove: 'ctrl-enter', shortcutSkip: 'alt-right', shortcutDel: 'alt-delete',
-    recordHistory: true, showBattleStats: true, showTime: true, statsRange: 'week'
+    recordHistory: true, showBattleStats: true, showTime: true, statsRange: 'week',
+    enableNumberKeys: true,
+    enableTitle: true
   };
 
   let autoApproveInterval = null;
@@ -362,7 +374,6 @@
       const gain = audioCtx.createGain();
       osc.connect(gain);
       gain.connect(audioCtx.destination);
-      
       const now = audioCtx.currentTime;
       
       if (type === 'stamp') {
@@ -429,7 +440,7 @@
         } else {
           clearInterval(autoApproveInterval);
           countdownEl.style.display = 'none';
-          const approveBtn = document.getElementById('reviewApproveBtn');
+          const approveBtn = document.getElementById('rvApproveBtn');
           if (approveBtn && document.getElementById('reviewMask').classList.contains('show')) {
             approveBtn.click();
           }
@@ -445,6 +456,25 @@
     updateWordCount();
   });
 
+  // ★ 数字快捷键
+  document.addEventListener('keydown', (e) => {
+    if (!rvStyle.enableNumberKeys || !document.getElementById('reviewMask').classList.contains('show')) return;
+    
+    const num = parseInt(e.key, 10);
+    if (isNaN(num) || num < 1 || num > 9) return;
+    
+    if (e.altKey && !e.shiftKey && !e.ctrlKey) {
+      e.preventDefault();
+      const items = document.querySelectorAll('#listCat .review-pill');
+      if (items[num - 1]) items[num - 1].click();
+    }
+    else if (e.shiftKey && e.altKey && !e.ctrlKey) {
+      e.preventDefault();
+      const items = document.querySelectorAll('#listTag .review-pill');
+      if (items[num - 1]) items[num - 1].click();
+    }
+  });
+
   document.getElementById('reviewText').addEventListener('keydown', (e) => {
     if (!rvStyle.enableShortcuts) return;
 
@@ -453,21 +483,21 @@
       (rvStyle.shortcutApprove === 'alt-enter' && e.altKey && e.key === 'Enter') ||
       (rvStyle.shortcutApprove === 'enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && e.key === 'Enter')
     );
-    if (isApprove) { e.preventDefault(); document.getElementById('reviewApproveBtn').click(); return; }
+    if (isApprove) { e.preventDefault(); document.getElementById('rvApproveBtn').click(); return; }
 
     const isSkip = rvStyle.shortcutSkip && (
       (rvStyle.shortcutSkip === 'ctrl-right' && (e.ctrlKey || e.metaKey) && e.key === 'ArrowRight') ||
       (rvStyle.shortcutSkip === 'alt-right' && e.altKey && e.key === 'ArrowRight') ||
       (rvStyle.shortcutSkip === 'right' && !e.shiftKey && !e.ctrlKey && !e.altKey && e.key === 'ArrowRight')
     );
-    if (isSkip) { e.preventDefault(); document.getElementById('reviewSkipBtn').click(); return; }
+    if (isSkip) { e.preventDefault(); document.getElementById('rvSkipBtn').click(); return; }
 
     const isDel = rvStyle.shortcutDel && (
       (rvStyle.shortcutDel === 'ctrl-delete' && (e.ctrlKey || e.metaKey) && e.key === 'Delete') ||
       (rvStyle.shortcutDel === 'alt-delete' && e.altKey && e.key === 'Delete') ||
       (rvStyle.shortcutDel === 'delete' && !e.shiftKey && !e.ctrlKey && !e.altKey && e.key === 'Delete')
     );
-    if (isDel) { e.preventDefault(); document.getElementById('reviewDelBtn').click(); return; }
+    if (isDel) { e.preventDefault(); document.getElementById('rvDelBtn').click(); return; }
   });
 
   function applyReviewStyle() {
@@ -511,6 +541,9 @@
     document.getElementById('rvShowShortcutHint').checked = rvStyle.showShortcutHint !== false;
     document.getElementById('rvEnableShortcuts').checked = rvStyle.enableShortcuts !== false;
     
+    document.getElementById('rvEnableNumberKeys').checked = rvStyle.enableNumberKeys !== false;
+    document.getElementById('rvEnableTitle').checked = rvStyle.enableTitle !== false;
+
     document.getElementById('rvRecordHistory').checked = rvStyle.recordHistory !== false;
     document.getElementById('rvShowBattleStats').checked = rvStyle.showBattleStats !== false;
     document.getElementById('rvShowTime').checked = rvStyle.showTime !== false;
@@ -546,7 +579,7 @@
     stamp.classList.toggle('pulse', rvStyle.pulse === 'on');
     sidebar.classList.toggle('hidden', rvStyle.sidebar === 'hide');
     
-    document.getElementById('reviewApproveBtn').textContent = rvStyle.btnText;
+    document.getElementById('rvApproveBtn').textContent = rvStyle.btnText;
     stampCorner.textContent = rvStyle.btnText;
     
     updateWordCount();
@@ -603,6 +636,8 @@
   bindCheckbox('rvRecordHistory', 'recordHistory');
   bindCheckbox('rvShowBattleStats', 'showBattleStats');
   bindCheckbox('rvShowTime', 'showTime');
+  bindCheckbox('rvEnableNumberKeys', 'enableNumberKeys');
+  bindCheckbox('rvEnableTitle', 'enableTitle');
   
   const bindNumInput = (id, prop, defVal) => {
     document.getElementById(id).addEventListener('change', (e) => {
@@ -679,6 +714,23 @@
     return { durationSec, todayCount, yesterdayCount, rangeCount };
   }
 
+  // ★ 御赐封号
+  function getImperialTitle() {
+    const total = battleStats.approved + battleStats.skipped + battleStats.deleted;
+    const approvedRate = total > 0 ? battleStats.approved / total : 0;
+    const avgSec = total > 0 ? (Date.now() - reviewStartTime) / 1000 / total : 0;
+
+    if (total >= 50) return "勤政明君";
+    if (battleStats.deleted >= 10 && battleStats.deleted / total > 0.8) return "铁面无私";
+    if (battleStats.chars >= 1000) return "才高八斗";
+    if (avgSec < 3 && total > 5) return "一目十行";
+    if (approvedRate === 1 && total > 5) return "从善如流";
+    if (battleStats.tags.size >= 5) return "博学多闻";
+    if (total > 0 && approvedRate === 0) return "从长计议";
+    if (total > 0) return "今日事今日毕";
+    return "天下太平";
+  }
+
   function loadReviewItem(isUndo = false) {
     const completedScreen = document.getElementById('rvCompleted');
     if (autoCloseTimer) clearTimeout(autoCloseTimer);
@@ -713,9 +765,16 @@
         }
       }
 
+      const titleBadge = document.getElementById('rvTitleBadge');
+      if (rvStyle.enableTitle) {
+        titleBadge.style.display = 'inline-block';
+        titleBadge.textContent = getImperialTitle();
+      } else {
+        titleBadge.style.display = 'none';
+      }
+
       let tagStr = battleStats.tags.size > 0 ? Array.from(battleStats.tags).join('、') : '无';
       
-      // ★ 渲染主统计（文言文古风版）
       document.getElementById('rvBattleReport').innerHTML = `
         <div>御览奏折 <span class="hl-red">${battleStats.approved + battleStats.skipped + battleStats.deleted}</span> 件</div>
         <div>准奏 <span class="hl-red">${battleStats.approved}</span> 件，留中 <span class="hl-red">${battleStats.skipped}</span> 件，焚毁 <span class="hl-red">${battleStats.deleted}</span> 件</div>
@@ -723,7 +782,6 @@
         <div>新添朱批：${tagStr}</div>
       `;
 
-      // 渲染历史对比
       let historyEl = document.getElementById('rvHistoryStats');
       const battleCardEl = document.getElementById('rvBattleCard');
       let hasHistory = false;
@@ -756,7 +814,6 @@
           historyEl.innerHTML = '';
       }
 
-      // ★ 根据是否显示右侧统计，切换分栏样式
       if (hasHistory) {
           battleCardEl.classList.add('split-layout');
       } else {
@@ -830,10 +887,8 @@
       message: message
     };
     
-    // 显示撤销按钮
     undoBtn.style.display = 'block';
     
-    // ★ 拼接操作名称和倒计时
     let timeLeft = rvStyle.undoTime || 5;
     undoBtn.textContent = `${message} · 撤销(${timeLeft}s)`; 
     
@@ -843,7 +898,7 @@
     undoCountdownInterval = setInterval(() => {
       timeLeft--;
       if (timeLeft > 0) {
-        undoBtn.textContent = `${message} · 撤销(${timeLeft}s)`; // ★ 动态更新倒计时
+        undoBtn.textContent = `${message} · 撤销(${timeLeft}s)`;
       } else {
         clearInterval(undoCountdownInterval);
       }
@@ -873,11 +928,9 @@
     
     save();
     
-    // 恢复到队列并重新加载
     reviewQueue.splice(index, 0, item.id);
     reviewCurrentId = item.id;
     
-    // 隐藏撤销按钮
     document.getElementById('rvUndoBtn').style.display = 'none';
     undoData = null;
     if (undoTimer) clearTimeout(undoTimer);
@@ -887,8 +940,7 @@
     if (action === 'skip') battleStats.skipped--;
     if (action === 'delete') battleStats.deleted--;
     
-    loadReviewItem(true); // 取消动画，直接跳回
-    if (window.toast) toast('已撤销操作');
+    loadReviewItem(true); 
   });
 
   function showCornerStamp() {
@@ -934,14 +986,14 @@
     return true;
   }
 
-  document.getElementById('reviewSkipBtn').addEventListener('click', () => {
+  document.getElementById('rvSkipBtn').addEventListener('click', () => {
     playSound('page');
     battleStats.skipped++;
     triggerUndoToast('已留中', 'skip');
     reviewNext();
   });
   
-  document.getElementById('reviewDelBtn').addEventListener('click', () => {
+  document.getElementById('rvDelBtn').addEventListener('click', () => {
     playSound('tear');
     if (!reviewCurrentId) return;
     battleStats.deleted++;
@@ -951,15 +1003,16 @@
     reviewNext();
   });
   
-  document.getElementById('reviewApproveBtn').addEventListener('click', () => {
+  document.getElementById('rvApproveBtn').addEventListener('click', () => {
     if (!reviewCurrentId) return;
     
     const saved = saveCurrent();
     if (saved === false) return;
 
     playSound('stamp');
-    battleStats.approved++;
     showCornerStamp();
+    
+    battleStats.approved++;
     triggerUndoToast('已准奏', 'approve');
     
     setTimeout(() => {
