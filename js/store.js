@@ -76,7 +76,8 @@ function save(){
   clearFilterCache();
   db._rev = (db._rev || 0) + 1;
   _scheduleSaveIDB();
-  if(!suppressPush) scheduleAutoPush();
+  // ★ 修复：加 typeof 保护，避免 github.js 尚未加载时 ReferenceError
+  if(!suppressPush && typeof scheduleAutoPush === 'function') scheduleAutoPush();
 }
 
 function _scheduleSaveIDB(){

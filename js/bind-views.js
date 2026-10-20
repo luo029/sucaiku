@@ -60,44 +60,211 @@ safeBind('modalMask', 'click', e => {if(e.target===$('modalMask'))closeModal();}
 
 // ★ 随机盲盒核心逻辑升级
 let randomAnimating = false;
-safeBind('menuRandomBtn', 'click', () => {
+let randomFilterValue = 'all';
+let autoFlipTimer = null; // ★ 新增：自动翻动定时器
+
+function getRandomPool() {
+  if (randomFilterValue === 'all') return db.items;
+  if (randomFilterValue === 'text') return db.items.filter(i => i.text && i.text.trim());
+  if (randomFilterValue === 'image') return db.items.filter(i => i.images && i.images.length > 0);
+  
+  if (randomFilterValue.startsWith('cat:')) {
+    const c = randomFilterValue.slice(4);
+    return db.items.filter(i => i.type === c);
+  }
+  if (randomFilterValue.startsWith('src:')) {
+    const s = randomFilterValue.slice(4);
+    return db.items.filter(i => i.source === s);
+  }
+  if (randomFilterValue.startsWith('tag:')) {
+    const t = randomFilterValue.slice(4);
+    return db.items.filter(i => (i.tags || []).includes(t));
+  }
+  return db.items;
+}
+
+function renderRandomFilterList() {
+  const q = $('randomFilterSearch').value.trim().toLowerCase();
+  const listEl = $('randomFilterList');
+  
+  let html = '';
+  
+  if (!q) {
+    html += `<div class="sp-item ${randomFilterValue === 'all' ? 'sp-selected' : ''}" data-val="all"><span class="sp-name">全随机</span></div>`;
+    html += `<div class="sp-item ${randomFilterValue === 'text' ? 'sp-selected' : ''}" data-val="text"><span class="sp-name">仅文字素材</span></div>`;
+    html += `<div class="sp-item ${randomFilterValue === 'image' ? 'sp-selected' : ''}" data-val="image"><span class="sp-name">仅图片素材</span></div>`;
+  }
+  
+  const cats = db.cats.filter(c => !q || c.toLowerCase().includes(q));
+  if (cats.length) {
+    html += `<div class="nav-label" style="margin-top:8px; margin-bottom:4px; padding-left:12px; font-size:12px; color:var(--text-3);">分类</div>`;
+    cats.forEach(c => {
+      html += `<div class="sp-item ${randomFilterValue === 'cat:' + c ? 'sp-selected' : ''}" data-val="cat:${esc(c)}">
+        <span class="sp-name">${esc(c)}</span>
+      </div>`;
+    });
+  }
+
+  const srcs = db.sources.filter(s => !q || s.toLowerCase().includes(q));
+  if (srcs.length) {
+    html += `<div class="nav-label" style="margin-top:8px; margin-bottom:4px; padding-left:12px; font-size:12px; color:var(--text-3);">来源</div>`;
+    srcs.forEach(s => {
+      html += `<div class="sp-item ${randomFilterValue === 'src:' + s ? 'sp-selected' : ''}" data-val="src:${esc(s)}">
+        <span class="sp-name">${esc(s)}</span>
+      </div>`;
+    });
+  }
+
+  const tags = Object.keys(collectTags()).filter(t => !q || t.toLowerCase().includes(q));
+  if (tags.length) {
+    html += `<div class="nav-label" style="margin-top:8px; margin-bottom:4px; padding-left:12px; font-size:12px; color:var(--text-3);">标签</div>`;
+    tags.forEach(t => {
+      html += `<div class="sp-item ${randomFilterValue === 'tag:' + t ? 'sp-selected' : ''}" data-val="tag:${esc(t)}">
+        <span class="sp-name">#${esc(t)}</span>
+      </div>`;
+    });
+  }
+
+  if (!html) {
+    html = `<div class="sp-empty">没有匹配的选项</div>`;
+  }
+  
+  listEl.innerHTML = html;
+}
+
+// 自定义下拉面板交互
+safeBind('randomFilterBtn', 'click', e => {
+  e.stopPropagation();
+  const panel = $('randomFilterPanel');
+  if (panel.hidden) {
+    $('randomFilterSearch').value = '';
+    renderRandomFilterList();
+    panel.hidden = false;
+    setTimeout(() => $('randomFilterSearch').focus(), 50);
+  } else {
+    panel.hidden = true;
+  }
+});
+
+safeBind('randomFilterSearch', 'input', renderRandomFilterList);
+safeBind('randomFilterSearch', 'keydown', e => {
+  if (e.key === 'Escape') $('randomFilterPanel').hidden = true;
+});
+
+safeBind('randomFilterList', 'click', e => {
+  const item = e.target.closest('.sp-item');
+  if (!item) return;
+  
+  randomFilterValue = item.dataset.val;
+  
+  let btnText = '全随机';
+  if (randomFilterValue === 'text') btnText = '仅文字';
+  else if (randomFilterValue === 'image') btnText = '仅图片';
+  else if (randomFilterValue.startsWith('cat:')) btnText = '分类: ' + randomFilterValue.slice(4);
+  else if (randomFilterValue.startsWith('src:')) btnText = '来源: ' + randomFilterValue.slice(4);
+  else if (randomFilterValue.startsWith('tag:')) btnText = '标签: #' + randomFilterValue.slice(4);
+  
+  $('randomFilterText').textContent = btnText;
+  
+  const btn = $('randomFilterBtn');
+  if (randomFilterValue !== 'all') {
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.color = 'var(--accent)';
+    btn.style.background = 'var(--accent-soft)';
+  } else {
+    btn.style.borderColor = '';
+    btn.style.color = '';
+    btn.style.background = '';
+  }
+  
+  $('randomFilterPanel').hidden = true;
+  drawRandomBox();
+});
+
+document.addEventListener('click', e => {
+  const panel = $('randomFilterPanel');
+  if (panel && !panel.hidden && !$('randomFilterBtn').contains(e.target) && !panel.contains(e.target)) {
+    panel.hidden = true;
+  }
+});
+
+// ★ 新增：自动翻动核心逻辑
+function stopAutoFlip() {
+  if (autoFlipTimer) {
+    clearInterval(autoFlipTimer);
+    autoFlipTimer = null;
+  }
+  if ($('randomAutoFlipCheck')) $('randomAutoFlipCheck').checked = false;
+}
+
+function startAutoFlip() {
+  // ★ 修复：只清理计时器，绝不重置复选框
+  // 原代码调用 stopAutoFlip() 会把 checkbox 重置为 false，
+  // 导致用户刚勾上就被判定为未勾选，计时器永远启动不了
+  if (autoFlipTimer) {
+    clearInterval(autoFlipTimer);
+    autoFlipTimer = null;
+  }
+  const check = $('randomAutoFlipCheck');
+  if (!check || !check.checked) return;
+  
+  let sec = parseInt($('randomAutoFlipTime').value, 10);
+  if (isNaN(sec) || sec < 5) sec = 5;
+  if (sec > 300) sec = 300;
+  $('randomAutoFlipTime').value = sec;
+  localStorage.setItem('random-auto-flip-time', sec); // 记录用户的秒数偏好
+
+  autoFlipTimer = setInterval(() => {
+    // 如果弹窗被意外关闭了，自动清理定时器
+    if (!$('randomMask').classList.contains('show')) {
+      stopAutoFlip();
+      return;
+    }
+    drawRandomBox();
+  }, sec * 1000);
+}
+
+function drawRandomBox() {
   if(randomAnimating) return;
   if(!db.items.length){toast('还没有素材，先添加一些吧');return;}
   
-  const randomIndex=Math.floor(Math.random()*db.items.length);
-  const item=db.items[randomIndex];
+  const pool = getRandomPool();
+  
+  if (pool.length === 0) {
+    toast('当前筛选条件下没有素材');
+    stopAutoFlip();
+    return;
+  }
+  
+  const randomIndex=Math.floor(Math.random()*pool.length);
+  const item=pool[randomIndex];
   const c=catColor(item.type);
   
-  // 首次打开时直接显示
-  if($('randomMask').classList.contains('show') === false) {
-    $('randomContent').innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+  const renderContent = () => {
+    return `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
         <span class="tag${item.type===IMG_TYPE?' tag-img':''}" style="${item.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(item.type)}</span>
         ${item.source?`<span style="font-size:13px;color:var(--text-3);">${esc(item.source)}</span>`:''}
+        ${item.tags && item.tags.length ? item.tags.map(t=>`<span class="tag-chip" style="pointer-events:none;font-size:11px;">#${esc(t)}</span>`).join('') : ''}
       </div>
-      ${item.text?`<div style="color:var(--text); white-space:pre-wrap;">${formatText(item.text)}</div>`:''}
+      ${item.text?`<div style="color:var(--text); white-space:pre-wrap; word-break:break-word;">${formatText(item.text)}</div>`:''}
       ${item.images&&item.images.length?`<div class="card-imgs" style="margin-top:12px;">${item.images.map(im=>{
         const src=imageSrc(im);
         return `<span class="ci"><img src="${esc(src)}" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}">${imgCatBadge(im)}</span>`;
       }).join('')}</div>`:''}
     `;
+  };
+
+  // 首次打开时直接显示
+  if($('randomMask').classList.contains('show') === false) {
+    $('randomContent').innerHTML = renderContent();
     $('randomMask').classList.add('show');
     return;
   }
 
-  // 已经打开时，判断是否开启动画
+  // 判断是否开启动画
   if (db.settings.enableAnim === false) {
-    $('randomContent').innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-        <span class="tag${item.type===IMG_TYPE?' tag-img':''}" style="${item.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(item.type)}</span>
-        ${item.source?`<span style="font-size:13px;color:var(--text-3);">${esc(item.source)}</span>`:''}
-      </div>
-      ${item.text?`<div style="color:var(--text); white-space:pre-wrap;">${formatText(item.text)}</div>`:''}
-      ${item.images&&item.images.length?`<div class="card-imgs" style="margin-top:12px;">${item.images.map(im=>{
-        const src=imageSrc(im);
-        return `<span class="ci"><img src="${esc(src)}" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}">${imgCatBadge(im)}</span>`;
-      }).join('')}</div>`:''}
-    `;
+    $('randomContent').innerHTML = renderContent();
     return;
   }
 
@@ -110,17 +277,7 @@ safeBind('menuRandomBtn', 'click', () => {
   contentEl.style.opacity = '0';
   
   setTimeout(() => {
-    contentEl.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-        <span class="tag${item.type===IMG_TYPE?' tag-img':''}" style="${item.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(item.type)}</span>
-        ${item.source?`<span style="font-size:13px;color:var(--text-3);">${esc(item.source)}</span>`:''}
-      </div>
-      ${item.text?`<div style="color:var(--text); white-space:pre-wrap;">${formatText(item.text)}</div>`:''}
-      ${item.images&&item.images.length?`<div class="card-imgs" style="margin-top:12px;">${item.images.map(im=>{
-        const src=imageSrc(im);
-        return `<span class="ci"><img src="${esc(src)}" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}">${imgCatBadge(im)}</span>`;
-      }).join('')}</div>`:''}
-    `;
+    contentEl.innerHTML = renderContent();
     contentEl.style.transform = 'translateY(-20px)';
     contentEl.style.transition = 'none';
     
@@ -132,11 +289,62 @@ safeBind('menuRandomBtn', 'click', () => {
     
     setTimeout(() => { randomAnimating = false; }, 350);
   }, 200);
+}
+
+safeBind('menuRandomBtn', 'click', () => {
+  randomFilterValue = 'all';
+  $('randomFilterText').textContent = '全随机';
+  const btn = $('randomFilterBtn');
+  btn.style.borderColor = '';
+  btn.style.color = '';
+  btn.style.background = '';
+  
+  // 从 localStorage 恢复上次设置的秒数，但默认不勾选自动翻动
+  const savedTime = localStorage.getItem('random-auto-flip-time') || '30';
+  $('randomAutoFlipTime').value = savedTime;
+  $('randomAutoFlipCheck').checked = false;
+  
+  drawRandomBox();
 });
 
-safeBind('randomCloseBtn', 'click', () => $('randomMask').classList.remove('show'));
-safeBind('randomAgainBtn', 'click', () => $('menuRandomBtn').click());
-safeBind('randomMask', 'click', e => {if(e.target===$('randomMask'))$('randomMask').classList.remove('show');});
+// 绑定自动翻动的复选框
+safeBind('randomAutoFlipCheck', 'change', e => {
+  if (e.target.checked) {
+    startAutoFlip();
+  } else {
+    stopAutoFlip();
+  }
+});
+
+// 绑定秒数修改（修改后立刻生效并重置计时）
+safeBind('randomAutoFlipTime', 'change', e => {
+  let sec = parseInt(e.target.value, 10);
+  if (isNaN(sec) || sec < 5) sec = 5;
+  if (sec > 300) sec = 300;
+  e.target.value = sec;
+  localStorage.setItem('random-auto-flip-time', sec);
+  
+  if (autoFlipTimer) {
+    startAutoFlip(); // 重启定时器
+  }
+});
+
+safeBind('randomCloseBtn', 'click', () => {
+  stopAutoFlip();
+  $('randomMask').classList.remove('show');
+});
+safeBind('randomAgainBtn', 'click', () => {
+  drawRandomBox();
+  if (autoFlipTimer) {
+    startAutoFlip(); // 手动抽时重置计时，避免刚抽完又立刻自动抽
+  }
+});
+safeBind('randomMask', 'click', e => {
+  if(e.target===$('randomMask')){
+    stopAutoFlip();
+    $('randomMask').classList.remove('show');
+  }
+});
 
 safeBind('menuDupBtn', 'click', checkDuplicates);
 safeBind('dupCloseBtn', 'click', () => $('dupMask').classList.remove('show'));

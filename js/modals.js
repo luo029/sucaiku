@@ -42,13 +42,42 @@ const modalsHtml = `
 </div>
 
 <div class="modal-mask" id="randomMask">
-  <div class="modal" style="max-width:460px; background:linear-gradient(180deg, var(--card) 0%, var(--bg) 100%); overflow:hidden;">
+  <div class="modal" style="max-width:480px; background:linear-gradient(180deg, var(--card) 0%, var(--bg) 100%); overflow:hidden;">
     <div class="modal-icon" style="background:var(--accent-soft);color:var(--accent);box-shadow:0 4px 12px var(--accent-soft);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
-    <h3 class="modal-title">盲盒灵感</h3>
-    <div id="randomContent" style="font-size:16px;line-height:1.8;margin:18px 0;max-height:50vh;overflow-y:auto;position:relative;">
-      <!-- 动态内容会插入到这里，并附带动画 -->
+    
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; position:relative;">
+      <h3 class="modal-title" style="margin:0;">盲盒灵感</h3>
+      <button id="randomFilterBtn" class="btn" style="display:flex; align-items:center; gap:6px; padding:6px 12px; font-size:13px; border-radius:8px; max-width:220px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        <span id="randomFilterText" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">全随机</span>
+      </button>
+      
+      <div id="randomFilterPanel" class="source-panel" hidden style="position:absolute; top:calc(100% + 8px); right:0; width:260px; z-index:100;">
+        <div class="sp-search-wrap"><input id="randomFilterSearch" placeholder="搜索分类、来源或标签…" autocomplete="off"></div>
+        <div class="sp-list" id="randomFilterList" style="max-height:240px;"></div>
+      </div>
     </div>
-    <div class="modal-actions"><button class="btn" id="randomCloseBtn">关闭</button><button class="primary" id="randomAgainBtn">再抽一次</button></div>
+
+    <div id="randomContent" style="font-size:16px; line-height:1.8; height: 320px; overflow-y: auto; padding-right: 8px; position:relative;">
+      <!-- 动态内容会插入到这里 -->
+    </div>
+
+    <!-- ★ 新增：自动翻动控制栏 -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
+      <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-2);">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
+          <input type="checkbox" id="randomAutoFlipCheck" style="accent-color:var(--accent); width:16px; height:16px; cursor:pointer;">
+          自动翻动
+        </label>
+        <input type="number" id="randomAutoFlipTime" value="30" min="5" max="300" style="width:56px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--text); text-align:center; outline:none;">
+        <span>秒</span>
+      </div>
+      
+      <div class="modal-actions" style="margin:0; width:auto;">
+        <button class="btn" id="randomCloseBtn">关闭</button>
+        <button class="primary" id="randomAgainBtn">再抽一次</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -110,7 +139,7 @@ const modalsHtml = `
       <div class="st-card" data-group="general">
         <div class="st-card-head">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-          <div><div class="st-card-title">编辑与列表</div><div class="st-card-desc">默认分类、长文折叠、分页设置</div></div>
+          <div><div class="st-card-title">编辑与列表</div><div class="st-card-desc">默认分类、长文折叠、分页与回收站</div></div>
         </div>
         <div class="st-card-body">
           <div class="st-field">
@@ -131,6 +160,20 @@ const modalsHtml = `
               <select id="defaultPageSizeSelect" class="setting-num" style="width:100%; text-align:left; padding:9px 12px; flex:1;"><option value="12">12 条</option><option value="24">24 条</option><option value="48">48 条</option><option value="100">100 条</option></select>
             </div>
           </div>
+          <!-- ★ 新增：回收站保留天数 -->
+          <div class="st-field" style="margin-top:16px;">
+            <label>回收站保留天数</label>
+            <div class="st-inline">
+              <input type="number" class="setting-num" id="trashTtlInput" min="1" max="365" step="1" value="30">
+              <span class="st-suffix">天</span>
+            </div>
+            <div class="st-hint">删除的素材会保留指定天数，过期自动清理</div>
+          </div>
+          <!-- ★ 新增：复制时附带来源 -->
+          <label class="st-toggle" style="margin-bottom:0;">
+            <div><div class="st-toggle-title">复制时附带来源</div><div class="st-toggle-desc">复制素材内容时自动在末尾附上「—— 来源」</div></div>
+            <input type="checkbox" id="copyWithSource">
+          </label>
         </div>
       </div>
 
@@ -339,7 +382,6 @@ const modalsHtml = `
     <p class="modal-desc">共 <b id="imgCatCount">0</b> 张图片，选择分类后上传：</p>
     <div class="img-cat-list" id="imgCatList"></div>
     
-    <!-- ★ 新增：进度条结构 -->
     <div id="imgProgressWrap" style="display:none; margin-bottom:16px;">
       <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-3); margin-bottom:6px;">
         <span id="imgProgressText">准备中...</span>

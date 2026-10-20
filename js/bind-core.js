@@ -382,6 +382,7 @@ function handleImgFallback(e) {
   });
 }
 
-[listEl, document.getElementById('imgMasonry'), pendingImgsEl].forEach(el => {
+// ★ 修复：把图床管理网格 imgMgrGrid 也加入错误兜底监听
+[listEl, document.getElementById('imgMasonry'), pendingImgsEl, document.getElementById('imgMgrGrid')].forEach(el => {
   if (el) el.addEventListener('error', handleImgFallback, true);
 });

@@ -258,9 +258,10 @@ function renderImgMgrBatch() {
       if (idx < 0) idx = 0;
       const palette = PALETTE[idx % PALETTE.length];
 
+      // ★ 修复：img 加 data-img-path，让 handleImgFallback 能兜底私有仓库图片
       return `<div class="mgr-card">
         <div class="mgr-img-wrap" data-open-img="${esc(url)}" data-img-path="${esc(f.relPath)}">
-          <img src="${esc(url)}" loading="lazy">
+          <img src="${esc(url)}" loading="lazy" data-img-path="${esc(f.relPath)}">
           <button class="mgr-del-btn" data-del-img-mgr="${esc(f.relPath)}" data-sha="${esc(f.sha)}" title="彻底删除">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
           </button>
