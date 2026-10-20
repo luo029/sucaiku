@@ -289,23 +289,20 @@ function drawRandomBox() {
   const c=catColor(item.type);
   
   const renderContent = () => {
-    // 使用 margin: auto 实现内容少时绝对居中，内容多时从顶部开始滚动
     return `
-      <div style="margin: auto 0; width: 100%; display: flex; flex-direction: column; align-items: center;">
-        <div style="display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:16px;flex-wrap:wrap;width:100%;">
-          <span class="tag${item.type===IMG_TYPE?' tag-img':''}" style="${item.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(item.type)}</span>
-          ${item.source?`<span style="font-size:13.5px;color:var(--text-2);font-weight:500;">${esc(item.source)}</span>`:''}
-          ${item.tags && item.tags.length ? item.tags.map(t=>`<span class="tag-chip" style="pointer-events:none;font-size:11.5px;">#${esc(t)}</span>`).join('') : ''}
-        </div>
-        ${item.text?`<div style="color:var(--text); white-space:pre-wrap; word-break:break-word; text-align:center; width:100%;">${formatText(item.text)}</div>`:''}
-        ${item.images&&item.images.length?`<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:20px;justify-content:center;width:100%;">${item.images.map(im=>{
-          const src=imageSrc(im);
-          return `<span class="ci" style="position:relative; display:inline-block; max-width:100%; line-height:0;">
-            <img src="${esc(src)}" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}" style="max-width:100%; max-height:260px; object-fit:contain; border-radius:12px; border:1px solid var(--line); box-shadow:0 4px 12px rgba(0,0,0,0.05); display:block; cursor:zoom-in; margin: 0 auto;">
-            <span style="position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.65); color:#fff; padding:4px 10px; border-radius:8px; font-size:12px; font-weight:600; backdrop-filter:blur(4px); letter-spacing:0.5px;">${esc(im.cat || '其他')}</span>
-          </span>`;
-        }).join('')}</div>`:''}
+      <div style="display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:16px;flex-wrap:wrap;width:100%;">
+        <span class="tag${item.type===IMG_TYPE?' tag-img':''}" style="${item.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(item.type)}</span>
+        ${item.source?`<span style="font-size:13.5px;color:var(--text-2);font-weight:500;">${esc(item.source)}</span>`:''}
+        ${item.tags && item.tags.length ? item.tags.map(t=>`<span class="tag-chip" style="pointer-events:none;font-size:11.5px;">#${esc(t)}</span>`).join('') : ''}
       </div>
+      ${item.text?`<div style="color:var(--text); white-space:pre-wrap; word-break:break-word; text-align:center; width:100%;">${formatText(item.text)}</div>`:''}
+      ${item.images&&item.images.length?`<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:20px;justify-content:center;width:100%;">${item.images.map(im=>{
+        const src=imageSrc(im);
+        return `<span class="ci" style="position:relative; display:inline-block; max-width:100%; line-height:0;">
+          <img src="${esc(src)}" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}" style="max-width:100%; max-height:260px; object-fit:contain; border-radius:12px; border:1px solid var(--line); box-shadow:0 4px 12px rgba(0,0,0,0.05); display:block; cursor:zoom-in; margin: 0 auto;">
+          <span style="position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.65); color:#fff; padding:4px 10px; border-radius:8px; font-size:12px; font-weight:600; backdrop-filter:blur(4px); letter-spacing:0.5px;">${esc(im.cat || '其他')}</span>
+        </span>`;
+      }).join('')}</div>`:''}
     `;
   };
 
