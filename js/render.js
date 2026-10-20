@@ -4,6 +4,8 @@ let catExpanded = false;
 let srcExpanded = false;
 
 function render(){
+  // ★ 修复：清空拖拽状态，避免列表重绘后 draggedItemId 残留
+  draggedItemId = null;
   normalize();
   if(currentSource!==ALL_SOURCES&&!db.sources.includes(currentSource))currentSource=ALL_SOURCES;
   const allTypes=new Set(['全部',IMG_TYPE,...db.cats]);

@@ -13,7 +13,7 @@ function parseCatFromFilename(filename) {
     const safe = sanitizeFilename(c);
     if (safe && filename.startsWith(safe + '-')) return c;
   }
-  return filename.split('-')[0] || '图片';
+  return '其他';
 }
 
 async function openImgManager() {
@@ -109,28 +109,51 @@ async function loadRepoImages() {
       f.type === 'blob' && f.path.startsWith(prefix) && /\.(jpg|jpeg|png|webp|gif)$/i.test(f.path)
     );
 
+    const refMap = new Map();
+    const filenameMap = new Map();
+    db.items.forEach(item => {
+      (item.images || []).forEach(im => {
+        if (!im.path) return;
+        const ip = String(im.path).trim();
+        const fn = ip.split('/').pop();
+        if (!refMap.has(ip)) refMap.set(ip, { cat: null, tags: new Set() });
+        const entry = refMap.get(ip);
+        if (im.cat) entry.cat = im.cat;
+        if (Array.isArray(im.tags)) im.tags.forEach(t => entry.tags.add(t));
+
+        if (!filenameMap.has(fn)) filenameMap.set(fn, []);
+        if (!filenameMap.get(fn).includes(ip)) filenameMap.get(fn).push(ip);
+      });
+    });
+
+    const usedPathsArr = Array.from(refMap.keys());
+
+    function findRef(relPath, filename) {
+      if (refMap.has(relPath)) return refMap.get(relPath);
+      const candidates = filenameMap.get(filename);
+      if (candidates) {
+        for (const ip of candidates) {
+          if (ip === relPath || ip.endsWith(relPath) || relPath.endsWith(ip) || ip.includes(filename)) {
+            return refMap.get(ip);
+          }
+        }
+      }
+      for (const ip of usedPathsArr) {
+        if (ip.endsWith(relPath) || relPath.endsWith(ip)) {
+          return refMap.get(ip);
+        }
+      }
+      return null;
+    }
+
     repoImagesCache = files.map(f => {
       const relPath = f.path.substring(prefix.length);
       const filename = f.path.split('/').pop();
       
-      let matchedCat = null;
-      let matchedTags = new Set();
-      const isUsed = db.items.some(item => 
-        item.images && item.images.some(im => {
-          if (!im.path) return false;
-          const ip = String(im.path).trim();
-          const rp = String(relPath).trim();
-          const isMatch = ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.includes(filename);
-          if (isMatch) {
-            if (im.cat) matchedCat = im.cat;
-            if (Array.isArray(im.tags)) im.tags.forEach(t => matchedTags.add(t));
-          }
-          return isMatch;
-        })
-      );
-      
-      const cat = matchedCat || parseCatFromFilename(filename);
-      const tags = Array.from(matchedTags);
+      const ref = findRef(relPath, filename);
+      const isUsed = !!ref;
+      const cat = (ref && ref.cat) || parseCatFromFilename(filename);
+      const tags = ref ? Array.from(ref.tags) : [];
       
       const parts = relPath.split('/');
       let yearMonth = '';
@@ -152,7 +175,6 @@ function renderImgMgrUI() {
   const status = $('imgMgrStatus');
   const grid = $('imgMgrGrid');
   
-  // ★ 实时同步「批量管理」按钮的 UI 状态
   const selectBtn = $('imgMgrSelectBtn');
   if (selectBtn) {
     if (imgMgrSelectMode) {
@@ -182,6 +204,18 @@ function renderImgMgrUI() {
   const unusedFiles = repoImagesCache.filter(f => !f.isUsed);
   const unusedCount = unusedFiles.length;
 
+  const allCatsNow = [...new Set(repoImagesCache.map(f => f.cat))];
+  if (imgMgrCurrentCat !== 'all' && !allCatsNow.includes(imgMgrCurrentCat)) {
+    imgMgrCurrentCat = 'all';
+  }
+  const allTimesNow = [...new Set(repoImagesCache.map(f => f.yearMonth).filter(Boolean))];
+  if (imgMgrCurrentTime !== 'all' && !allTimesNow.includes(imgMgrCurrentTime)) {
+    imgMgrCurrentTime = 'all';
+  }
+  if (imgMgrCurrentFilter === 'unused' && unusedCount === 0) {
+    imgMgrCurrentFilter = 'all';
+  }
+
   const headCount = $('imgMgrHeadCount');
   if (headCount) headCount.textContent = `共 ${total} 张`;
 
@@ -193,7 +227,7 @@ function renderImgMgrUI() {
 
   const pillsEl = $('imgMgrPills');
   if (pillsEl) {
-    const allCats = [...new Set(repoImagesCache.map(f => f.cat))].sort();
+    const allCats = allCatsNow.sort();
     let html = '';
     
     const isAllActive = imgMgrCurrentCat === 'all' && imgMgrCurrentFilter === 'all';
@@ -282,8 +316,13 @@ function renderImgMgrBatch() {
       if (idx < 0) idx = 0;
       const palette = PALETTE[idx % PALETTE.length];
 
+      // 标签渲染，并在每个标签右侧加 ✕ 图标用于快速删除
       const tagsHtml = (f.tags && f.tags.length) 
-        ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; justify-content:center;">${f.tags.map(t => `<span class="tag-chip" style="font-size:10px; padding:1px 6px;">#${esc(t)}</span>`).join('')}</div>` 
+        ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; justify-content:center;">${f.tags.map(t => `
+            <span class="tag-chip" style="font-size:10px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px; cursor:default;">
+              #${esc(t)}
+              <span data-rm-tag="${esc(t)}" data-rel-path="${esc(f.relPath)}" style="cursor:pointer; opacity:0.6; font-size:12px; line-height:1; padding:0 2px; transition:opacity 0.15s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6" title="移除该标签">✕</span>
+            </span>`).join('')}</div>` 
         : '';
 
       const isSelected = imgMgrSelectedIds.has(f.relPath);
@@ -422,33 +461,32 @@ async function cleanAllUnusedImages() {
   let success = 0;
   let fail = 0;
 
-  for (const f of unused) {
-    try {
-      const fullPath = `${rc.path}/${f.relPath}`;
-      const url = ghApiUrl(rc, fullPath);
-      const res = await fetch(url, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${rc.token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `delete unused ${f.relPath}`, sha: f.sha, branch: rc.branch })
-      });
-      if (res.ok) success++;
-      else fail++;
-    } catch (e) {
-      fail++;
+  try {
+    for (const f of unused) {
+      try {
+        const fullPath = `${rc.path}/${f.relPath}`;
+        const url = ghApiUrl(rc, fullPath);
+        const res = await fetch(url, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${rc.token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: `delete unused ${f.relPath}`, sha: f.sha, branch: rc.branch })
+        });
+        if (res.ok) success++;
+        else fail++;
+      } catch (e) {
+        fail++;
+      }
+      await new Promise(r => setTimeout(r, 300));
     }
-    await new Promise(r => setTimeout(r, 300));
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
   }
-
-  btn.disabled = false;
-  btn.innerHTML = originalText;
   
   toast(`清理完成：成功 ${success} 张，失败 ${fail} 张`);
   await loadRepoImages();
 }
 
-/* =========================================================
-   图床批量操作核心逻辑
-   ========================================================= */
 function updateImgMgrBatchBar() {
   const bar = $('imgMgrBatchBar');
   if (!bar) return;

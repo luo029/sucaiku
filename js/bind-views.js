@@ -399,7 +399,7 @@ safeBind('imgMgrCloseBtn', 'click', () => {
 safeBind('imgMgrRefreshBtn', 'click', loadRepoImages);
 safeBind('imgMgrCleanUnusedBtn', 'click', cleanAllUnusedImages);
 
-// ★ 新增：图床批量操作交互（动态状态切换）
+// ★ 图床批量操作交互
 safeBind('imgMgrSelectBtn', 'click', () => {
   imgMgrSelectMode = !imgMgrSelectMode;
   imgMgrSelectedIds.clear(); 
@@ -422,7 +422,6 @@ safeBind('imgMgrSelectAllBtn', 'click', () => {
   renderImgMgrUI();
 });
 
-// ★ 批量修改分类弹窗
 safeBind('imgMgrBatchCatBtn', 'click', () => {
   if (!imgMgrSelectedIds.size) return toast('请先选择图片');
   $('imgMgrBatchEditTitle').textContent = '批量修改分类';
@@ -446,7 +445,6 @@ safeBind('imgMgrBatchCatBtn', 'click', () => {
   $('imgMgrBatchEditMask').classList.add('show');
 });
 
-// 分类选择网格（单选逻辑）
 $('imgMgrBatchCatGrid').addEventListener('click', e => {
   const item = e.target.closest('.batch-cat-item');
   if (!item) return;
@@ -456,7 +454,6 @@ $('imgMgrBatchCatGrid').addEventListener('click', e => {
   grid.dataset.selected = item.dataset.cat;
 });
 
-// ★ 批量修改标签弹窗
 let selectedBatchTags = new Set(); 
 
 safeBind('imgMgrBatchTagBtn', 'click', () => {
@@ -466,21 +463,46 @@ safeBind('imgMgrBatchTagBtn', 'click', () => {
   $('imgMgrBatchCatWrap').style.display = 'none';
   $('imgMgrBatchTagWrap').style.display = 'block';
   
-  $('imgMgrBatchTagSearch').value = '';
+  // 重置面板状态
   $('imgMgrBatchTagNewInput').value = '';
+  $('imgMgrBatchTagSearch').value = '';
+  $('imgMgrBatchTagPoolWrap').style.display = 'none';
   selectedBatchTags.clear();
+  
+  // ★ 读取选中图片的原有标签并填入
+  repoImagesCache.forEach(f => {
+    if (imgMgrSelectedIds.has(f.relPath)) {
+      (f.tags || []).forEach(t => selectedBatchTags.add(t));
+    }
+  });
   
   renderBatchTagPool();
   $('imgMgrBatchEditMask').classList.add('show');
 });
 
 function renderBatchTagPool() {
+  // 1. 渲染已选区
+  const selectedWrap = $('imgMgrBatchSelectedTags');
+  if (selectedWrap) {
+    if (selectedBatchTags.size === 0) {
+      selectedWrap.innerHTML = '<span style="font-size:13px; color:var(--text-3);">暂无标签，可直接输入或点击右侧搜索添加</span>';
+    } else {
+      selectedWrap.innerHTML = Array.from(selectedBatchTags).map(t => `
+        <span class="batch-tag-item active" style="cursor:default; padding:4px 10px;">
+          #${esc(t)}
+          <span data-remove-tag="${esc(t)}" style="cursor:pointer; font-size:16px; line-height:1; opacity:0.6; margin-left:4px; padding:0 2px; transition:opacity 0.15s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6" title="移除">×</span>
+        </span>
+      `).join('');
+    }
+  }
+
+  // 2. 渲染可选标签池
   const q = $('imgMgrBatchTagSearch').value.trim().toLowerCase();
   const allTags = Object.keys(collectTags()).sort((a,b) => a.localeCompare(b,'zh'));
   const pool = $('imgMgrBatchTagPool');
   
   if (!allTags.length) {
-    pool.innerHTML = '<div style="font-size:13px; color:var(--text-3); width:100%; text-align:center; padding:12px;">暂无标签，请在下方直接输入</div>';
+    pool.innerHTML = '<div style="font-size:13px; color:var(--text-3); width:100%; text-align:center; padding:12px;">暂无标签，请直接输入</div>';
     return;
   }
   
@@ -502,6 +524,16 @@ function renderBatchTagPool() {
 
 $('imgMgrBatchTagSearch').addEventListener('input', renderBatchTagPool);
 
+// 点击已选标签区的 × 移除标签
+$('imgMgrBatchSelectedTags').addEventListener('click', e => {
+  const btn = e.target.closest('[data-remove-tag]');
+  if (!btn) return;
+  const t = btn.dataset.removeTag;
+  selectedBatchTags.delete(t);
+  renderBatchTagPool();
+});
+
+// 点击标签池切换选中状态
 $('imgMgrBatchTagPool').addEventListener('click', e => {
   const item = e.target.closest('.batch-tag-item');
   if (!item) return;
@@ -509,6 +541,19 @@ $('imgMgrBatchTagPool').addEventListener('click', e => {
   if (selectedBatchTags.has(t)) selectedBatchTags.delete(t);
   else selectedBatchTags.add(t);
   renderBatchTagPool();
+});
+
+// ★ 点击搜索图标展开/收起标签池
+safeBind('imgMgrBatchTagSearchBtn', 'click', () => {
+  const wrap = $('imgMgrBatchTagPoolWrap');
+  if (wrap.style.display === 'none') {
+    wrap.style.display = 'block';
+    $('imgMgrBatchTagSearch').focus();
+  } else {
+    wrap.style.display = 'none';
+    $('imgMgrBatchTagSearch').value = '';
+    renderBatchTagPool();
+  }
 });
 
 safeBind('imgMgrBatchTagAddBtn', 'click', () => {
@@ -520,11 +565,18 @@ safeBind('imgMgrBatchTagAddBtn', 'click', () => {
   renderBatchTagPool();
 });
 
+// ★ 支持输入框回车直接添加
+safeBind('imgMgrBatchTagNewInput', 'keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    $('imgMgrBatchTagAddBtn').click();
+  }
+});
+
 safeBind('imgMgrBatchEditCancel', 'click', () => {
   $('imgMgrBatchEditMask').classList.remove('show');
 });
 
-// ★ 确认修改逻辑
 safeBind('imgMgrBatchEditConfirm', 'click', () => {
   const isCat = $('imgMgrBatchEditTitle').textContent.includes('分类');
   let updatedCount = 0;
@@ -586,6 +638,7 @@ safeBind('imgMgrBatchEditConfirm', 'click', () => {
   exitImgMgrSelectMode();
 });
 
+/* 批量删除加 try/finally + 限并发 + 进度提示 */
 safeBind('imgMgrBatchDelBtn', 'click', async () => {
   if (!imgMgrSelectedIds.size) return toast('请先选择图片');
   const count = imgMgrSelectedIds.size;
@@ -594,15 +647,15 @@ safeBind('imgMgrBatchDelBtn', 'click', async () => {
   const btn = $('imgMgrBatchDelBtn');
   const origText = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '正在删除...';
   
   const rc = ghRepoConfig('img');
   let success = 0;
   let fail = 0;
+  let done = 0;
   
   const toDelete = repoImagesCache.filter(f => imgMgrSelectedIds.has(f.relPath));
   
-  for (const f of toDelete) {
+  async function deleteOne(f) {
     try {
       const fullPath = `${rc.path}/${f.relPath}`;
       const url = ghApiUrl(rc, fullPath);
@@ -619,49 +672,97 @@ safeBind('imgMgrBatchDelBtn', 'click', async () => {
       }
     } catch (e) {
       fail++;
+    } finally {
+      done++;
+      btn.innerHTML = `正在删除 ${done}/${toDelete.length}...`;
     }
-    await new Promise(r => setTimeout(r, 300)); 
   }
   
-  const affectedIds = new Set();
-  let removedImagesCount = 0;
-  db.items.forEach(item => {
-    if (item.images) {
-      const beforeLen = item.images.length;
-      item.images = item.images.filter(im => {
-        if (!im.path) return true;
-        const ip = String(im.path).trim();
-        for (const f of toDelete) {
-          const rp = String(f.relPath).trim();
-          if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip)) {
-            removedImagesCount++;
-            return false;
+  try {
+    const CONCURRENCY = 3;
+    let idx = 0;
+    async function worker() {
+      while (idx < toDelete.length) {
+        const i = idx++;
+        await deleteOne(toDelete[i]);
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+    await Promise.all(Array.from({length: Math.min(CONCURRENCY, toDelete.length)}, () => worker()));
+    
+    // 清理本地引用
+    const affectedIds = new Set();
+    let removedImagesCount = 0;
+    db.items.forEach(item => {
+      if (item.images) {
+        const beforeLen = item.images.length;
+        item.images = item.images.filter(im => {
+          if (!im.path) return true;
+          const ip = String(im.path).trim();
+          for (const f of toDelete) {
+            const rp = String(f.relPath).trim();
+            if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip)) {
+              removedImagesCount++;
+              return false;
+            }
           }
-        }
-        return true;
-      });
-      if (item.images.length !== beforeLen) affectedIds.add(item.id);
-    }
-  });
-  
-  if (affectedIds.size > 0) {
-    db.items = db.items.filter(i => {
-      if (!affectedIds.has(i.id)) return true;
-      return i.text || (i.images && i.images.length > 0);
+          return true;
+        });
+        if (item.images.length !== beforeLen) affectedIds.add(item.id);
+      }
     });
-    save();
-    render();
+    
+    if (affectedIds.size > 0) {
+      db.items = db.items.filter(i => {
+        if (!affectedIds.has(i.id)) return true;
+        return i.text || (i.images && i.images.length > 0);
+      });
+      save();
+      render();
+    }
+    
+    toast(`清理完成：成功 ${success} 张，失败 ${fail} 张`);
+  } catch (e) {
+    console.error(e);
+    toast('批量删除出错：' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origText;
+    exitImgMgrSelectMode();
   }
-  
-  btn.disabled = false;
-  btn.innerHTML = origText;
-  
-  toast(`清理完成：成功 ${success} 张，失败 ${fail} 张`);
-  exitImgMgrSelectMode();
 });
 
-// 普通点击模式下的删除和打开大图
 safeBind('imgMgrGrid', 'click', e => {
+  const rmTagBtn = e.target.closest('[data-rm-tag]');
+  if (rmTagBtn) {
+    e.stopPropagation();
+    const relPath = rmTagBtn.dataset.relPath;
+    const tag = rmTagBtn.dataset.rmTag;
+    
+    const imgItem = repoImagesCache.find(x => x.relPath === relPath);
+    if (imgItem) {
+      imgItem.tags = (imgItem.tags || []).filter(t => t !== tag);
+    }
+    
+    db.items.forEach(item => {
+      if (item.images) {
+        item.images.forEach(im => {
+          if (!im.path) return;
+          const ip = String(im.path).trim();
+          const rp = String(relPath).trim();
+          const filename = relPath.split('/').pop();
+          if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.includes(filename)) {
+            if (im.tags) im.tags = im.tags.filter(t => t !== tag);
+          }
+        });
+      }
+    });
+    
+    save();
+    renderImgMgrUI();
+    return;
+  }
+
   if (imgMgrSelectMode) {
     const card = e.target.closest('.mgr-card');
     if (card && card.dataset.relPath) {
@@ -733,12 +834,31 @@ safeBind('settingTabs', 'click', e => {
   });
 });
 
+function resetSettingsTabs() {
+  const tabs = document.querySelectorAll('#settingTabs .st-tab');
+  tabs.forEach(b => {
+    const isGen = b.dataset.target === 'general';
+    b.classList.toggle('active', isGen);
+    b.style.color = isGen ? 'var(--accent)' : 'var(--text-2)';
+    b.style.background = isGen ? 'var(--accent-soft)' : 'transparent';
+    b.style.fontWeight = isGen ? '600' : '500';
+  });
+  document.querySelectorAll('.st-scroll .st-card').forEach(card => {
+    card.style.display = (card.dataset.group === 'general') ? 'block' : 'none';
+  });
+}
+
 function openSettings() {
   renderStyleOptions();
   applySettingsToUI();
   fillGHForm();
   updateTinyUsageUI();
   renderSettingsOverview();
+  resetSettingsTabs();
+  
+  const scrollEl = document.querySelector('.st-scroll');
+  if (scrollEl) scrollEl.scrollTop = 0;
+  
   $('settingMask').classList.add('show');
 }
 safeBind('menuSettingBtn', 'click', openSettings);
@@ -786,11 +906,11 @@ safeBind('uiStyleMode', 'click', e => {
   toast('已切换至「' + styleName + '」');
 });
 
-safeBind('cardSpacing', 'click', e => {
-  const b = e.target.closest('button[data-spacing]'); if(!b) return;
-  db.settings.cardSpacing = b.dataset.spacing; 
+safeBind('listStyleMode', 'click', e => {
+  const b = e.target.closest('button[data-style]'); if(!b) return;
+  db.settings.listStyle = b.dataset.style; 
   saveSettings(); applySettingsToUI();
-  toast('卡片间距已调整');
+  toast('列表排版已调整');
 });
 
 safeBind('zenFontSize', 'click', e => {
@@ -822,11 +942,29 @@ safeBind('copyWithSource', 'change', e => {
   saveSettings();
   toast(e.target.checked?'已开启复制附带后缀':'已关闭');
 });
-
 safeBind('copySourceFormat', 'change', e => {
   db.settings.copySourceFormat = e.target.value; 
   saveSettings();
   toast('自定义后缀格式已保存');
+});
+
+safeBind('enableMarkdown', 'change', e => {
+  db.settings.enableMarkdown = e.target.checked;
+  saveSettings();
+  renderList();
+  toast(e.target.checked ? '已启用 Markdown 格式' : '已关闭 Markdown 格式');
+});
+
+safeBind('copyWithoutMarks', 'change', e => {
+  db.settings.copyWithoutMarks = e.target.checked;
+  saveSettings();
+  toast(e.target.checked ? '复制时将自动去除标记符号' : '复制时将保留标记符号');
+});
+
+safeBind('copyKeepBlankLines', 'change', e => {
+  db.settings.copyKeepBlankLines = e.target.checked;
+  saveSettings();
+  toast(e.target.checked ? '复制时保留空行' : '复制时压缩空行');
 });
 
 safeBind('trashTtlInput', 'change', e => {

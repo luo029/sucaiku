@@ -21,7 +21,7 @@ const AVAILABLE_STYLES = [
 
 const DEFAULT_SETTINGS={
   copyWithSource:false,
-  copySourceFormat:'—— {source}', // 默认格式
+  copySourceFormat:'—— {source}',
   trashTtlDays:30,statsDims:{cat:true,source:true,tag:true},statsLimit:8,
   compressMode:'local',tinypngKey:'',tinypngProxy:'',
   catLimit:3, srcLimit:3, tagLimit:3,
@@ -38,11 +38,15 @@ const DEFAULT_SETTINGS={
   sidebarShowSrc:true,
   sidebarShowTag:true,
   inputPlaceholder:'粘贴句子、段落（Ctrl+Enter保存）。用【文字】可高亮。可直接粘贴图片。',
-  cardSpacing:'standard',
+  cardSpacing:'standard', // 已废弃，但保留字段兼容老数据
+  listStyle:'card', 
   zenFontSize:'normal',
   uiStyle:'modern',
   focusModeCat:'收件箱',
-  saveShortcut:'ctrl-enter'
+  saveShortcut:'ctrl-enter',
+  enableMarkdown:true,
+  copyWithoutMarks:true,
+  copyKeepBlankLines:true
 };
 
 const PALETTE=[
@@ -88,8 +92,6 @@ let draggedItemId=null;
 let currentImgViewCat='全部';
 let repoImagesCache = [];
 let imgMgrCurrentFilter = 'all';
-
-// 图床批量操作状态
 let imgMgrSelectMode = false;
 let imgMgrSelectedIds = new Set();
 
@@ -134,15 +136,39 @@ function highlightEscaped(escaped,kws){
   catch(e){return escaped;}
 }
 
+// ★ 支持 Markdown 判定与高亮跨行
 function formatText(text,kws){
   const raw=String(text==null?'':text);
-  const re=/(\*\*|==|【)(.*?)(\*\*|==|】)/g;
+  const enableMD = db.settings.enableMarkdown !== false;
+  const re=/(\*\*|==|【)([\s\S]*?)(\*\*|==|】)/g;
   let out='',last=0,m;
+  
   while((m=re.exec(raw))){
-    const ok=(m[1]==='【'&&m[3]==='】')||(m[1]==='**'&&m[3]==='**')||(m[1]==='=='&&m[3]==='==');
-    if(!ok)continue;
+    const startSym = m[1];
+    const endSym = m[3];
+    const content = m[2];
+    let isValid = false;
+    let isBold = false;
+    
+    if (startSym === '【' && endSym === '】') {
+      isValid = true;
+    } else if (startSym === '==' && endSym === '==') {
+      isValid = true;
+    } else if (startSym === '**' && endSym === '**') {
+      isValid = true;
+      if (enableMD) isBold = true;
+    }
+    
+    if(!isValid) continue;
+    
     out+=highlightEscaped(esc(raw.slice(last,m.index)),kws);
-    out+=`<mark class="hl">${esc(m[2])}</mark>`;
+    
+    if (isBold) {
+      out += `<strong>${esc(content)}</strong>`;
+    } else {
+      out += `<mark class="hl">${esc(content)}</mark>`;
+    }
+    
     last=m.index+m[0].length;
   }
   out+=highlightEscaped(esc(raw.slice(last)),kws);
@@ -176,8 +202,21 @@ function toast(msg){
   toastTimer=setTimeout(()=>el.classList.remove('show'),2400);
 }
 
+// ★ 支持处理空行和跨行高亮的复制文本
 function copyText(text,source){
-  let finalText=String(text||'').replace(/[【】]|\*\*|==/g, '');
+  let finalText=String(text||'');
+  
+  if (db.settings.copyWithoutMarks !== false) {
+    finalText = finalText
+      .replace(/【([\s\S]*?)】/g, '$1')
+      .replace(/==([\s\S]*?)==/g, '$1')
+      .replace(/\*\*([\s\S]*?)\*\*/g, '$1');
+  }
+
+  if (db.settings.copyKeepBlankLines === false) {
+    finalText = finalText.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
   if(db.settings.copyWithSource){
     const fmt = db.settings.copySourceFormat; 
     if (fmt) {
@@ -190,10 +229,12 @@ function copyText(text,source){
       if(suffix.trim()) finalText += '\n' + suffix;
     }
   }
+  
   if(navigator.clipboard&&window.isSecureContext){
     navigator.clipboard.writeText(finalText).then(()=>toast('已复制')).catch(()=>fallbackCopy(finalText));
   }else fallbackCopy(finalText);
 }
+
 function fallbackCopy(t){
   const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';
   document.body.appendChild(ta);ta.select();
@@ -271,6 +312,11 @@ function applySettingsToUI(){
     $('copySourceFormat').value = s.copySourceFormat !== undefined ? s.copySourceFormat : '—— {source}';
     if($('copySourceFormatWrap')) $('copySourceFormatWrap').style.display = s.copyWithSource ? 'block' : 'none';
   }
+  
+  if($('enableMarkdown')) $('enableMarkdown').checked = s.enableMarkdown !== false;
+  if($('copyWithoutMarks')) $('copyWithoutMarks').checked = s.copyWithoutMarks !== false;
+  if($('copyKeepBlankLines')) $('copyKeepBlankLines').checked = s.copyKeepBlankLines !== false;
+  
   if($('trashTtlInput')) $('trashTtlInput').value=Number(s.trashTtlDays)||30;
   if($('statDimCat')) $('statDimCat').checked=!s.statsDims||s.statsDims.cat!==false;
   if($('statDimSource')) $('statDimSource').checked=!s.statsDims||s.statsDims.source!==false;
@@ -308,11 +354,10 @@ function applySettingsToUI(){
   
   if($('inputPlaceholder')) $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
 
-  document.body.classList.remove('spacing-compact', 'spacing-loose');
-  if (s.cardSpacing === 'compact') document.body.classList.add('spacing-compact');
-  if (s.cardSpacing === 'loose') document.body.classList.add('spacing-loose');
-  document.querySelectorAll('#cardSpacing button').forEach(b => {
-    b.classList.toggle('active', b.dataset.spacing === (s.cardSpacing || 'standard'));
+  document.body.classList.remove('layout-strip');
+  if (s.listStyle === 'strip') document.body.classList.add('layout-strip');
+  document.querySelectorAll('#listStyleMode button').forEach(b => {
+    b.classList.toggle('active', b.dataset.style === (s.listStyle || 'card'));
   });
 
   document.querySelectorAll('#saveShortcut button').forEach(b => {

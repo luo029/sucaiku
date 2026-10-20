@@ -200,6 +200,12 @@
     padding: 9px 8px;
     font-size: 12.5px;
   }
+  
+  /* ★ 图床批量操作条专属手机适配 */
+  #imgMgrBatchBar {
+    top: calc(14px + env(safe-area-inset-top)) !important;
+    bottom: auto !important;
+  }
 
   /* ---- Toast ---- */
   #toast {
@@ -348,6 +354,7 @@
   @media (max-width: 768px) {
     .main-inner { padding-bottom: 80px; }
     .batch-bar { bottom: 14px; }
+    #imgMgrBatchBar { top: 14px !important; bottom: auto !important; }
     #toast { bottom: 24px; }
     #toast.raised { bottom: 180px; }
     .modal { padding-bottom: 20px; }

@@ -65,6 +65,7 @@ function showStorageWarning(size) {
 let suppressPush = false;
 let _filterCacheKey = '';
 let _filterCacheResult = [];
+let _pendingSave = false;
 
 function clearFilterCache() {
   _filterCacheKey = '';
@@ -75,6 +76,7 @@ let _idbSaveTimer = null;
 function save(){
   clearFilterCache();
   db._rev = (db._rev || 0) + 1;
+  _pendingSave = true;
   _scheduleSaveIDB();
   if(!suppressPush && typeof scheduleAutoPush === 'function') scheduleAutoPush();
 }
@@ -84,12 +86,14 @@ function _scheduleSaveIDB(){
   _idbSaveTimer = setTimeout(async () => {
     try {
       await idbPut(IDB_KEY, db);
+      _pendingSave = false;
       const size = JSON.stringify(db).length;
       if (size > 4 * 1024 * 1024) showStorageWarning(size);
     } catch(e) {
       console.error('IndexedDB 保存失败', e);
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify(db));
+        _pendingSave = false;
         toast('已降级保存到 localStorage');
       } catch(e2) {
         toast('保存失败！请立即导出备份');
@@ -104,45 +108,74 @@ async function saveImmediate(){
   clearFilterCache();
   try {
     await idbPut(IDB_KEY, db);
+    _pendingSave = false;
     const size = JSON.stringify(db).length;
     if (size > 4 * 1024 * 1024) showStorageWarning(size);
   } catch(e) {
     console.error('IndexedDB 立即保存失败', e);
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(db));
+      _pendingSave = false;
     } catch(e2) {
       toast('保存失败！请立即导出备份');
     }
   }
 }
 
+/* ★ 修复：关标签页/切后台时，如果还有待保存的数据，同步写入 localStorage 兜底 */
+function _flushPendingToLocalStorage() {
+  if (!_pendingSave) return;
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(db));
+  } catch(e) {}
+}
+window.addEventListener('beforeunload', _flushPendingToLocalStorage);
+window.addEventListener('pagehide', _flushPendingToLocalStorage);
+
 async function loadStore(){
-  let data = null;
+  let idbData = null;
+  let lsData = null;
 
   try {
-    const idbData = await idbGet(IDB_KEY);
-    if (idbData && typeof idbData === 'object') data = idbData;
+    const d = await idbGet(IDB_KEY);
+    if (d && typeof d === 'object') idbData = d;
   } catch(e) {
     console.warn('IndexedDB 读取失败', e);
   }
 
-  if (!data) {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') lsData = parsed;
+    }
+  } catch(e) {}
+
+  const idbRev = Number(idbData && idbData._rev) || 0;
+  const lsRev = Number(lsData && lsData._rev) || 0;
+
+  let data = null;
+  if (idbData && lsData) {
+    // 两边都有：谁 _rev 大用谁（localStorage 兜底数据可能更新）
+    if (lsRev > idbRev) {
+      data = lsData;
+      try { await idbPut(IDB_KEY, lsData); } catch(e) {}
+      console.log('✅ 从 localStorage 兜底恢复到 IndexedDB');
+    } else {
+      data = idbData;
+    }
+    try { localStorage.removeItem(STORE_KEY); } catch(e) {}
+  } else if (idbData) {
+    data = idbData;
+  } else if (lsData) {
+    data = lsData;
     try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-          data = parsed;
-          try {
-            await idbPut(IDB_KEY, parsed);
-            localStorage.removeItem(STORE_KEY);
-            console.log('✅ 已将 localStorage 数据迁移到 IndexedDB');
-          } catch(e2) {
-            console.warn('迁移到 IndexedDB 失败', e2);
-          }
-        }
-      }
-    } catch(e) {}
+      await idbPut(IDB_KEY, lsData);
+      localStorage.removeItem(STORE_KEY);
+      console.log('✅ 已将 localStorage 数据迁移到 IndexedDB');
+    } catch(e2) {
+      console.warn('迁移到 IndexedDB 失败', e2);
+    }
   }
 
   if (data && typeof data === 'object') {
@@ -173,7 +206,7 @@ function applyLoadedData(o) {
   db._rev = Number(o._rev) || 0;
 }
 
-// ★ 图片标签处理
+// 图片标签处理
 function normalizeImages(arr){
   if(!Array.isArray(arr))return [];
   return arr.map(img=>{
@@ -212,7 +245,11 @@ function ensureColors(){
   return dirty;
 }
 
+/* ★ 修复：加 _rev 守卫，避免每次 render 全量跑（性能优化，不改变行为） */
 function normalize(){
+  // 同一版本号已经规范化过，直接跳过
+  if (db._normalizedRev === (db._rev || 0)) return;
+
   const catSet=new Set(db.cats);let dirty=false;
   db.items.forEach(i=>{
     if(i.type !== IMG_TYPE && !i.text && Array.isArray(i.images) && i.images.length > 0){
@@ -229,6 +266,7 @@ function normalize(){
   if(db.fixedSource&&!db.sources.includes(db.fixedSource)){db.fixedSource='';dirty=true;}
   if(ensureColors())dirty=true;
   if(dirty)save();
+  db._normalizedRev = db._rev || 0;
 }
 
 function cleanupSources(){
@@ -252,7 +290,7 @@ function catColor(name){
   return{bg:`hsl(${hue}, 70%, 95%)`,fg:`hsl(${hue}, 60%, 40%)`};
 }
 
-// ★ 标签合并统计
+// 标签合并统计
 function collectTags(){
   const counts={};
   db.items.forEach(i=>{
@@ -263,7 +301,7 @@ function collectTags(){
   return counts;
 }
 
-// ★ 标签搜索合并
+// 标签搜索合并
 function getFilteredItems(){
   const cacheKey = `${currentType}|${currentSource}|${currentTag}|${keyword}|${db._rev || 0}`;
   if (_filterCacheKey === cacheKey && _filterCacheResult) {

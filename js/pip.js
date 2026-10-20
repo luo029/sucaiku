@@ -10,6 +10,18 @@
 
   let pipWindow = null;
 
+  /* ★ 修复：安全生成带 alpha 的颜色（兼容 hex 6位/3位，其它格式兜底），不再拼字符串后缀 */
+  function alphaColor(color, alpha) {
+    const c = String(color || '#888888').trim();
+    const aHex = Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, '0');
+    if (/^#[0-9a-fA-F]{6}$/.test(c)) return c + aHex;
+    if (/^#[0-9a-fA-F]{3}$/.test(c)) {
+      return '#' + c[1]+c[1] + c[2]+c[2] + c[3]+c[3] + aHex;
+    }
+    // 兜底：灰色半透明（不会报错，不会丢滚动条）
+    return `rgba(136,136,136,${alpha})`;
+  }
+
   pipBtn.addEventListener('click', async () => {
     if (pipWindow) {
       pipWindow.close();
@@ -33,7 +45,6 @@
     pipWindow.document.documentElement.setAttribute('data-theme', theme);
     pipWindow.document.documentElement.setAttribute('data-style', style);
     
-    // 提取当前颜色变量
     const computedStyle = getComputedStyle(document.documentElement);
     const bgColor = computedStyle.getPropertyValue('--bg').trim() || '#f3f4f8';
     const cardColor = computedStyle.getPropertyValue('--card').trim() || '#ffffff';
@@ -54,8 +65,8 @@
     pipStyle.textContent = `
       ::-webkit-scrollbar { width: 5px; }
       ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: ${text3Color}40; border-radius: 4px; }
-      ::-webkit-scrollbar-thumb:hover { background: ${text3Color}70; }
+      ::-webkit-scrollbar-thumb { background: ${alphaColor(text3Color, 0.25)}; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: ${alphaColor(text3Color, 0.44)}; }
       
       * { box-sizing: border-box; }
       
@@ -64,7 +75,6 @@
         background: ${cardColor}; color: ${textColor}; font-family: ${fontMain};
       }
       
-      /* 顶部导航：增加微投影，更有质感 */
       .pip-header {
         display: flex; justify-content: space-between; align-items: center;
         padding: 14px 18px; 
@@ -79,7 +89,6 @@
         letter-spacing: 0.5px;
       }
       
-      /* 保存按钮 */
       .pip-save-btn {
         padding: 6px 16px; border-radius: 6px; border: none;
         background: ${accentColor}; color: #fff; font-weight: 600; font-size: 13px;
@@ -91,7 +100,6 @@
       .pip-save-btn.success { background: #10b981 !important; box-shadow: 0 2px 6px rgba(16,185,129,0.2); }
       .pip-save-btn:disabled { background: transparent; color: ${text3Color}; border: 1px solid ${lineColor}; cursor: not-allowed; box-shadow: none; }
       
-      /* 输入区：加大内边距 */
       .pip-input-area {
         flex: 1; position: relative; display: flex; flex-direction: column; background: ${cardColor};
       }
@@ -102,7 +110,6 @@
       }
       .pip-textarea::placeholder { color: ${text3Color}; opacity: 0.7; }
       
-      /* 底部提示 */
       .pip-footer {
         padding: 10px 18px; font-size: 11.5px; color: ${text3Color};
         text-align: right; border-top: 1px dashed ${lineColor};

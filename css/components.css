@@ -163,34 +163,20 @@ mark.kw{background:rgba(250,204,21,.38);color:inherit;padding:1px 3px;border-rad
 .page-size:hover{border-color:var(--line-2)}
 .page-size:focus{border-color:var(--accent)}
 
-/* ★ 修复：批量栏隐藏时使用 opacity 和 visibility，彻底解决底部漏出颜色条的问题 */
+/* 批量栏 */
 .batch-bar {
-  position: fixed;
-  left: 50%;
-  bottom: 30px;
+  position: fixed; left: 50%; bottom: 30px;
   transform: translateX(-50%) translateY(20px);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  background: linear-gradient(135deg, #2a2d40, #1e2130);
-  color: #fff;
-  padding: 12px 14px 12px 24px;
-  border-radius: 16px;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  display: flex; align-items: center; gap: 16px;
+  background: linear-gradient(135deg, #2a2d40, #1e2130); color: #fff;
+  padding: 12px 14px 12px 24px; border-radius: 16px;
   box-shadow: 0 12px 36px rgba(30,33,48,.4);
   transition: all .35s cubic-bezier(.2,.8,.2,1.15);
-  z-index: 200;
-  max-width: calc(100vw - 24px);
+  z-index: 200; max-width: calc(100vw - 24px);
 }
 [data-theme="dark"] .batch-bar { background: linear-gradient(135deg, #2a2d40, #16171f); border: 1px solid var(--line); }
-.batch-bar.show {
-  transform: translateX(-50%) translateY(0);
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
+.batch-bar.show { transform: translateX(-50%) translateY(0); opacity: 1; visibility: visible; pointer-events: auto; }
 .batch-info{font-size:14px;white-space:nowrap;letter-spacing:.3px}
 .batch-info b{color:#a5b4fc;font-weight:700;margin:0 4px;font-size:15px}
 .batch-actions{display:flex;gap:8px;flex-wrap:wrap}
@@ -225,30 +211,17 @@ mark.kw{background:rgba(250,204,21,.38);color:inherit;padding:1px 3px;border-rad
 
 /* 侧栏开关控制卡片 */
 .sidebar-toggle-item {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 10px 0;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--card);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-2);
-  transition: all 0.15s;
-  user-select: none;
+  flex: 1; display: flex; justify-content: center; align-items: center;
+  padding: 10px 0; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--card); cursor: pointer; font-size: 14px; font-weight: 500;
+  color: var(--text-2); transition: all 0.15s; user-select: none;
 }
 .sidebar-toggle-item:has(input:checked) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 600;
-  box-shadow: 0 0 0 1px var(--accent-soft);
+  border-color: var(--accent); background: var(--accent-soft);
+  color: var(--accent); font-weight: 600; box-shadow: 0 0 0 1px var(--accent-soft);
 }
 
-/* 卡片间距与极简模式字号 */
+/* 卡片间距 */
 body.spacing-compact .card { margin-bottom: 8px; padding: 12px 16px 12px 18px; }
 body.spacing-compact .content { line-height: 1.6; }
 body.spacing-compact .card-top { margin-bottom: 6px; }
@@ -260,20 +233,71 @@ body.spacing-loose .content { line-height: 2.1; }
 body.zen-font-large .content { font-size: 21px !important; }
 body.zen-font-xlarge .content { font-size: 24px !important; }
 
-/* 图片分类选择建议列表 */
-.tag-suggestion-chip {
-  display: inline-block;
-  padding: 4px 10px;
+/* ★ 新增：极简列表排版（紧凑条条） */
+body.layout-strip .card {
+  padding: 12px 16px 12px 20px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  animation: none;
+}
+body.layout-strip .card:hover {
+  transform: none;
+  box-shadow: var(--sh-1);
+  border-color: var(--line-2);
+}
+body.layout-strip .card::before {
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+body.layout-strip .card-top {
+  margin-bottom: 4px;
+}
+body.layout-strip .content {
+  line-height: 1.6;
+  font-size: 15px;
+}
+body.layout-strip .card-imgs {
+  margin-top: 6px;
+  gap: 6px;
+}
+body.layout-strip .card-imgs img {
+  max-width: 60px;
+  max-height: 60px;
   border-radius: 6px;
-  font-size: 12px;
-  background: var(--bg);
+}
+body.layout-strip .card .ops {
+  position: absolute;
+  right: 16px;
+  bottom: 8px;
+  margin: 0;
+  opacity: 0;
+  background: var(--card);
   border: 1px solid var(--line);
-  color: var(--text-2);
-  cursor: pointer;
-  transition: all 0.15s;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 2px;
+  z-index: 10;
 }
-.tag-suggestion-chip:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
+body.layout-strip .card:hover .ops {
+  opacity: 1;
 }
+
+@media (max-width: 768px) {
+  body.layout-strip .card .ops {
+    position: static;
+    box-shadow: none;
+    background: transparent;
+    border: none;
+    opacity: 1;
+    margin-top: 8px;
+    margin-left: -8px;
+  }
+}
+
+.tag-suggestion-chip {
+  display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 12px;
+  background: var(--bg); border: 1px solid var(--line); color: var(--text-2);
+  cursor: pointer; transition: all 0.15s;
+}
+.tag-suggestion-chip:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }

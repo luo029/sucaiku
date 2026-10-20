@@ -13,28 +13,28 @@ const modalsHtml = `
   </div>
 </div>
 
-<!-- 图床批量操作栏 -->
-<div class="batch-bar" id="imgMgrBatchBar" style="background:linear-gradient(135deg,#1e3a8a,#1e40af); z-index: 200;">
+<!-- 图床批量操作栏（改为顶部悬浮） -->
+<div class="batch-bar" id="imgMgrBatchBar" style="top: 80px; bottom: auto; background: rgba(30, 58, 138, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
   <div class="batch-info">图片已选 <b id="imgMgrBatchNum" style="color:#93c5fd;">0</b> 张</div>
   <div class="batch-actions">
     <button class="btn" id="imgMgrSelectAllBtn">全选本页</button>
     <button class="btn" id="imgMgrBatchCatBtn">修改分类</button>
     <button class="btn" id="imgMgrBatchTagBtn">修改标签</button>
     <button class="btn" id="imgMgrBatchExit">退出</button>
-    <button class="btn danger-solid" id="imgMgrBatchDelBtn">彻底删除</button>
+    <button class="btn danger-solid" id="imgMgrBatchDelBtn" style="background:#ef4444; border-color:#dc2626;">彻底删除</button>
   </div>
 </div>
 
-<!-- 图床批量修改弹窗 -->
+<!-- 图床批量修改弹窗（尺寸缩小，排版紧凑） -->
 <div class="modal-mask" id="imgMgrBatchEditMask" style="z-index: 210;">
-  <div class="modal" style="max-width:420px; border-radius:16px;">
-    <div class="modal-icon export-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
-    <h3 class="modal-title" id="imgMgrBatchEditTitle">批量修改</h3>
-    <p class="modal-desc">正在为选中的 <b id="imgMgrBatchEditCount">0</b> 张图片修改：</p>
+  <div class="modal" style="max-width:420px; border-radius:16px; padding:24px;">
+    <div class="modal-icon export-icon" style="width:44px;height:44px;margin-bottom:12px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
+    <h3 class="modal-title" id="imgMgrBatchEditTitle" style="font-size:18px;">批量修改</h3>
+    <p class="modal-desc" style="margin-bottom:20px; font-size:13.5px;">正在为选中的 <b id="imgMgrBatchEditCount">0</b> 张图片修改：</p>
     
     <!-- 分类单选网格 -->
     <div id="imgMgrBatchCatWrap" class="export-field">
-      <label class="export-label">目标分类（单选）</label>
+      <label class="export-label">目标分类</label>
       <div id="imgMgrBatchCatGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap:8px; margin-top:8px;">
         <!-- JS 渲染分类块 -->
       </div>
@@ -42,18 +42,38 @@ const modalsHtml = `
     
     <!-- 标签池多选 -->
     <div id="imgMgrBatchTagWrap" class="export-field" style="display:none;">
-      <label class="export-label">目标标签（选中即替换，留空则清空）</label>
-      <input class="modal-input" id="imgMgrBatchTagSearch" placeholder="搜索现有标签..." style="margin-bottom:12px;" autocomplete="off">
-      <div id="imgMgrBatchTagPool" style="display:flex; flex-wrap:wrap; gap:8px; max-height:160px; overflow-y:auto; padding:4px; margin-bottom:12px;">
-        <!-- JS 渲染标签池 -->
+      
+      <!-- 当前已包含的标签展示区 -->
+      <div style="margin-bottom:16px;">
+        <label class="export-label" style="margin-bottom:6px;">当前标签（点击 × 移除）</label>
+        <div id="imgMgrBatchSelectedTags" style="display:flex; flex-wrap:wrap; gap:6px; padding:10px; background:var(--bg); border-radius:10px; border:1px solid var(--line); min-height:42px; align-content:flex-start;">
+          <!-- JS 渲染已选标签 -->
+        </div>
       </div>
-      <div style="display:flex; gap:8px;">
-        <input class="modal-input" id="imgMgrBatchTagNewInput" placeholder="直接输入新标签（逗号分隔）" autocomplete="off" style="flex:1;">
-        <button class="btn" id="imgMgrBatchTagAddBtn" style="padding:0 16px; border-radius:8px; white-space:nowrap;">添加</button>
+
+      <!-- ★ 合并后的输入与搜索区 -->
+      <div style="margin-bottom:12px;">
+        <label class="export-label" style="margin-bottom:6px;">添加标签</label>
+        <div style="display:flex; gap:8px;">
+          <input class="modal-input" id="imgMgrBatchTagNewInput" placeholder="直接输入新标签（逗号分隔）" autocomplete="off" style="flex:1;">
+          <button class="btn" id="imgMgrBatchTagAddBtn" style="padding:0 16px; border-radius:8px; white-space:nowrap; font-size:13px;">添加</button>
+          <button class="btn" id="imgMgrBatchTagSearchBtn" style="padding:0 12px; border-radius:8px; white-space:nowrap; display:flex; align-items:center;" title="从已有标签中选择">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          </button>
+        </div>
       </div>
+
+      <!-- 默认隐藏的标签池，点搜索图标才显示 -->
+      <div id="imgMgrBatchTagPoolWrap" style="display:none; margin-top:10px;">
+        <input class="modal-input" id="imgMgrBatchTagSearch" placeholder="搜索现有标签..." style="margin-bottom:10px; font-size:13px; padding:8px 12px;" autocomplete="off">
+        <div id="imgMgrBatchTagPool" style="display:flex; flex-wrap:wrap; gap:6px; max-height:120px; overflow-y:auto; padding:4px;">
+          <!-- JS 渲染标签池 -->
+        </div>
+      </div>
+      
     </div>
 
-    <div class="modal-actions" style="margin-top:24px;">
+    <div class="modal-actions" style="margin-top:20px; gap:10px;">
       <button class="btn" id="imgMgrBatchEditCancel">取消</button>
       <button class="primary" id="imgMgrBatchEditConfirm" style="border-radius:8px;">确认修改</button>
     </div>
@@ -150,9 +170,9 @@ const modalsHtml = `
     </div>
     <div class="st-scroll">
       <div id="settingTabs" style="display:flex; gap:8px; margin-bottom:16px; border-bottom:1px solid var(--line); padding-bottom:12px; overflow-x:auto; scrollbar-width:none;">
-        <button class="st-tab active" data-target="general" style="padding:6px 16px; border-radius:8px; font-weight:600; font-size:13.5px; color:var(--accent); background:var(--accent-soft); cursor:pointer; border:none; transition:all 0.15s; white-space:nowrap;">基础与编辑</button>
-        <button class="st-tab" data-target="sync" style="padding:6px 16px; border-radius:8px; font-weight:500; font-size:13.5px; color:var(--text-2); background:transparent; cursor:pointer; border:none; transition:all 0.15s; white-space:nowrap;">云端同步</button>
-        <button class="st-tab" data-target="images" style="padding:6px 16px; border-radius:8px; font-weight:500; font-size:13.5px; color:var(--text-2); background:transparent; cursor:pointer; border:none; transition:all 0.15s; white-space:nowrap;">图片处理</button>
+        <button class="st-tab active" data-target="general" style="padding:8px 16px; border-radius:10px; font-weight:600; font-size:13.5px; color:var(--accent); background:var(--accent-soft); cursor:pointer; border:none; transition:all 0.15s; white-space:nowrap;">基础与编辑</button>
+        <button class="st-tab" data-target="sync" style="padding:8px 16px; border-radius:10px; font-weight:500; font-size:13.5px; color:var(--text-2); background:transparent; cursor:pointer; border:none; transition:all 0.15s; white-space:nowrap;">云端同步</button>
+        <button class="st-tab" data-target="images" style="padding:8px 16px; border-radius:10px; font-weight:500; font-size:13.5px; color:var(--text-2); background:transparent; cursor:pointer; border:none; transition:all 0.15s; white-space:nowrap;">图片处理</button>
       </div>
       
       <div class="st-card" data-group="general">
@@ -161,7 +181,7 @@ const modalsHtml = `
           <div><div class="st-card-title">数据概览</div><div class="st-card-desc">你当前素材库的实时数据</div></div>
         </div>
         <div class="st-card-body">
-          <div id="settingsOverview" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;">
+          <div id="settingsOverview" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap:10px;">
             <div class="ov-item">
               <div class="ov-num" style="color:var(--accent);" id="ovTotal">0</div>
               <div class="ov-label">总素材</div>
@@ -192,11 +212,11 @@ const modalsHtml = `
           <div class="st-grid-2">
             <div class="st-field" style="margin-bottom:0;">
               <label>默认新建分类</label>
-              <select id="defaultTypeSelect" style="width:100%; text-align:left; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:13.5px; outline:none;"></select>
+              <select id="defaultTypeSelect" class="page-size" style="width:100%; text-align:left; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); font-size:13.5px; outline:none;"></select>
             </div>
             <div class="st-field" style="margin-bottom:0;">
               <label>默认每页显示条数</label>
-              <select id="defaultPageSizeSelect" class="setting-num" style="width:100%; text-align:left; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:13.5px; outline:none;">
+              <select id="defaultPageSizeSelect" class="page-size" style="width:100%; text-align:left; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); font-size:13.5px; outline:none;">
                 <option value="12">12 条</option>
                 <option value="24">24 条</option>
                 <option value="48">48 条</option>
@@ -219,10 +239,26 @@ const modalsHtml = `
             </div>
           </div>
 
-          <div style="height: 1px; background: var(--line); margin: 20px 0;"></div>
+          <div style="height: 1px; background: var(--line); margin: 16px 0;"></div>
 
-          <div class="st-field" style="margin-bottom:0;">
-            <label class="st-toggle" style="margin-bottom: 0; padding: 12px 14px;">
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <label class="st-toggle">
+              <div>
+                <div class="st-toggle-title">复制时自动去除标记符号</div>
+                <div class="st-toggle-desc">将【】 ** == 等符号去掉，只留纯文本</div>
+              </div>
+              <input type="checkbox" id="copyWithoutMarks">
+            </label>
+
+            <label class="st-toggle">
+              <div>
+                <div class="st-toggle-title">复制时保留空行（原汁原味）</div>
+                <div class="st-toggle-desc">如果关闭，则会压缩多余空行和首尾空行</div>
+              </div>
+              <input type="checkbox" id="copyKeepBlankLines">
+            </label>
+
+            <label class="st-toggle">
               <div>
                 <div class="st-toggle-title">复制时附带自定义后缀</div>
                 <div class="st-toggle-desc">复制素材内容时自动在末尾追加文字</div>
@@ -230,11 +266,21 @@ const modalsHtml = `
               <input type="checkbox" id="copyWithSource">
             </label>
             
-            <div id="copySourceFormatWrap" style="margin-top: 12px; display: none;">
-              <label style="font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; display: block;">自定义后缀格式</label>
-              <input type="text" id="copySourceFormat" placeholder="—— {source}" style="width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; color: var(--text); background: var(--card); outline: none;">
+            <div id="copySourceFormatWrap" style="display: none; padding: 4px 0 0;">
+              <label style="font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 8px; display: block;">自定义后缀格式</label>
+              <input type="text" id="copySourceFormat" placeholder="—— {source}" style="width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; color: var(--text); background: var(--bg); outline: none;">
               <div class="st-hint">可用 <code>{source}</code> 代表原来源。例如输入 <code>—— 摘抄</code>，或者 <code>（摘自：{source}）</code></div>
             </div>
+
+            <div style="height: 1px; background: var(--line); margin: 6px 0;"></div>
+
+            <label class="st-toggle">
+              <div>
+                <div class="st-toggle-title">启用 Markdown 语法</div>
+                <div class="st-toggle-desc">输入 **文字** 显示为加粗，【文字】显示为高亮</div>
+              </div>
+              <input type="checkbox" id="enableMarkdown">
+            </label>
           </div>
 
         </div>
@@ -243,16 +289,25 @@ const modalsHtml = `
       <div class="st-card" data-group="general">
         <div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><div><div class="st-card-title">外观与显示</div><div class="st-card-desc">主题、字号、时间显示格式</div></div></div>
         <div class="st-card-body">
-          <label class="st-toggle" style="margin-bottom:12px;">
-            <div><div class="st-toggle-title">夜间模式</div><div class="st-toggle-desc">切换深色/浅色主题</div></div>
-            <input type="checkbox" id="themeDarkToggle">
-          </label>
-          <label class="st-toggle" style="margin-bottom:12px;">
-            <div><div class="st-toggle-title">相对时间显示</div><div class="st-toggle-desc">如显示为“3 分钟前”、“昨天”</div></div>
-            <input type="checkbox" id="useRelativeTimeToggle">
-          </label>
-          <label class="st-toggle" style="margin-bottom:12px;"><div><div class="st-toggle-title">显示一言（Hitokoto）</div><div class="st-toggle-desc">在页面顶部显示随机句子</div></div><input type="checkbox" id="showHitokoto"></label>
-          <label class="st-toggle" style="margin-bottom:16px;"><div><div class="st-toggle-title">开启卡片动画</div><div class="st-toggle-desc">关闭可提升大量数据时的滚动性能</div></div><input type="checkbox" id="enableAnim"></label>
+          
+          <div class="st-grid-2" style="margin-bottom:16px;">
+            <label class="st-toggle" style="margin-bottom:0;">
+              <div><div class="st-toggle-title">夜间模式</div></div>
+              <input type="checkbox" id="themeDarkToggle">
+            </label>
+            <label class="st-toggle" style="margin-bottom:0;">
+              <div><div class="st-toggle-title">相对时间</div></div>
+              <input type="checkbox" id="useRelativeTimeToggle">
+            </label>
+            <label class="st-toggle" style="margin-bottom:0;">
+              <div><div class="st-toggle-title">显示一言</div></div>
+              <input type="checkbox" id="showHitokoto">
+            </label>
+            <label class="st-toggle" style="margin-bottom:0;">
+              <div><div class="st-toggle-title">卡片动画</div></div>
+              <input type="checkbox" id="enableAnim">
+            </label>
+          </div>
           
           <div class="st-field" style="margin-bottom:16px;">
             <label>保存快捷键</label>
@@ -260,53 +315,47 @@ const modalsHtml = `
               <button type="button" data-shortcut="ctrl-enter">Ctrl + Enter 保存</button>
               <button type="button" data-shortcut="enter">Enter 保存</button>
             </div>
-            <div class="st-hint">选择 Enter 保存时，需按 Shift+Enter 换行</div>
           </div>
 
           <div class="st-field" style="margin-bottom:16px;">
-            <label>安心输入模式</label>
+            <label>安心输入模式分类</label>
             <div style="display:flex; gap:10px;">
-              <input type="text" id="focusModeCatInput" placeholder="收件箱" style="flex:1; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; background:var(--bg); color:var(--text); outline:none;">
-              <button class="btn primary" id="openFocusModeBtn" style="padding:0 20px; border-radius:8px;">进入模式</button>
+              <input type="text" id="focusModeCatInput" placeholder="收件箱" style="flex:1; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:13.5px; background:var(--bg); color:var(--text); outline:none;">
+              <button class="btn primary" id="openFocusModeBtn" style="padding:0 20px; border-radius:10px; white-space:nowrap; font-size:13px;">进入模式</button>
             </div>
-            <div class="st-hint">进入后隐藏所有列表，保存的素材默认归入上方填写的分类（如：收件箱、日志）。</div>
+            <div class="st-hint">此分类下的素材编辑保存后，会自动跳转处理下一条（无需进入模式也可生效）。</div>
           </div>
 
           <div class="st-field" style="margin-bottom:16px;">
             <label>UI 风格</label>
-            <div class="segmented" id="uiStyleMode">
-              <!-- 这里的内容将由 JS 自动生成 -->
-            </div>
-            <div class="st-hint">切换界面的整体视觉风格</div>
+            <div class="segmented" id="uiStyleMode"></div>
           </div>
 
-          <div class="st-field" style="margin-bottom:16px;">
-            <label>全局字号缩放</label>
-            <div class="segmented" id="fontSizeMode">
-              <button type="button" data-size="normal">标准 A</button>
-              <button type="button" data-size="large">大 A+</button>
-              <button type="button" data-size="xlarge">特大 A++</button>
+          <div class="st-grid-2" style="margin-bottom:16px;">
+            <div class="st-field" style="margin-bottom:0;">
+              <label>全局字号</label>
+              <div class="segmented" id="fontSizeMode">
+                <button type="button" data-size="normal">标准</button>
+                <button type="button" data-size="large">大</button>
+                <button type="button" data-size="xlarge">特大</button>
+              </div>
             </div>
-          </div>
-
-          <div class="st-field" style="margin-bottom:16px;">
-            <label>极简模式字号</label>
-            <div class="segmented" id="zenFontSize">
-              <button type="button" data-zfs="normal">标准</button>
-              <button type="button" data-zfs="large">大</button>
-              <button type="button" data-zfs="xlarge">特大</button>
+            <div class="st-field" style="margin-bottom:0;">
+              <label>极简字号</label>
+              <div class="segmented" id="zenFontSize">
+                <button type="button" data-zfs="normal">标准</button>
+                <button type="button" data-zfs="large">大</button>
+                <button type="button" data-zfs="xlarge">特大</button>
+              </div>
             </div>
-            <div class="st-hint">极简模式下单独的字号调整，适合沉浸式阅读</div>
           </div>
 
           <div class="st-field">
-            <label>卡片列表间距</label>
-            <div class="segmented" id="cardSpacing">
-              <button type="button" data-spacing="compact">紧凑</button>
-              <button type="button" data-spacing="standard">标准</button>
-              <button type="button" data-spacing="loose">宽松</button>
+            <label>列表排版样式</label>
+            <div class="segmented" id="listStyleMode">
+              <button type="button" data-style="card">卡片视图</button>
+              <button type="button" data-style="strip">紧凑列表</button>
             </div>
-            <div class="st-hint">调整卡片之间的留白</div>
           </div>
         </div>
       </div>
@@ -316,7 +365,7 @@ const modalsHtml = `
         <div class="st-card-body">
           
           <label style="display:block; margin-bottom:10px; font-size:13px; font-weight:600; color:var(--text-2);">侧边栏内容显示</label>
-          <div style="display:flex; gap:10px; margin-bottom:24px;">
+          <div style="display:flex; gap:10px; margin-bottom:20px;">
             <label class="sidebar-toggle-item">
               <input type="checkbox" id="sidebarShowCat" checked style="display:none;">
               <span>分类</span>
@@ -365,8 +414,23 @@ const modalsHtml = `
           <div class="st-grid-2"><div class="st-field"><label>仓库所有者</label><input type="text" id="ghOwner" placeholder="your-username" autocomplete="off"></div><div class="st-field"><label>仓库名</label><input type="text" id="ghRepo" placeholder="material-library" autocomplete="off"></div></div>
           <div class="st-grid-2"><div class="st-field"><label>分支</label><input type="text" id="ghBranch" placeholder="main" autocomplete="off"></div><div class="st-field"><label>数据文件路径</label><input type="text" id="ghDataPath" placeholder="material-library.json" autocomplete="off"></div></div>
           <div class="st-field"><label>站点基础 URL（可选）</label><input type="text" id="ghSiteBase" placeholder="https://your-username.github.io/material-library" autocomplete="off"><div class="st-hint">仅用于显示；留空自动推断</div></div>
-          <div class="st-toggle-row"><label class="st-toggle"><div><div class="st-toggle-title">保存后自动推送</div><div class="st-toggle-desc">任何增删改都会触发一次同步</div></div><input type="checkbox" id="ghAuto"></label></div>
-          <div class="st-toggle-row"><label class="st-toggle"><div><div class="st-toggle-title">启动时自动拉取</div><div class="st-toggle-desc">刷新页面时，从云端获取最新数据</div></div><input type="checkbox" id="ghAutoPull" checked></label></div>
+          
+          <div style="display:flex; flex-direction:column; gap:10px; margin-top:16px;">
+            <label class="st-toggle">
+              <div>
+                <div class="st-toggle-title">保存后自动推送</div>
+                <div class="st-toggle-desc">任何增删改都会触发一次同步</div>
+              </div>
+              <input type="checkbox" id="ghAuto">
+            </label>
+            <label class="st-toggle">
+              <div>
+                <div class="st-toggle-title">启动时自动拉取</div>
+                <div class="st-toggle-desc">刷新页面时，从云端获取最新数据</div>
+              </div>
+              <input type="checkbox" id="ghAutoPull" checked>
+            </label>
+          </div>
           
           <div class="st-grid-2" style="margin-top:16px;">
             <div class="st-field" style="margin-bottom:0;">
@@ -386,15 +450,13 @@ const modalsHtml = `
           </div>
           <div class="st-hint" style="margin-bottom:12px;">停止操作指定时间后推送；闲置指定时间后检查云端更新（不低于10秒）</div>
           
-          <div class="st-toggle-row">
-            <label class="st-toggle">
-              <div>
-                <div class="st-toggle-title">开启云端更新巡检</div>
-                <div class="st-toggle-desc">开启后，当其他设备更新时，会弹窗提醒你刷新</div>
-              </div>
-              <input type="checkbox" id="autoCheckUpdateToggle" checked>
-            </label>
-          </div>
+          <label class="st-toggle">
+            <div>
+              <div class="st-toggle-title">开启云端更新巡检</div>
+              <div class="st-toggle-desc">开启后，当其他设备更新时，会弹窗提醒你刷新</div>
+            </div>
+            <input type="checkbox" id="autoCheckUpdateToggle" checked>
+          </label>
 
           <div class="st-actions" style="display:flex; gap:8px; margin-top:16px;">
             <button class="btn" id="ghTestBtn">测试</button>
@@ -402,7 +464,7 @@ const modalsHtml = `
             <button class="btn primary" id="ghPushBtn">推送</button>
           </div>
           <div class="st-actions" style="display:flex; gap:8px; margin-top:8px; margin-bottom:12px;">
-            <button class="btn danger" id="ghForcePushBtn" style="flex:1; border-color:rgba(239,68,68,.3); background:var(--danger-soft); color:var(--danger); font-size:13px; padding:9px 10px;">强制覆盖云端</button>
+            <button class="btn danger" id="ghForcePushBtn" style="flex:1; border-color:rgba(239,68,68,.3); background:var(--danger-soft); color:var(--danger); font-size:13px; padding:10px 12px;">强制覆盖云端</button>
           </div>
           <div class="st-status" id="ghStatus"></div>
         </div>
@@ -434,7 +496,7 @@ const modalsHtml = `
       </div>
     </div>
 
-    <div class="modal-actions" style="margin-top:16px;"><button class="btn" id="settingCloseBtn">关闭</button></div>
+    <div class="modal-actions" style="margin-top:16px;"><button class="btn" id="settingCloseBtn" style="width:100%;">关闭</button></div>
   </div>
 </div>
 
@@ -530,6 +592,17 @@ const modalsHtml = `
     <p class="modal-desc">为选中的 <b id="tagAddCount">0</b> 条素材追加标签（逗号分隔）：</p>
     <div class="export-field"><input class="modal-input" id="tagAddInput" placeholder="如：金句, 爱情" autocomplete="off"></div>
     <div class="modal-actions"><button class="btn" id="tagAddCancel">取消</button><button class="primary" id="tagAddConfirm">添加</button></div>
+  </div>
+</div>
+
+<!-- ★ 批量设置来源 -->
+<div class="modal-mask" id="batchSourceMask">
+  <div class="modal">
+    <div class="modal-icon export-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+    <h3 class="modal-title">批量设置来源</h3>
+    <p class="modal-desc">将选中的 <b id="batchSourceCount">0</b> 条素材来源修改为（留空则清空来源）：</p>
+    <div class="export-field"><input class="modal-input" id="batchSourceInput" placeholder="输入来源名称，或留空清空" autocomplete="off"></div>
+    <div class="modal-actions"><button class="btn" id="batchSourceCancel">取消</button><button class="primary" id="batchSourceConfirm">确定</button></div>
   </div>
 </div>
 

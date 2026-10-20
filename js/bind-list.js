@@ -148,14 +148,38 @@ $('tagAddConfirm').addEventListener('click',()=>{
   save();render();toast(`已为 ${n} 条素材添加标签`);
 });
 
-// 批量设置来源（安全绑定）
+/* ★ 修复：批量设置来源改用模态框（不再用 prompt，移动端体验更好） */
 const batchSourceBtn = $('batchSourceBtn');
 if (batchSourceBtn) {
   batchSourceBtn.addEventListener('click', () => {
     if(!selectedIds.size){toast('请先选择素材');return;}
-    const src = prompt(`将选中的 ${selectedIds.size} 条素材来源修改为：\n（直接留空并点确定可清空来源）`);
-    if (src === null) return;
-    const newSource = src.trim();
+    $('batchSourceCount').textContent = selectedIds.size;
+    $('batchSourceInput').value = '';
+    $('batchSourceMask').classList.add('show');
+    setTimeout(() => $('batchSourceInput').focus(), 60);
+  });
+}
+
+const batchSourceCancel = $('batchSourceCancel');
+if (batchSourceCancel) {
+  batchSourceCancel.addEventListener('click', () => $('batchSourceMask').classList.remove('show'));
+}
+const batchSourceMaskEl = $('batchSourceMask');
+if (batchSourceMaskEl) {
+  batchSourceMaskEl.addEventListener('click', e => {
+    if(e.target === batchSourceMaskEl) batchSourceMaskEl.classList.remove('show');
+  });
+}
+const batchSourceInputEl = $('batchSourceInput');
+if (batchSourceInputEl) {
+  batchSourceInputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); $('batchSourceConfirm').click(); }
+  });
+}
+const batchSourceConfirmEl = $('batchSourceConfirm');
+if (batchSourceConfirmEl) {
+  batchSourceConfirmEl.addEventListener('click', () => {
+    const newSource = $('batchSourceInput').value.trim();
     let n = 0;
     db.items.forEach(i => {
       if (selectedIds.has(i.id)) {
@@ -167,6 +191,7 @@ if (batchSourceBtn) {
     if (newSource && !db.sources.includes(newSource)) db.sources.push(newSource);
     selectedIds.clear(); selectMode = false;
     save(); render();
+    $('batchSourceMask').classList.remove('show');
     toast(`已为 ${n} 条素材设置来源`);
   });
 }
