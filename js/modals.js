@@ -34,6 +34,7 @@ const modalsHtml = `
         <button type="button" data-fmt="json" class="active">JSON 备份</button>
         <button type="button" data-fmt="txt">TXT</button>
         <button type="button" data-fmt="md">Markdown</button>
+        <button type="button" data-fmt="csv">Excel (CSV)</button>
       </div>
     </div>
     <div class="modal-actions"><button class="btn" id="exportCancel">取消</button><button class="primary" id="exportConfirm">导出</button></div>

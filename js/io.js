@@ -79,6 +79,23 @@ function doExport(){
     const fname=isAll?`素材库-${dateStr}.md`:`素材库-${scopeName}-${dateStr}.md`;
     download(new Blob([out],{type:'text/markdown;charset=utf-8'}),fname);
     toast('已导出 Markdown');
+  }else if(exportFormat==='csv'){
+    let out = '\uFEFF'; // 加 BOM 头，防止 Excel 打开中文乱码
+    out += '分类,来源,标签,内容,创建时间,图片链接\n';
+    items.forEach(i => {
+      const type = (i.type || '').replace(/"/g, '""');
+      const source = (i.source || '').replace(/"/g, '""');
+      // ★ 修改：标签改为逗号分隔
+      const tags = (i.tags || []).join(',').replace(/"/g, '""'); 
+      const text = (i.text || '').replace(/"/g, '""');
+      const date = "'" + fmtFull(i.createdAt); // 防 ########
+      const imgs = (i.images || []).map(im => imageSrc(im)).join(' | ').replace(/"/g, '""');
+      
+      out += `"${type}","${source}","${tags}","${text}","${date}","${imgs}"\n`;
+    });
+    const fname = isAll ? `素材库-${dateStr}.csv` : `素材库-${scopeName}-${dateStr}.csv`;
+    download(new Blob([out], {type: 'text/csv;charset=utf-8'}), fname);
+    toast('已导出 CSV，可用 Excel 打开');
   }else{
     let out='';
     if(isAll){
