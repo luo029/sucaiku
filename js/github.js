@@ -7,7 +7,7 @@ function loadGH(){
     owner:cfg.owner||'',
     repo:cfg.repo||'',
     branch:cfg.branch||'main',
-    dataPath:cfg.dataPath||'data/material-library.json',
+    dataPath:cfg.dataPath||'material-library.json', // ★ 已修改
     siteBase:cfg.siteBase||'',
     autoSync:!!cfg.autoSync,
     autoPull:cfg.autoPull!==false,
@@ -41,7 +41,7 @@ function ghRepoConfig(kind){
     owner:cfg.owner,
     repo:cfg.repo,
     branch:cfg.branch||'main',
-    path:cfg.dataPath||'data/material-library.json',
+    path:cfg.dataPath||'material-library.json', // ★ 已修改
     siteBase:cfg.siteBase||''
   };
 }
@@ -143,7 +143,6 @@ async function ghPull(silent){
       db.settings={...db.settings,...data.settings,statsDims:{...db.settings.statsDims,...(data.settings.statsDims||{})}};
     }
     db.items.forEach(i=>{i.images=normalizeImages(i.images);});
-    // ★ 不再写 localStorage，直接同步写 IndexedDB
     saveSettings();
     normalize();
     await saveImmediate();
@@ -283,7 +282,7 @@ function collectGHForm(){
     owner:$('ghOwner').value.trim(),
     repo:$('ghRepo').value.trim(),
     branch:($('ghBranch').value.trim()||'main'),
-    dataPath:($('ghDataPath').value.trim()||'data/material-library.json'),
+    dataPath:($('ghDataPath').value.trim()||'material-library.json'), // ★ 已修改
     siteBase:$('ghSiteBase').value.trim(),
     autoSync:$('ghAuto').checked,
     autoPull:$('ghAutoPull').checked,
@@ -321,7 +320,6 @@ async function checkCloudUpdate() {
     if (_lastKnownCloudSha && _lastKnownCloudSha !== currentSha) {
       _lastKnownCloudSha = currentSha;
       
-      // ★ 修复：有未保存内容时不弹 reload，改用轻提示
       const hasUnsaved = (typeof inputEl !== 'undefined' && inputEl && inputEl.value.trim()) || (typeof editingId !== 'undefined' && editingId);
       if (hasUnsaved) {
         toast('⚠️ 云端已更新，你有未保存内容，请先保存或手动刷新页面');
