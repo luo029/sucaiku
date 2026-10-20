@@ -40,7 +40,7 @@ const DEFAULT_SETTINGS={
   zenFontSize:'normal',
   uiStyle:'modern',
   focusModeCat:'收件箱',
-  saveShortcut:'ctrl-enter' // 'ctrl-enter' 或 'enter'
+  saveShortcut:'ctrl-enter'
 };
 
 const PALETTE=[
@@ -170,7 +170,6 @@ function toast(msg){
   toastTimer=setTimeout(()=>el.classList.remove('show'),2400);
 }
 
-// ★ 核心修改：复制时自动去除高亮符号
 function copyText(text,source){
   let finalText=String(text||'').replace(/[【】]|\*\*|==/g, '');
   if(db.settings.copyWithSource&&source)finalText+='\n—— '+source;
@@ -276,7 +275,6 @@ function applySettingsToUI(){
   if(srcGroup) srcGroup.style.display = s.sidebarShowSrc !== false ? '' : 'none';
   if(tagGroup) tagGroup.style.display = s.sidebarShowTag !== false ? '' : 'none';
 
-  // ★ 修复：避免 placeholder 重复拼接
   if(inputEl) {
     const hint = s.saveShortcut === 'enter' ? '（Enter 保存，Shift+Enter 换行）' : '（Ctrl+Enter 保存）';
     const isCustom = s.inputPlaceholder && s.inputPlaceholder !== DEFAULT_SETTINGS.inputPlaceholder;
@@ -340,6 +338,7 @@ function applySettingsToUI(){
 
   updateTinyUsageUI();
   if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor();
+  if (typeof renderStyleOptions === 'function') renderStyleOptions(); // ★ 修复：确保风格按钮高亮同步
 }
 
 function applyFontSize(mode) {

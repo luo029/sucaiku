@@ -42,10 +42,12 @@ const modalsHtml = `
 </div>
 
 <div class="modal-mask" id="randomMask">
-  <div class="modal" style="max-width:440px;">
-    <div class="modal-icon" style="background:var(--accent-soft);color:var(--accent);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
+  <div class="modal" style="max-width:460px; background:linear-gradient(180deg, var(--card) 0%, var(--bg) 100%); overflow:hidden;">
+    <div class="modal-icon" style="background:var(--accent-soft);color:var(--accent);box-shadow:0 4px 12px var(--accent-soft);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
     <h3 class="modal-title">盲盒灵感</h3>
-    <div id="randomContent" style="font-size:16px;line-height:1.8;margin:18px 0;max-height:50vh;overflow-y:auto;"></div>
+    <div id="randomContent" style="font-size:16px;line-height:1.8;margin:18px 0;max-height:50vh;overflow-y:auto;position:relative;">
+      <!-- 动态内容会插入到这里，并附带动画 -->
+    </div>
     <div class="modal-actions"><button class="btn" id="randomCloseBtn">关闭</button><button class="primary" id="randomAgainBtn">再抽一次</button></div>
   </div>
 </div>
@@ -336,6 +338,18 @@ const modalsHtml = `
     <h3 class="modal-title">选择图片分类</h3>
     <p class="modal-desc">共 <b id="imgCatCount">0</b> 张图片，选择分类后上传：</p>
     <div class="img-cat-list" id="imgCatList"></div>
+    
+    <!-- ★ 新增：进度条结构 -->
+    <div id="imgProgressWrap" style="display:none; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-3); margin-bottom:6px;">
+        <span id="imgProgressText">准备中...</span>
+        <span id="imgProgressPercent">0%</span>
+      </div>
+      <div style="height:6px; width:100%; background:var(--line); border-radius:3px; overflow:hidden;">
+        <div id="imgProgressBar" style="height:100%; width:0%; background:var(--accent); transition:width 0.3s ease, background 0.3s;"></div>
+      </div>
+    </div>
+    
     <div class="st-status" id="imgUploadStatus" style="margin-bottom:12px;"></div>
     <div class="modal-actions"><button class="btn" id="imgCatCancel">取消</button><button class="primary" id="imgCatConfirm">上传</button></div>
   </div>

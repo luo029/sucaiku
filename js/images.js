@@ -158,6 +158,14 @@ function openImgCatChooser(files){
   pendingUploadCat=db.imageCategories[0]||DEFAULT_IMG_CATS[0];
   $('imgCatCount').textContent=files.length;
   $('imgUploadStatus').textContent='';
+  
+  // 重置进度条
+  $('imgProgressWrap').style.display = 'none';
+  $('imgProgressBar').style.width = '0%';
+  $('imgProgressBar').style.background = 'var(--accent)';
+  $('imgProgressText').textContent = '准备中...';
+  $('imgProgressPercent').textContent = '0%';
+
   renderImgCatChooser();
   $('imgCatMask').classList.add('show');
 }
@@ -177,14 +185,28 @@ async function startUploadPending(){
   const files=pendingUploadFiles.slice();
   let success=0,fail=0;
 
+  // 显示进度条
+  $('imgProgressWrap').style.display = 'block';
+
   try{
     for(let i=0;i<files.length;i++){
       const file=files[i];
       try{
+        // 更新进度条基础状态（压缩阶段，用紫色）
+        const baseProgress = (i / files.length) * 100;
+        $('imgProgressBar').style.width = baseProgress + '%';
+        $('imgProgressPercent').textContent = Math.floor(baseProgress) + '%';
+        $('imgProgressText').textContent = `[${i+1}/${files.length}] 压缩中...`;
+        $('imgProgressBar').style.background = 'var(--accent)';
+
         statusEl.textContent=`[${i+1}/${files.length}] 压缩中…`;
         const comp=await compressImage(file,msg=>{statusEl.textContent=`[${i+1}/${files.length}] ${msg}`;});
         const ratio=comp.origSize>0?(1-comp.newSize/comp.origSize)*100:0;
+        
+        // 压缩完成，准备上传（变为蓝色）
+        $('imgProgressBar').style.background = '#3b82f6';
         statusEl.textContent=`[${i+1}/${files.length}] 压缩 ${fmtSize(comp.origSize)} → ${fmtSize(comp.newSize)}（${ratio>0?'-'+ratio.toFixed(0)+'%':'无变化'}），上传中…`;
+        $('imgProgressText').textContent = `[${i+1}/${files.length}] 上传中...`;
 
         const now=new Date();
         const year=now.getFullYear();
@@ -209,13 +231,24 @@ async function startUploadPending(){
         renderPendingImgs();
         success++;
         statusEl.textContent=`[${i+1}/${files.length}] 完成：${fmtSize(comp.origSize)} → ${fmtSize(comp.newSize)}（${comp.via||''}）`;
+
+        // 更新进度条（完成）
+        const doneProgress = ((i + 1) / files.length) * 100;
+        $('imgProgressBar').style.width = doneProgress + '%';
+        $('imgProgressPercent').textContent = Math.floor(doneProgress) + '%';
       }catch(err){
         console.error(err);
         fail++;
         statusEl.textContent=`[${i+1}/${files.length}] 失败：${err.message}`;
+        $('imgProgressText').textContent = `[${i+1}/${files.length}] 失败`;
+        $('imgProgressBar').style.background = 'var(--danger)';
       }
     }
 
+    // 全部完成
+    $('imgProgressBar').style.background = fail > 0 ? 'var(--danger)' : '#10b981';
+    $('imgProgressText').textContent = fail > 0 ? '部分失败' : '全部完成';
+    
     if(fail===0){
       const isEditing=!!editingId;
       const hasText = inputEl.value.trim().length > 0;
@@ -243,11 +276,11 @@ async function startUploadPending(){
         save();render();
         statusEl.textContent=`上传成功 ${success} 张，已自动保存到素材库`;
         toast(`已上传 ${success} 张图片并自动保存`);
-        setTimeout(()=>{ $('imgCatMask').classList.remove('show'); }, 500);
+        setTimeout(()=>{ $('imgCatMask').classList.remove('show'); }, 800);
       }else{
         statusEl.textContent=`上传成功 ${success} 张，点击「保存」加入素材库`;
         toast(`已上传 ${success} 张图片，点保存加入素材库`);
-        setTimeout(()=>{ $('imgCatMask').classList.remove('show'); }, 600);
+        setTimeout(()=>{ $('imgCatMask').classList.remove('show'); }, 800);
       }
     }else{
       statusEl.textContent=`完成：成功 ${success}，失败 ${fail}`;

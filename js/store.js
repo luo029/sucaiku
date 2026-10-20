@@ -171,6 +171,10 @@ function applyLoadedData(o) {
   if (Array.isArray(o.imageCategories) && o.imageCategories.length) {
     db.imageCategories = o.imageCategories.filter(s => typeof s === 'string' && s.trim());
   }
+  // ★ 修复：恢复时合并 settings，确保云端或本地的主题、配置不会丢
+  if (o.settings && typeof o.settings === 'object') {
+    db.settings = { ...db.settings, ...o.settings, statsDims: { ...db.settings.statsDims, ...(o.settings.statsDims || {}) } };
+  }
   db._rev = Number(o._rev) || 0;
 }
 
@@ -258,7 +262,6 @@ function collectTags(){
 }
 
 function getFilteredItems(){
-  // ★ 缓存 key 加入 db._rev：任何 save() 都会让缓存失效，避免脏数据
   const cacheKey = `${currentType}|${currentSource}|${currentTag}|${keyword}|${db._rev || 0}`;
   if (_filterCacheKey === cacheKey && _filterCacheResult) {
     return _filterCacheResult;

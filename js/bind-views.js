@@ -58,24 +58,82 @@ safeBind('modalConfirm', 'click', () => {
 });
 safeBind('modalMask', 'click', e => {if(e.target===$('modalMask'))closeModal();});
 
+// ★ 随机盲盒核心逻辑升级
+let randomAnimating = false;
 safeBind('menuRandomBtn', 'click', () => {
+  if(randomAnimating) return;
   if(!db.items.length){toast('还没有素材，先添加一些吧');return;}
+  
   const randomIndex=Math.floor(Math.random()*db.items.length);
   const item=db.items[randomIndex];
   const c=catColor(item.type);
-  $('randomContent').innerHTML=`
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-      <span class="tag${item.type===IMG_TYPE?' tag-img':''}" style="${item.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(item.type)}</span>
-      ${item.source?`<span style="font-size:13px;color:var(--text-3);">${esc(item.source)}</span>`:''}
-    </div>
-    ${item.text?`<div style="color:var(--text);">${formatText(item.text)}</div>`:''}
-    ${item.images&&item.images.length?`<div class="card-imgs" style="margin-top:12px;">${item.images.map(im=>{
-      const src=imageSrc(im);
-      return `<span class="ci"><img src="${esc(src)}" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}">${imgCatBadge(im)}</span>`;
-    }).join('')}</div>`:''}
-  `;
-  $('randomMask').classList.add('show');
+  
+  // 首次打开时直接显示
+  if($('randomMask').classList.contains('show') === false) {
+    $('randomContent').innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <span class="tag${item.type===IMG_TYPE?' tag-img':''}" style="${item.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(item.type)}</span>
+        ${item.source?`<span style="font-size:13px;color:var(--text-3);">${esc(item.source)}</span>`:''}
+      </div>
+      ${item.text?`<div style="color:var(--text); white-space:pre-wrap;">${formatText(item.text)}</div>`:''}
+      ${item.images&&item.images.length?`<div class="card-imgs" style="margin-top:12px;">${item.images.map(im=>{
+        const src=imageSrc(im);
+        return `<span class="ci"><img src="${esc(src)}" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}">${imgCatBadge(im)}</span>`;
+      }).join('')}</div>`:''}
+    `;
+    $('randomMask').classList.add('show');
+    return;
+  }
+
+  // 已经打开时，判断是否开启动画
+  if (db.settings.enableAnim === false) {
+    $('randomContent').innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <span class="tag${item.type===IMG_TYPE?' tag-img':''}" style="${item.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(item.type)}</span>
+        ${item.source?`<span style="font-size:13px;color:var(--text-3);">${esc(item.source)}</span>`:''}
+      </div>
+      ${item.text?`<div style="color:var(--text); white-space:pre-wrap;">${formatText(item.text)}</div>`:''}
+      ${item.images&&item.images.length?`<div class="card-imgs" style="margin-top:12px;">${item.images.map(im=>{
+        const src=imageSrc(im);
+        return `<span class="ci"><img src="${esc(src)}" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}">${imgCatBadge(im)}</span>`;
+      }).join('')}</div>`:''}
+    `;
+    return;
+  }
+
+  // 执行翻转动画
+  randomAnimating = true;
+  const contentEl = $('randomContent');
+  
+  contentEl.style.transition = 'all 0.2s ease';
+  contentEl.style.transform = 'translateY(20px)';
+  contentEl.style.opacity = '0';
+  
+  setTimeout(() => {
+    contentEl.innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <span class="tag${item.type===IMG_TYPE?' tag-img':''}" style="${item.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(item.type)}</span>
+        ${item.source?`<span style="font-size:13px;color:var(--text-3);">${esc(item.source)}</span>`:''}
+      </div>
+      ${item.text?`<div style="color:var(--text); white-space:pre-wrap;">${formatText(item.text)}</div>`:''}
+      ${item.images&&item.images.length?`<div class="card-imgs" style="margin-top:12px;">${item.images.map(im=>{
+        const src=imageSrc(im);
+        return `<span class="ci"><img src="${esc(src)}" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}">${imgCatBadge(im)}</span>`;
+      }).join('')}</div>`:''}
+    `;
+    contentEl.style.transform = 'translateY(-20px)';
+    contentEl.style.transition = 'none';
+    
+    void contentEl.offsetWidth;
+    
+    contentEl.style.transition = 'all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1.15)';
+    contentEl.style.transform = 'translateY(0)';
+    contentEl.style.opacity = '1';
+    
+    setTimeout(() => { randomAnimating = false; }, 350);
+  }, 200);
 });
+
 safeBind('randomCloseBtn', 'click', () => $('randomMask').classList.remove('show'));
 safeBind('randomAgainBtn', 'click', () => $('menuRandomBtn').click());
 safeBind('randomMask', 'click', e => {if(e.target===$('randomMask'))$('randomMask').classList.remove('show');});
@@ -421,10 +479,8 @@ if (oldImgCatsInput) {
   window.renderImgCatsEditor = function() {
     const editor = document.getElementById('imgCatsEditor');
     if (!editor) return;
-    editor.innerHTML = db.imageCategories.map(c => {
-      let idx = db.imageCategories.indexOf(c);
-      let hash = 0; for (let i = 0; i < c.length; i++) hash = c.charCodeAt(i) + ((hash << 5) - hash);
-      idx = Math.abs(hash);
+    editor.innerHTML = db.imageCategories.map((c, idx) => {
+      // ★ 修复：直接按数组索引取色，绝不重复
       const palette = PALETTE[idx % PALETTE.length];
       return `
         <div style="display:inline-flex; align-items:center; gap:6px; background:${palette.bg}; color:${palette.fg}; padding:4px 10px 4px 12px; border-radius:99px; font-size:13px; font-weight:600; border:1px solid ${palette.fg};">

@@ -2,7 +2,6 @@
 let imgMgrCurrentCat = 'all';
 let imgMgrCurrentTime = 'all';
 
-// ★ 新增：分批渲染的全局变量
 let imgMgrFilteredFiles = [];
 let imgMgrRenderedCount = 0;
 let imgMgrObserver = null;
@@ -167,7 +166,6 @@ function renderImgMgrUI() {
     if (unusedCount > 0) cleanBtn.textContent = `清理 ${unusedCount} 张未引用`;
   }
 
-  // 渲染分类标签（Pills）
   const pillsEl = $('imgMgrPills');
   if (pillsEl) {
     const allCats = [...new Set(repoImagesCache.map(f => f.cat))].sort();
@@ -183,14 +181,12 @@ function renderImgMgrUI() {
 
     allCats.forEach(c => {
       const count = repoImagesCache.filter(f => f.cat === c).length;
-      let catIdx = db.imageCategories.indexOf(c);
-      if (catIdx < 0) {
-        let hash = 0; for (let i = 0; i < c.length; i++) hash = c.charCodeAt(i) + ((hash << 5) - hash);
-        catIdx = Math.abs(hash);
-      }
-      const palette = PALETTE[catIdx % PALETTE.length];
-      const isActive = imgMgrCurrentCat === c && imgMgrCurrentFilter !== 'unused';
+      // ★ 修复：直接按数组索引取色
+      let idx = db.imageCategories.indexOf(c);
+      if (idx < 0) idx = 0;
+      const palette = PALETTE[idx % PALETTE.length];
       
+      const isActive = imgMgrCurrentCat === c && imgMgrCurrentFilter !== 'unused';
       const bg = isActive ? palette.bg : 'transparent';
       const color = isActive ? palette.fg : 'var(--text-2)';
       const border = isActive ? palette.fg : 'transparent';
@@ -202,7 +198,6 @@ function renderImgMgrUI() {
     pillsEl.innerHTML = html;
   }
 
-  // 渲染时间筛选
   const timeSel = $('imgMgrTimeSel');
   if (timeSel) {
     const allTimes = [...new Set(repoImagesCache.map(f => f.yearMonth).filter(Boolean))].sort().reverse();
@@ -213,7 +208,6 @@ function renderImgMgrUI() {
     else { timeSel.value = 'all'; imgMgrCurrentTime = 'all'; }
   }
 
-  // 过滤数据
   let displayFiles = repoImagesCache;
   if (imgMgrCurrentFilter === 'unused') displayFiles = displayFiles.filter(f => !f.isUsed);
   if (imgMgrCurrentCat !== 'all') displayFiles = displayFiles.filter(f => f.cat === imgMgrCurrentCat);
@@ -224,7 +218,6 @@ function renderImgMgrUI() {
     return;
   }
 
-  // ★ 重置分批渲染状态
   imgMgrFilteredFiles = displayFiles;
   imgMgrRenderedCount = 0;
   if (imgMgrObserver) {
@@ -232,7 +225,6 @@ function renderImgMgrUI() {
     imgMgrObserver = null;
   }
 
-  // 清空并立即渲染第一批
   grid.innerHTML = '';
   
   let warningHtml = '';
@@ -241,22 +233,18 @@ function renderImgMgrUI() {
   }
   if (warningHtml) grid.innerHTML = warningHtml;
 
-  // 调用新增的分批渲染函数
   renderImgMgrBatch();
 }
 
-// ★ 新增：分批渲染逻辑
 function renderImgMgrBatch() {
   const grid = $('imgMgrGrid');
   if (!grid) return;
   
-  // 移除旧的哨兵
   const oldSentinel = document.getElementById('imgMgrSentinel');
   if (oldSentinel) oldSentinel.remove();
 
   const nextFiles = imgMgrFilteredFiles.slice(imgMgrRenderedCount, imgMgrRenderedCount + IMG_MGR_BATCH_SIZE);
   
-  // 用 requestAnimationFrame 延迟渲染，让浏览器有时间绘制上面的骨架
   requestAnimationFrame(() => {
     const html = nextFiles.map(f => {
       const url = imageUrlFromPath(f.relPath);
@@ -265,12 +253,10 @@ function renderImgMgrBatch() {
         ? '<span class="mgr-badge used">已引用</span>' 
         : '<span class="mgr-badge unused">未引用</span>';
 
-      let catIdx = db.imageCategories.indexOf(f.cat);
-      if (catIdx < 0) {
-        let hash = 0; for (let i = 0; i < f.cat.length; i++) hash = f.cat.charCodeAt(i) + ((hash << 5) - hash);
-        catIdx = Math.abs(hash);
-      }
-      const palette = PALETTE[catIdx % PALETTE.length];
+      // ★ 修复：直接按数组索引取色
+      let idx = db.imageCategories.indexOf(f.cat);
+      if (idx < 0) idx = 0;
+      const palette = PALETTE[idx % PALETTE.length];
 
       return `<div class="mgr-card">
         <div class="mgr-img-wrap" data-open-img="${esc(url)}" data-img-path="${esc(f.relPath)}">
@@ -295,7 +281,6 @@ function renderImgMgrBatch() {
     grid.insertAdjacentHTML('beforeend', html);
     imgMgrRenderedCount += nextFiles.length;
 
-    // 如果还有剩余，添加新的哨兵并监听
     if (imgMgrRenderedCount < imgMgrFilteredFiles.length) {
       const sentinel = document.createElement('div');
       sentinel.id = 'imgMgrSentinel';
@@ -304,11 +289,9 @@ function renderImgMgrBatch() {
       grid.appendChild(sentinel);
 
       if (!imgMgrObserver) {
-        // 找到图床的滚动容器
         const scrollContainer = document.querySelector('#imgManagerView > div:nth-child(2)');
         imgMgrObserver = new IntersectionObserver((entries) => {
           if (entries[0].isIntersecting) {
-            // 每批之间延迟一点，防止用户滚动过快导致卡顿
             setTimeout(() => renderImgMgrBatch(), 30);
           }
         }, { root: scrollContainer, rootMargin: '400px' });
@@ -319,9 +302,6 @@ function renderImgMgrBatch() {
   });
 }
 
-// ==========================================
-// 物理删除图片 + 引用自愈
-// ==========================================
 async function deleteRepoImage(relPath, sha) {
   if (!confirm(`确定要从 GitHub 图床彻底删除这张图片吗？\n\n注意：删除后不可恢复！如果该图片被素材引用，相关素材里的这张图也会被同步清理。`)) return;
   
@@ -338,10 +318,8 @@ async function deleteRepoImage(relPath, sha) {
     
     if (!res.ok) throw new Error(`HTTP ${res.status} ${await res.text()}`);
     
-    // 1. 从缓存中移除
     repoImagesCache = repoImagesCache.filter(f => f.relPath !== relPath);
     
-    // 2. 清理本地引用
     const affectedIds = new Set();
     let removedImagesCount = 0;
     
@@ -365,7 +343,6 @@ async function deleteRepoImage(relPath, sha) {
       }
     });
     
-    // 3. 只清理"本次受影响且变空"的素材
     let removedItemsCount = 0;
     if (affectedIds.size > 0) {
       const beforeCount = db.items.length;
@@ -379,7 +356,6 @@ async function deleteRepoImage(relPath, sha) {
       render();
     }
     
-    // 4. 提示
     if (removedItemsCount > 0) {
       toast(`图片已删，并清理了 ${removedItemsCount} 条失去所有内容的空素材`);
     } else if (removedImagesCount > 0) {
