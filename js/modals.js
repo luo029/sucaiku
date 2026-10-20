@@ -114,35 +114,54 @@ const modalsHtml = `
     
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; position:relative;">
       <h3 class="modal-title" style="margin:0;">盲盒灵感</h3>
-      <button id="randomFilterBtn" class="btn" style="display:flex; align-items:center; gap:6px; padding:6px 12px; font-size:13px; border-radius:8px; max-width:220px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-        <span id="randomFilterText" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">全随机</span>
-      </button>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <!-- 字号调节按钮 -->
+        <button id="randomFontSizeBtn" class="btn" style="display:flex; align-items:center; justify-content:center; padding:6px 10px; font-size:13px; font-weight:700; border-radius:8px; min-width:36px;" title="切换字号">
+          Aa
+        </button>
+        <!-- 自动翻动按钮 -->
+        <button id="randomAutoFlipToggleBtn" class="btn" style="display:flex; align-items:center; gap:6px; padding:6px 12px; font-size:13px; border-radius:8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85 1 6.54 2.66L21 8"/><path d="M21 3v5h-5"/></svg>
+          <span>自动翻动</span>
+        </button>
+        <!-- 随机筛选按钮 -->
+        <button id="randomFilterBtn" class="btn" style="display:flex; align-items:center; gap:6px; padding:6px 12px; font-size:13px; border-radius:8px; max-width:150px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          <span id="randomFilterText" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">全随机</span>
+        </button>
+      </div>
       
+      <!-- 筛选面板 -->
       <div id="randomFilterPanel" class="source-panel" hidden style="position:absolute; top:calc(100% + 8px); right:0; width:260px; z-index:100;">
         <div class="sp-search-wrap"><input id="randomFilterSearch" placeholder="搜索分类、来源或标签…" autocomplete="off"></div>
         <div class="sp-list" id="randomFilterList" style="max-height:240px;"></div>
       </div>
+
+      <!-- 自动翻动设置面板 -->
+      <div id="randomAutoFlipPanel" class="source-panel" hidden style="position:absolute; top:calc(100% + 8px); right:0; width:220px; z-index:100; padding:16px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+          <span style="font-size:14px; font-weight:600; color:var(--text);">开启自动翻动</span>
+          <label class="st-toggle" style="margin:0; padding:0; border:none; background:transparent; width:auto;">
+            <input type="checkbox" id="randomAutoFlipCheck" style="width:40px; height:22px; margin:0;">
+          </label>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:13px; color:var(--text-3); white-space:nowrap;">间隔</span>
+          <input type="number" id="randomAutoFlipTime" value="30" min="5" max="300" style="flex:1; border:1px solid var(--line); border-radius:6px; padding:6px; background:var(--bg); color:var(--text); text-align:center; outline:none; font-size:13px;">
+          <span style="font-size:13px; color:var(--text-3);">秒</span>
+        </div>
+      </div>
     </div>
 
-    <div id="randomContent" style="font-size:16px; line-height:1.8; height: 320px; overflow-y: auto; padding-right: 8px; position:relative;">
+    <!-- 内容居中显示，默认字号 20px -->
+    <div id="randomContent" style="font-size:20px; line-height:1.8; height: 320px; overflow-y: auto; padding: 16px 8px; position:relative; display:flex; flex-direction:column; align-items:center; text-align:center;">
       <!-- 动态内容会插入到这里 -->
     </div>
 
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
-      <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-2);">
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
-          <input type="checkbox" id="randomAutoFlipCheck" style="accent-color:var(--accent); width:16px; height:16px; cursor:pointer;">
-          自动翻动
-        </label>
-        <input type="number" id="randomAutoFlipTime" value="30" min="5" max="300" style="width:56px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--text); text-align:center; outline:none;">
-        <span>秒</span>
-      </div>
-      
-      <div class="modal-actions" style="margin:0; width:auto;">
-        <button class="btn" id="randomCloseBtn">关闭</button>
-        <button class="primary" id="randomAgainBtn">再抽一次</button>
-      </div>
+    <!-- 底部按钮居中 -->
+    <div style="display:flex; justify-content:center; gap:12px; margin-top:16px;">
+      <button class="btn" id="randomCloseBtn" style="min-width:100px;">关闭</button>
+      <button class="primary" id="randomAgainBtn" style="min-width:100px;">再抽一次</button>
     </div>
   </div>
 </div>
@@ -490,7 +509,7 @@ const modalsHtml = `
         </div>
       </div>
 
-      <!-- ★ 新增：专注模式传图设置 -->
+      <!-- ★ 专注模式传图设置 -->
       <div class="st-card" data-group="images" style="display:none;">
         <div class="st-card-head">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg>
@@ -507,7 +526,7 @@ const modalsHtml = `
             </label>
             <div id="focusImgCatWrap" class="st-field" style="margin-bottom:0; margin-top:8px;">
               <label>默认图片分类</label>
-              <select id="focusImgDefaultCat" class="page-size" style="width:100%; text-align:left; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); font-size:13.5px; outline:none;"></select>
+              <select id="focusImgDefaultCat" style="width:100%; text-align:left; padding:10px 36px 10px 12px; border-radius:10px; border:1px solid var(--line); background-color:var(--bg); background-image:url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%238c8f9e\' stroke-width=\'2.5\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'m6 9 6 6 6-6\'/%3E%3C/svg%3E'); background-repeat:no-repeat; background-position:right 12px center; color:var(--text); font-size:13.5px; outline:none; appearance:none; -webkit-appearance:none; cursor:pointer; transition:all .15s;"></select>
               <div class="st-hint">静默上传时，图片将归入此分类。</div>
             </div>
           </div>

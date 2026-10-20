@@ -34,6 +34,12 @@ safeBind('imgMasonry', 'click', e => {
   if(img)window.open(img.dataset.openImg,'_blank','noopener');
 });
 
+// ★ 盲盒内的图片点击放大
+safeBind('randomContent', 'click', e => {
+  const img = e.target.closest('[data-open-img]');
+  if(img) window.open(img.dataset.openImg,'_blank','noopener');
+});
+
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
   if(focusMode){setFocus(false);return;}
@@ -69,6 +75,27 @@ safeBind('modalMask', 'click', e => {if(e.target===$('modalMask'))closeModal();}
 let randomAnimating = false;
 let randomFilterValue = 'all';
 let autoFlipTimer = null; 
+let randomFontSize = localStorage.getItem('random-font-size') || '20px';
+
+function applyRandomFontSize() {
+  if ($('randomContent')) {
+    $('randomContent').style.fontSize = randomFontSize;
+  }
+}
+
+safeBind('randomFontSizeBtn', 'click', e => {
+  e.stopPropagation();
+  if (randomFontSize === '20px') {
+    randomFontSize = '24px';
+  } else if (randomFontSize === '24px') {
+    randomFontSize = '28px';
+  } else {
+    randomFontSize = '20px';
+  }
+  localStorage.setItem('random-font-size', randomFontSize);
+  applyRandomFontSize();
+  $('randomFontSizeBtn').textContent = randomFontSize === '20px' ? 'Aa' : (randomFontSize === '24px' ? 'Aa+' : 'Aa++');
+});
 
 function getRandomPool() {
   if (randomFilterValue === 'all') return db.items;
@@ -141,6 +168,7 @@ function renderRandomFilterList() {
 
 safeBind('randomFilterBtn', 'click', e => {
   e.stopPropagation();
+  $('randomAutoFlipPanel').hidden = true; // 关闭另一个面板
   const panel = $('randomFilterPanel');
   if (panel.hidden) {
     $('randomFilterSearch').value = '';
@@ -187,10 +215,29 @@ safeBind('randomFilterList', 'click', e => {
   drawRandomBox();
 });
 
-document.addEventListener('click', e => {
-  const panel = $('randomFilterPanel');
-  if (panel && !panel.hidden && !$('randomFilterBtn').contains(e.target) && !panel.contains(e.target)) {
+// 自动翻动面板控制
+safeBind('randomAutoFlipToggleBtn', 'click', e => {
+  e.stopPropagation();
+  $('randomFilterPanel').hidden = true; // 关闭另一个面板
+  const panel = $('randomAutoFlipPanel');
+  if (panel.hidden) {
+    $('randomAutoFlipCheck').checked = !!autoFlipTimer; // 同步状态
+    panel.hidden = false;
+  } else {
     panel.hidden = true;
+  }
+});
+
+// 点击外部关闭面板
+document.addEventListener('click', e => {
+  const filterPanel = $('randomFilterPanel');
+  if (filterPanel && !filterPanel.hidden && !$('randomFilterBtn').contains(e.target) && !filterPanel.contains(e.target)) {
+    filterPanel.hidden = true;
+  }
+  
+  const autoPanel = $('randomAutoFlipPanel');
+  if (autoPanel && !autoPanel.hidden && !$('randomAutoFlipToggleBtn').contains(e.target) && !autoPanel.contains(e.target)) {
+    autoPanel.hidden = true;
   }
 });
 
@@ -242,23 +289,31 @@ function drawRandomBox() {
   const c=catColor(item.type);
   
   const renderContent = () => {
+    // 使用 margin: auto 实现内容少时绝对居中，内容多时从顶部开始滚动
     return `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-        <span class="tag${item.type===IMG_TYPE?' tag-img':''}" style="${item.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(item.type)}</span>
-        ${item.source?`<span style="font-size:13px;color:var(--text-3);">${esc(item.source)}</span>`:''}
-        ${item.tags && item.tags.length ? item.tags.map(t=>`<span class="tag-chip" style="pointer-events:none;font-size:11px;">#${esc(t)}</span>`).join('') : ''}
+      <div style="margin: auto 0; width: 100%; display: flex; flex-direction: column; align-items: center;">
+        <div style="display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:16px;flex-wrap:wrap;width:100%;">
+          <span class="tag${item.type===IMG_TYPE?' tag-img':''}" style="${item.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(item.type)}</span>
+          ${item.source?`<span style="font-size:13.5px;color:var(--text-2);font-weight:500;">${esc(item.source)}</span>`:''}
+          ${item.tags && item.tags.length ? item.tags.map(t=>`<span class="tag-chip" style="pointer-events:none;font-size:11.5px;">#${esc(t)}</span>`).join('') : ''}
+        </div>
+        ${item.text?`<div style="color:var(--text); white-space:pre-wrap; word-break:break-word; text-align:center; width:100%;">${formatText(item.text)}</div>`:''}
+        ${item.images&&item.images.length?`<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:20px;justify-content:center;width:100%;">${item.images.map(im=>{
+          const src=imageSrc(im);
+          return `<span class="ci" style="position:relative; display:inline-block; max-width:100%; line-height:0;">
+            <img src="${esc(src)}" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}" style="max-width:100%; max-height:260px; object-fit:contain; border-radius:12px; border:1px solid var(--line); box-shadow:0 4px 12px rgba(0,0,0,0.05); display:block; cursor:zoom-in; margin: 0 auto;">
+            <span style="position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.65); color:#fff; padding:4px 10px; border-radius:8px; font-size:12px; font-weight:600; backdrop-filter:blur(4px); letter-spacing:0.5px;">${esc(im.cat || '其他')}</span>
+          </span>`;
+        }).join('')}</div>`:''}
       </div>
-      ${item.text?`<div style="color:var(--text); white-space:pre-wrap; word-break:break-word;">${formatText(item.text)}</div>`:''}
-      ${item.images&&item.images.length?`<div class="card-imgs" style="margin-top:12px;">${item.images.map(im=>{
-        const src=imageSrc(im);
-        return `<span class="ci"><img src="${esc(src)}" data-open-img="${esc(src)}" data-img-path="${esc(im.path||'')}">${imgCatBadge(im)}</span>`;
-      }).join('')}</div>`:''}
     `;
   };
 
   if($('randomMask').classList.contains('show') === false) {
     $('randomContent').innerHTML = renderContent();
     $('randomMask').classList.add('show');
+    $('randomFontSizeBtn').textContent = randomFontSize === '20px' ? 'Aa' : (randomFontSize === '24px' ? 'Aa+' : 'Aa++');
+    applyRandomFontSize();
     return;
   }
 
@@ -300,6 +355,8 @@ safeBind('menuRandomBtn', 'click', () => {
   const savedTime = localStorage.getItem('random-auto-flip-time') || '30';
   $('randomAutoFlipTime').value = savedTime;
   $('randomAutoFlipCheck').checked = false;
+  $('randomAutoFlipPanel').hidden = true;
+  $('randomFilterPanel').hidden = true;
   
   drawRandomBox();
 });
