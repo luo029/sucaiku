@@ -163,29 +163,91 @@ mark.kw{background:rgba(250,204,21,.38);color:inherit;padding:1px 3px;border-rad
 .page-size:hover{border-color:var(--line-2)}
 .page-size:focus{border-color:var(--accent)}
 
-/* 批量栏 */
+/* ================= 批量操作栏完美重构版 ================= */
 .batch-bar {
-  position: fixed; left: 50%; bottom: 30px;
+  position: fixed; left: 50%; bottom: 24px;
   transform: translateX(-50%) translateY(20px);
   opacity: 0; visibility: hidden; pointer-events: none;
   display: flex; align-items: center; gap: 16px;
-  background: linear-gradient(135deg, #2a2d40, #1e2130); color: #fff;
-  padding: 12px 14px 12px 24px; border-radius: 16px;
-  box-shadow: 0 12px 36px rgba(30,33,48,.4);
+  background: rgba(30, 32, 45, 0.95); /* 深色毛玻璃质感 */
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  padding: 12px 20px; border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.3), 0 2px 10px rgba(0,0,0,.15);
   transition: all .35s cubic-bezier(.2,.8,.2,1.15);
   z-index: 200; max-width: calc(100vw - 24px);
+  border: 1px solid rgba(255,255,255,0.08);
 }
-[data-theme="dark"] .batch-bar { background: linear-gradient(135deg, #2a2d40, #16171f); border: 1px solid var(--line); }
+[data-theme="dark"] .batch-bar {
+  background: rgba(24, 25, 34, 0.95); /* 夜间模式稍微加深 */
+  border-color: rgba(255,255,255,0.12);
+}
 .batch-bar.show { transform: translateX(-50%) translateY(0); opacity: 1; visibility: visible; pointer-events: auto; }
-.batch-info{font-size:14px;white-space:nowrap;letter-spacing:.3px}
-.batch-info b{color:#a5b4fc;font-weight:700;margin:0 4px;font-size:15px}
-.batch-actions{display:flex;gap:8px;flex-wrap:wrap}
-.batch-bar .btn{border-color:rgba(255,255,255,.15);background:rgba(255,255,255,.08);color:#e5e7ef;padding:9px 14px;font-size:13.5px;transition:all .15s}
-.batch-bar .btn:hover{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.3)}
-.batch-bar .btn.danger-solid{background:linear-gradient(135deg,#ef4444,#dc2626);border-color:transparent;color:#fff}
-.batch-bar .btn.danger-solid:hover{filter:brightness(1.1)}
 
-/* 弹窗 */
+.batch-info { 
+  font-size: 14px; color: #d1d5db; white-space: nowrap; 
+  font-weight: 500; display: flex; align-items: center; 
+}
+.batch-info b { color: #818cf8; font-weight: 800; margin: 0 4px; font-size: 18px; }
+
+/* 操作区排布 */
+.batch-actions { display: flex; align-items: center; gap: 12px; }
+.batch-group { display: flex; align-items: center; gap: 8px; }
+.batch-divider { width: 1px; height: 20px; background: rgba(255,255,255,0.15); flex-shrink: 0; }
+
+/* 统一按钮样式 */
+.batch-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 36px; padding: 0 14px; border-radius: 10px;
+  background: rgba(255,255,255,0.06); border: 1px solid transparent;
+  color: #e5e7eb; font-size: 13.5px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s; font-family: inherit;
+  white-space: nowrap;
+}
+.batch-btn svg { opacity: 0.7; transition: opacity 0.15s; flex-shrink: 0; }
+.batch-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.batch-btn:hover svg { opacity: 1; }
+.batch-btn:active { transform: scale(0.96); }
+
+/* 危险按钮（删除） */
+.batch-btn.danger { color: #fca5a5; }
+.batch-btn.danger svg { color: #f87171; }
+.batch-btn.danger:hover { background: rgba(239,68,68,0.15); color: #fef2f2; }
+.batch-btn.danger:hover svg { color: #fef2f2; }
+
+/* 退出按钮（弱化） */
+.batch-btn.cancel { background: transparent; color: #9ca3af; padding: 0 10px; }
+.batch-btn.cancel:hover { background: rgba(255,255,255,0.08); color: #fff; }
+
+/* 手机端适配：改为底部抽屉排列，更紧凑 */
+@media (max-width: 768px) {
+  .batch-bar {
+    left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+    transform: translateY(20px); max-width: none;
+    flex-direction: column; align-items: stretch; gap: 12px; padding: 16px;
+    border-radius: 16px;
+  }
+  .batch-bar.show { transform: translateY(0); }
+  
+  .batch-info { justify-content: center; font-size: 15px; }
+  
+  .batch-actions { flex-direction: column; align-items: stretch; gap: 12px; }
+  .batch-divider { height: 1px; width: 100%; margin: 4px 0; background: rgba(255,255,255,0.08); }
+  
+  .batch-group { 
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; 
+  }
+  .batch-group:nth-child(3) { 
+    grid-template-columns: 1fr 1fr; /* 删除和退出平分 */
+  }
+  
+  .batch-btn { height: 42px; font-size: 14px; border-radius: 10px; background: rgba(255,255,255,0.1); padding: 0; justify-content: center; }
+  .batch-btn.cancel { background: rgba(255,255,255,0.05); }
+  
+  /* 全选按钮独占一行 */
+  .batch-group:first-child .batch-btn { grid-column: 1 / -1; }
+}
+
+/* ================= 弹窗 ================= */
 .modal-mask{position:fixed;inset:0;background:rgba(15,16,24,.65);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:100}
 .modal-mask.show{opacity:1;pointer-events:auto}
 .modal{background:var(--card);border-radius:20px;padding:28px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(15,16,24,.4);transform:translateY(20px) scale(.95);transition:all .3s cubic-bezier(.2,.8,.2,1.1);border:1px solid var(--line)}
@@ -301,3 +363,22 @@ body.layout-strip .card:hover .ops {
   cursor: pointer; transition: all 0.15s;
 }
 .tag-suggestion-chip:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* ★ 彻底杀死原生下拉框的丑蓝底色（针对批量移动、导出等原生 select） */
+#moveCatSelect, #exportScope, select {
+  background-color: var(--bg) !important;
+  color: var(--text) !important;
+  border-radius: 8px;
+  border: 1px solid var(--line) !important;
+  outline: none;
+  cursor: pointer;
+}
+#moveCatSelect option, #exportScope option, select option {
+  background-color: var(--card) !important; /* 让下拉列表的背景跟随主题 */
+  color: var(--text) !important;
+  padding: 10px;
+}
+#moveCatSelect:focus, #exportScope:focus, select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}

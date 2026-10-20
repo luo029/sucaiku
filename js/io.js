@@ -8,7 +8,7 @@ function setZen(on){
   localStorage.setItem(ZEN_KEY,on?'1':'0');
   if(on){closeSidebar();selectMode=false;selectedIds.clear();closeImgView();setFocus(false);}
   renderList();
-  if(on)scrollTop();
+  scrollTop(); // ★ 修复：无论进入还是退出，都平滑回到顶部
 }
 
 /* =========================================================
@@ -23,6 +23,7 @@ function setFocus(on) {
     inputEl.focus();
   }
   renderList();
+  scrollTop(); // ★ 修复：同样修复专注模式退出不回顶部的问题
 }
 
 /* =========================================================

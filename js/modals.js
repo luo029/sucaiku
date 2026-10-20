@@ -1,57 +1,90 @@
 /* js / modals.js · 所有的弹窗与隐藏元素，动态插入到页面底部 */
 const modalsHtml = `
+<!-- 批量操作栏（美化重构版） -->
 <div class="batch-bar" id="batchBar">
-  <div class="batch-info">已选 <b id="batchNum">0</b> 条</div>
+  <div class="batch-info">
+    已选 <b id="batchNum">0</b> 条
+  </div>
   <div class="batch-actions">
-    <button class="btn" id="selectAllBtn">全选本页</button>
-    <button class="btn" id="batchMoveBtn">移动分类</button>
-    <button class="btn" id="batchTagBtn">加标签</button>
-    <button class="btn" id="batchSourceBtn">设置来源</button>
-    <button class="btn" id="batchExportBtn">导出</button>
-    <button class="btn" id="batchExit">退出</button>
-    <button class="btn danger-solid" id="batchDel">删除</button>
+    
+    <!-- 第一组：选择 -->
+    <div class="batch-group">
+      <button class="batch-btn" id="selectAllBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        全选本页
+      </button>
+    </div>
+
+    <div class="batch-divider"></div>
+
+    <!-- 第二组：内容编辑 -->
+    <div class="batch-group">
+      <button class="batch-btn" id="batchMoveBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+        移动分类
+      </button>
+      <button class="batch-btn" id="batchTagBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        加标签
+      </button>
+      <button class="batch-btn" id="batchSourceBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        设置来源
+      </button>
+      <button class="batch-btn" id="batchExportBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        导出选中
+      </button>
+    </div>
+
+    <div class="batch-divider"></div>
+
+    <!-- 第三组：危险与退出 -->
+    <div class="batch-group">
+      <button class="batch-btn danger" id="batchDel">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        删除
+      </button>
+      <button class="batch-btn cancel" id="batchExit">退出</button>
+    </div>
+
   </div>
 </div>
 
-<!-- 图床批量操作栏（改为顶部悬浮） -->
-<div class="batch-bar" id="imgMgrBatchBar" style="top: 80px; bottom: auto; background: rgba(30, 58, 138, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
+<!-- 图床批量操作栏 -->
+<div class="batch-bar" id="imgMgrBatchBar" style="top: 80px; bottom: auto; background: rgba(30, 58, 138, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
   <div class="batch-info">图片已选 <b id="imgMgrBatchNum" style="color:#93c5fd;">0</b> 张</div>
   <div class="batch-actions">
-    <button class="btn" id="imgMgrSelectAllBtn">全选本页</button>
-    <button class="btn" id="imgMgrBatchCatBtn">修改分类</button>
-    <button class="btn" id="imgMgrBatchTagBtn">修改标签</button>
-    <button class="btn" id="imgMgrBatchExit">退出</button>
-    <button class="btn danger-solid" id="imgMgrBatchDelBtn" style="background:#ef4444; border-color:#dc2626;">彻底删除</button>
+    <div class="batch-group">
+      <button class="batch-btn" id="imgMgrSelectAllBtn">全选本页</button>
+      <button class="batch-btn" id="imgMgrBatchCatBtn">修改分类</button>
+      <button class="batch-btn" id="imgMgrBatchTagBtn">修改标签</button>
+    </div>
+    <div class="batch-divider"></div>
+    <div class="batch-group">
+      <button class="batch-btn danger" id="imgMgrBatchDelBtn" style="background:#ef4444; color:#fff; border-color:#dc2626;">彻底删除</button>
+      <button class="batch-btn cancel" id="imgMgrBatchExit">退出</button>
+    </div>
   </div>
 </div>
 
-<!-- 图床批量修改弹窗（尺寸缩小，排版紧凑） -->
+<!-- 图床批量修改弹窗 -->
 <div class="modal-mask" id="imgMgrBatchEditMask" style="z-index: 210;">
   <div class="modal" style="max-width:420px; border-radius:16px; padding:24px;">
     <div class="modal-icon export-icon" style="width:44px;height:44px;margin-bottom:12px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
     <h3 class="modal-title" id="imgMgrBatchEditTitle" style="font-size:18px;">批量修改</h3>
     <p class="modal-desc" style="margin-bottom:20px; font-size:13.5px;">正在为选中的 <b id="imgMgrBatchEditCount">0</b> 张图片修改：</p>
     
-    <!-- 分类单选网格 -->
     <div id="imgMgrBatchCatWrap" class="export-field">
       <label class="export-label">目标分类</label>
-      <div id="imgMgrBatchCatGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap:8px; margin-top:8px;">
-        <!-- JS 渲染分类块 -->
-      </div>
+      <div id="imgMgrBatchCatGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap:8px; margin-top:8px;"></div>
     </div>
     
-    <!-- 标签池多选 -->
     <div id="imgMgrBatchTagWrap" class="export-field" style="display:none;">
-      
-      <!-- 当前已包含的标签展示区 -->
       <div style="margin-bottom:16px;">
         <label class="export-label" style="margin-bottom:6px;">当前标签（点击 × 移除）</label>
-        <div id="imgMgrBatchSelectedTags" style="display:flex; flex-wrap:wrap; gap:6px; padding:10px; background:var(--bg); border-radius:10px; border:1px solid var(--line); min-height:42px; align-content:flex-start;">
-          <!-- JS 渲染已选标签 -->
-        </div>
+        <div id="imgMgrBatchSelectedTags" style="display:flex; flex-wrap:wrap; gap:6px; padding:10px; background:var(--bg); border-radius:10px; border:1px solid var(--line); min-height:42px; align-content:flex-start;"></div>
       </div>
-
-      <!-- ★ 合并后的输入与搜索区 -->
       <div style="margin-bottom:12px;">
         <label class="export-label" style="margin-bottom:6px;">添加标签</label>
         <div style="display:flex; gap:8px;">
@@ -62,15 +95,10 @@ const modalsHtml = `
           </button>
         </div>
       </div>
-
-      <!-- 默认隐藏的标签池，点搜索图标才显示 -->
       <div id="imgMgrBatchTagPoolWrap" style="display:none; margin-top:10px;">
         <input class="modal-input" id="imgMgrBatchTagSearch" placeholder="搜索现有标签..." style="margin-bottom:10px; font-size:13px; padding:8px 12px;" autocomplete="off">
-        <div id="imgMgrBatchTagPool" style="display:flex; flex-wrap:wrap; gap:6px; max-height:120px; overflow-y:auto; padding:4px;">
-          <!-- JS 渲染标签池 -->
-        </div>
+        <div id="imgMgrBatchTagPool" style="display:flex; flex-wrap:wrap; gap:6px; max-height:120px; overflow-y:auto; padding:4px;"></div>
       </div>
-      
     </div>
 
     <div class="modal-actions" style="margin-top:20px; gap:10px;">
@@ -111,33 +139,25 @@ const modalsHtml = `
 <div class="modal-mask" id="randomMask">
   <div class="modal" style="max-width:480px; background:linear-gradient(180deg, var(--card) 0%, var(--bg) 100%); overflow:hidden;">
     <div class="modal-icon" style="background:var(--accent-soft);color:var(--accent);box-shadow:0 4px 12px var(--accent-soft);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
-    
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; position:relative;">
       <h3 class="modal-title" style="margin:0;">盲盒灵感</h3>
       <div style="display:flex; gap:8px; align-items:center;">
-        <!-- 字号调节按钮 -->
-        <button id="randomFontSizeBtn" class="btn" style="display:flex; align-items:center; justify-content:center; padding:6px 10px; font-size:13px; font-weight:700; border-radius:8px; min-width:36px;" title="切换字号">
-          Aa
-        </button>
-        <!-- 自动翻动按钮 -->
+        <button id="randomFontSizeBtn" class="btn" style="display:flex; align-items:center; justify-content:center; padding:6px 10px; font-size:13px; font-weight:700; border-radius:8px; min-width:36px;" title="切换字号">Aa</button>
         <button id="randomAutoFlipToggleBtn" class="btn" style="display:flex; align-items:center; gap:6px; padding:6px 12px; font-size:13px; border-radius:8px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85 1 6.54 2.66L21 8"/><path d="M21 3v5h-5"/></svg>
           <span>自动翻动</span>
         </button>
-        <!-- 随机筛选按钮 -->
         <button id="randomFilterBtn" class="btn" style="display:flex; align-items:center; gap:6px; padding:6px 12px; font-size:13px; border-radius:8px; max-width:150px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
           <span id="randomFilterText" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">全随机</span>
         </button>
       </div>
       
-      <!-- 筛选面板 -->
       <div id="randomFilterPanel" class="source-panel" hidden style="position:absolute; top:calc(100% + 8px); right:0; width:260px; z-index:100;">
         <div class="sp-search-wrap"><input id="randomFilterSearch" placeholder="搜索分类、来源或标签…" autocomplete="off"></div>
         <div class="sp-list" id="randomFilterList" style="max-height:240px;"></div>
       </div>
 
-      <!-- 自动翻动设置面板 -->
       <div id="randomAutoFlipPanel" class="source-panel" hidden style="position:absolute; top:calc(100% + 8px); right:0; width:220px; z-index:100; padding:16px;">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
           <span style="font-size:14px; font-weight:600; color:var(--text);">开启自动翻动</span>
@@ -152,13 +172,7 @@ const modalsHtml = `
         </div>
       </div>
     </div>
-
-    <!-- 内容居中显示，默认字号 20px -->
-    <div id="randomContent" style="font-size:20px; line-height:1.8; height: 320px; overflow-y: auto; padding: 16px 8px; position:relative; display:flex; flex-direction:column; align-items:center; text-align:center;">
-      <!-- 动态内容会插入到这里 -->
-    </div>
-
-    <!-- 底部按钮居中 -->
+    <div id="randomContent" style="font-size:20px; line-height:1.8; height: 320px; overflow-y: auto; padding: 16px 8px; position:relative; display:flex; flex-direction:column; align-items:center; text-align:center;"></div>
     <div style="display:flex; justify-content:center; gap:12px; margin-top:16px;">
       <button class="btn" id="randomCloseBtn" style="min-width:100px;">关闭</button>
       <button class="primary" id="randomAgainBtn" style="min-width:100px;">再抽一次</button>
@@ -227,7 +241,6 @@ const modalsHtml = `
           <div><div class="st-card-title">编辑与列表</div><div class="st-card-desc">默认分类、长文折叠、分页与复制格式</div></div>
         </div>
         <div class="st-card-body">
-          
           <div class="st-grid-2">
             <div class="st-field" style="margin-bottom:0;">
               <label>默认新建分类</label>
@@ -257,9 +270,7 @@ const modalsHtml = `
               </div>
             </div>
           </div>
-
           <div style="height: 1px; background: var(--line); margin: 16px 0;"></div>
-
           <div style="display:flex; flex-direction:column; gap:10px;">
             <label class="st-toggle">
               <div>
@@ -268,7 +279,6 @@ const modalsHtml = `
               </div>
               <input type="checkbox" id="copyWithoutMarks">
             </label>
-
             <label class="st-toggle">
               <div>
                 <div class="st-toggle-title">复制时保留空行（原汁原味）</div>
@@ -276,7 +286,6 @@ const modalsHtml = `
               </div>
               <input type="checkbox" id="copyKeepBlankLines">
             </label>
-
             <label class="st-toggle">
               <div>
                 <div class="st-toggle-title">复制时附带自定义后缀</div>
@@ -284,15 +293,12 @@ const modalsHtml = `
               </div>
               <input type="checkbox" id="copyWithSource">
             </label>
-            
             <div id="copySourceFormatWrap" style="display: none; padding: 4px 0 0;">
               <label style="font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 8px; display: block;">自定义后缀格式</label>
               <input type="text" id="copySourceFormat" placeholder="—— {source}" style="width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; color: var(--text); background: var(--bg); outline: none;">
               <div class="st-hint">可用 <code>{source}</code> 代表原来源。例如输入 <code>—— 摘抄</code>，或者 <code>（摘自：{source}）</code></div>
             </div>
-
             <div style="height: 1px; background: var(--line); margin: 6px 0;"></div>
-
             <label class="st-toggle">
               <div>
                 <div class="st-toggle-title">启用 Markdown 语法</div>
@@ -301,14 +307,12 @@ const modalsHtml = `
               <input type="checkbox" id="enableMarkdown">
             </label>
           </div>
-
         </div>
       </div>
 
       <div class="st-card" data-group="general">
         <div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><div><div class="st-card-title">外观与显示</div><div class="st-card-desc">主题、字号、时间显示格式</div></div></div>
         <div class="st-card-body">
-          
           <div class="st-grid-2" style="margin-bottom:16px;">
             <label class="st-toggle" style="margin-bottom:0;">
               <div><div class="st-toggle-title">夜间模式</div></div>
@@ -327,7 +331,6 @@ const modalsHtml = `
               <input type="checkbox" id="enableAnim">
             </label>
           </div>
-          
           <div class="st-field" style="margin-bottom:16px;">
             <label>保存快捷键</label>
             <div class="segmented" id="saveShortcut">
@@ -335,7 +338,6 @@ const modalsHtml = `
               <button type="button" data-shortcut="enter">Enter 保存</button>
             </div>
           </div>
-
           <div class="st-field" style="margin-bottom:16px;">
             <label>安心输入模式分类</label>
             <div style="display:flex; gap:10px;">
@@ -344,12 +346,10 @@ const modalsHtml = `
             </div>
             <div class="st-hint">此分类下的素材编辑保存后，会自动跳转处理下一条（无需进入模式也可生效）。</div>
           </div>
-
           <div class="st-field" style="margin-bottom:16px;">
             <label>UI 风格</label>
             <div class="segmented" id="uiStyleMode"></div>
           </div>
-
           <div class="st-grid-2" style="margin-bottom:16px;">
             <div class="st-field" style="margin-bottom:0;">
               <label>全局字号</label>
@@ -368,7 +368,6 @@ const modalsHtml = `
               </div>
             </div>
           </div>
-
           <div class="st-field">
             <label>列表排版样式</label>
             <div class="segmented" id="listStyleMode">
@@ -382,7 +381,6 @@ const modalsHtml = `
       <div class="st-card" data-group="general">
         <div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><div><div class="st-card-title">侧栏设置</div><div class="st-card-desc">自定义侧栏显示内容与折叠数量</div></div></div>
         <div class="st-card-body">
-          
           <label style="display:block; margin-bottom:10px; font-size:13px; font-weight:600; color:var(--text-2);">侧边栏内容显示</label>
           <div style="display:flex; gap:10px; margin-bottom:20px;">
             <label class="sidebar-toggle-item">
@@ -398,7 +396,6 @@ const modalsHtml = `
               <span>标签</span>
             </label>
           </div>
-
           <label style="display:block; margin-bottom:10px; font-size:13px; font-weight:600; color:var(--text-2);">折叠数量限制</label>
           <div style="display:flex; gap:10px;">
             <div style="flex:1; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:12px 8px; text-align:center;">
@@ -414,7 +411,6 @@ const modalsHtml = `
               <input type="number" id="tagLimitInput" min="1" max="30" step="1" value="3" style="width:100%; text-align:center; padding:0; font-size:16px; font-weight:700; color:var(--accent); border:none; background:transparent; outline:none;">
             </div>
           </div>
-
         </div>
       </div>
 
@@ -433,7 +429,6 @@ const modalsHtml = `
           <div class="st-grid-2"><div class="st-field"><label>仓库所有者</label><input type="text" id="ghOwner" placeholder="your-username" autocomplete="off"></div><div class="st-field"><label>仓库名</label><input type="text" id="ghRepo" placeholder="material-library" autocomplete="off"></div></div>
           <div class="st-grid-2"><div class="st-field"><label>分支</label><input type="text" id="ghBranch" placeholder="main" autocomplete="off"></div><div class="st-field"><label>数据文件路径</label><input type="text" id="ghDataPath" placeholder="material-library.json" autocomplete="off"></div></div>
           <div class="st-field"><label>站点基础 URL（可选）</label><input type="text" id="ghSiteBase" placeholder="https://your-username.github.io/material-library" autocomplete="off"><div class="st-hint">仅用于显示；留空自动推断</div></div>
-          
           <div style="display:flex; flex-direction:column; gap:10px; margin-top:16px;">
             <label class="st-toggle">
               <div>
@@ -450,7 +445,6 @@ const modalsHtml = `
               <input type="checkbox" id="ghAutoPull" checked>
             </label>
           </div>
-          
           <div class="st-grid-2" style="margin-top:16px;">
             <div class="st-field" style="margin-bottom:0;">
               <label>自动推送间隔</label>
@@ -468,7 +462,6 @@ const modalsHtml = `
             </div>
           </div>
           <div class="st-hint" style="margin-bottom:12px;">停止操作指定时间后推送；闲置指定时间后检查云端更新（不低于10秒）</div>
-          
           <label class="st-toggle">
             <div>
               <div class="st-toggle-title">开启云端更新巡检</div>
@@ -476,7 +469,6 @@ const modalsHtml = `
             </div>
             <input type="checkbox" id="autoCheckUpdateToggle" checked>
           </label>
-
           <div class="st-actions" style="display:flex; gap:8px; margin-top:16px;">
             <button class="btn" id="ghTestBtn">测试</button>
             <button class="btn" id="ghPullBtn">拉取</button>
@@ -509,7 +501,6 @@ const modalsHtml = `
         </div>
       </div>
 
-      <!-- ★ 专注模式传图设置 -->
       <div class="st-card" data-group="images" style="display:none;">
         <div class="st-card-head">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg>
@@ -538,7 +529,6 @@ const modalsHtml = `
         <div class="st-card-body"><div class="st-field"><input type="text" id="imgCatsInput" placeholder="梗图, 情节, 插画, 其他" autocomplete="off"></div></div>
       </div>
     </div>
-
     <div class="modal-actions" style="margin-top:16px;"><button class="btn" id="settingCloseBtn" style="width:100%;">关闭</button></div>
   </div>
 </div>
@@ -549,11 +539,9 @@ const modalsHtml = `
     <h3 class="modal-title">选择图片分类</h3>
     <p class="modal-desc">共 <b id="imgCatCount">0</b> 张图片，选择分类后上传：</p>
     <div class="img-cat-list" id="imgCatList"></div>
-    
     <div class="st-field" style="margin-bottom:16px;">
       <input class="modal-input" id="imgUploadTags" placeholder="添加标签（逗号分隔），与文字标签共用" autocomplete="off">
     </div>
-    
     <div id="imgProgressWrap" style="display:none; margin-bottom:16px;">
       <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-3); margin-bottom:6px;">
         <span id="imgProgressText">准备中...</span>
@@ -563,7 +551,6 @@ const modalsHtml = `
         <div id="imgProgressBar" style="height:100%; width:0%; background:var(--accent); transition:width 0.3s ease, background 0.3s;"></div>
       </div>
     </div>
-    
     <div class="st-status" id="imgUploadStatus" style="margin-bottom:12px;"></div>
     <div class="modal-actions"><button class="btn" id="imgCatCancel">取消</button><button class="primary" id="imgCatConfirm">上传</button></div>
   </div>
@@ -638,7 +625,6 @@ const modalsHtml = `
   </div>
 </div>
 
-<!-- ★ 批量设置来源 -->
 <div class="modal-mask" id="batchSourceMask">
   <div class="modal">
     <div class="modal-icon export-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>

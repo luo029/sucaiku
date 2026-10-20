@@ -1,8 +1,8 @@
 /* js / init.js · 启动初始化 */
 
 const PUBLIC_OWNER = 'luo029';          
-const PUBLIC_REPO = 'sucaiku_data';          
-const PUBLIC_IMG_REPO = 'sucaiku_pictures'; 
+const PUBLIC_REPO = 'sucaiuk_data';          
+const PUBLIC_IMG_REPO = 'sucaiuk_pictures'; 
 const PUBLIC_PATH = 'material-library.json'; 
 
 (async function initApp(){
@@ -10,11 +10,24 @@ const PUBLIC_PATH = 'material-library.json';
     try{
       const savedLayout=localStorage.getItem(LAYOUT_KEY);
       if(savedLayout==='sidebar'||savedLayout==='compact')layoutMode=savedLayout;
+      
       const savedTheme=localStorage.getItem(THEME_KEY);
-      if(savedTheme==='dark')themeMode='dark';
+      if (savedTheme === 'dark' || savedTheme === 'light') {
+        themeMode = savedTheme;
+      } else {
+        // ★ 如果没有手动保存过，跟随系统
+        themeMode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
     }catch(e){}
     applyLayout();
     setTheme(themeMode);
+
+    // ★ 监听系统主题变化
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+      if (!localStorage.getItem(THEME_KEY)) {
+        setTheme(e.matches ? 'dark' : 'light');
+      }
+    });
 
     loadSettings();
     await loadStore();                     
