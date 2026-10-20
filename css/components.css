@@ -163,10 +163,34 @@ mark.kw{background:rgba(250,204,21,.38);color:inherit;padding:1px 3px;border-rad
 .page-size:hover{border-color:var(--line-2)}
 .page-size:focus{border-color:var(--accent)}
 
-/* 批量栏 */
-.batch-bar{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(140%);display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,#2a2d40,#1e2130);color:#fff;padding:12px 14px 12px 24px;border-radius:16px;box-shadow:0 12px 36px rgba(30,33,48,.4);transition:transform .35s cubic-bezier(.2,.8,.2,1.15);z-index:60;max-width:calc(100vw - 24px)}
-[data-theme="dark"] .batch-bar{background:linear-gradient(135deg,#2a2d40,#16171f);border:1px solid var(--line)}
-.batch-bar.show{transform:translateX(-50%) translateY(0)}
+/* ★ 修复：批量栏隐藏时使用 opacity 和 visibility，彻底解决底部漏出颜色条的问题 */
+.batch-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%) translateY(20px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, #2a2d40, #1e2130);
+  color: #fff;
+  padding: 12px 14px 12px 24px;
+  border-radius: 16px;
+  box-shadow: 0 12px 36px rgba(30,33,48,.4);
+  transition: all .35s cubic-bezier(.2,.8,.2,1.15);
+  z-index: 200;
+  max-width: calc(100vw - 24px);
+}
+[data-theme="dark"] .batch-bar { background: linear-gradient(135deg, #2a2d40, #16171f); border: 1px solid var(--line); }
+.batch-bar.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
 .batch-info{font-size:14px;white-space:nowrap;letter-spacing:.3px}
 .batch-info b{color:#a5b4fc;font-weight:700;margin:0 4px;font-size:15px}
 .batch-actions{display:flex;gap:8px;flex-wrap:wrap}
@@ -235,3 +259,21 @@ body.spacing-loose .content { line-height: 2.1; }
 
 body.zen-font-large .content { font-size: 21px !important; }
 body.zen-font-xlarge .content { font-size: 24px !important; }
+
+/* 图片分类选择建议列表 */
+.tag-suggestion-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tag-suggestion-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}

@@ -1,6 +1,5 @@
 /* js / init.js · 启动初始化 */
 
-// 🌟 你的公开数据源配置
 const PUBLIC_OWNER = 'luo029';          
 const PUBLIC_REPO = 'sucaiku_data';          
 const PUBLIC_IMG_REPO = 'sucaiku_pictures'; 
@@ -13,13 +12,12 @@ const PUBLIC_PATH = 'material-library.json';
       if(savedLayout==='sidebar'||savedLayout==='compact')layoutMode=savedLayout;
       const savedTheme=localStorage.getItem(THEME_KEY);
       if(savedTheme==='dark')themeMode='dark';
-      // ★ 强制刷新后不进入极简模式
     }catch(e){}
     applyLayout();
     setTheme(themeMode);
 
     loadSettings();
-    await loadStore();                     // ★ 改为 await（IndexedDB 异步）
+    await loadStore();                     
     cleanTrash();
     refreshTypeSelect(db.settings.defaultType || db.cats[0] || '');
     setupDropZones();
@@ -33,9 +31,6 @@ const PUBLIC_PATH = 'material-library.json';
     renderPendingImgs();
     fetchHitokoto();
 
-    // =========================================================
-    // 访客模式 / 自动拉取逻辑
-    // =========================================================
     (function(){
       const cfg=loadGH();
       const isOwner = !!(cfg.token && cfg.owner && cfg.repo);
@@ -52,7 +47,6 @@ const PUBLIC_PATH = 'material-library.json';
         return;
       }
 
-      // 2. 访客模式（没有完整 Token）
       const style = document.createElement('style');
       style.innerHTML = `
         body.guest-mode .composer { display: none !important; }

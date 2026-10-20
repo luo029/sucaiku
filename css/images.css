@@ -123,7 +123,84 @@
 .mgr-badge.used { background: var(--accent-soft); color: var(--accent); }
 .mgr-badge.unused { background: var(--danger-soft); color: var(--danger); }
 
-/* Toast */
-#toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%) translateY(20px);background:linear-gradient(135deg,#2a2d40,#1e2130);color:#fff;padding:12px 24px;border-radius:14px;font-size:14px;opacity:0;pointer-events:none;transition:all .3s cubic-bezier(.2,.8,.2,1.1);z-index:200;white-space:nowrap;box-shadow:0 12px 36px rgba(30,33,48,.4);letter-spacing:.3px;font-weight:500;max-width:calc(100vw - 40px);overflow:hidden;text-overflow:ellipsis}
-#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-#toast.raised{bottom:110px}
+/* ★ 新增：美化后的 Toast，毛玻璃胶囊风格 */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 12px 24px;
+  border-radius: 999px;
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all .3s cubic-bezier(.2,.8,.2,1.1);
+  z-index: 999;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  white-space: nowrap;
+  font-weight: 500;
+  letter-spacing: .3px;
+  max-width: calc(100vw - 40px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-theme="dark"] #toast {
+  background: rgba(30, 32, 45, 0.85);
+  border-color: rgba(255,255,255,0.1);
+  color: #fff;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+#toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+#toast.raised {
+  bottom: 110px;
+}
+
+/* ★ 新增：批量修改分类与标签的网格布局 */
+.batch-cat-item {
+  padding: 10px 8px;
+  text-align: center;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--card);
+  color: var(--text-2);
+  transition: all 0.2s;
+}
+.batch-cat-item:hover { border-color: var(--line-2); background: var(--bg); }
+.batch-cat-item.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: 0 2px 8px rgba(99,102,241,0.15);
+}
+
+.batch-tag-item {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  color: var(--text-2);
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.batch-tag-item:hover { border-color: var(--line-2); background: var(--bg); }
+.batch-tag-item.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}

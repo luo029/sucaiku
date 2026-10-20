@@ -120,7 +120,6 @@ document.addEventListener('click',e=>{
 
 $('hitokotoRefresh').addEventListener('click',fetchHitokoto);
 
-// ★ 修复：搜索防抖 180ms，避免每次敲字全库重算
 let searchDebounceTimer = null;
 searchEl.addEventListener('input',()=>{
   clearTimeout(searchDebounceTimer);
@@ -133,7 +132,6 @@ searchEl.addEventListener('input',()=>{
   }, 180);
 });
 
-// 分类下拉框
 if ($('catFilterBtn')) {
   $('catFilterBtn').addEventListener('click', e => {
     e.stopPropagation();
@@ -382,7 +380,6 @@ function handleImgFallback(e) {
   });
 }
 
-// ★ 修复：把图床管理网格 imgMgrGrid 也加入错误兜底监听
 [listEl, document.getElementById('imgMasonry'), pendingImgsEl, document.getElementById('imgMgrGrid')].forEach(el => {
   if (el) el.addEventListener('error', handleImgFallback, true);
 });

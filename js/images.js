@@ -159,7 +159,8 @@ function openImgCatChooser(files){
   $('imgCatCount').textContent=files.length;
   $('imgUploadStatus').textContent='';
   
-  // 重置进度条
+  if ($('imgUploadTags')) $('imgUploadTags').value = '';
+
   $('imgProgressWrap').style.display = 'none';
   $('imgProgressBar').style.width = '0%';
   $('imgProgressBar').style.background = 'var(--accent)';
@@ -180,19 +181,21 @@ async function startUploadPending(){
   if(!ghReady(cfg)){toast('请先在设置中配置 GitHub');return;}
   uploadInProgress=true;
   const cat=pendingUploadCat||'其他';
+  
+  const tagsRaw = $('imgUploadTags') ? $('imgUploadTags').value.trim() : '';
+  const imgTags = tagsRaw ? tagsRaw.split(/[,，\s]+/).filter(Boolean) : [];
+
   const statusEl=$('imgUploadStatus');
   const rc=ghRepoConfig('img');
   const files=pendingUploadFiles.slice();
   let success=0,fail=0;
 
-  // 显示进度条
   $('imgProgressWrap').style.display = 'block';
 
   try{
     for(let i=0;i<files.length;i++){
       const file=files[i];
       try{
-        // 更新进度条基础状态（压缩阶段，用紫色）
         const baseProgress = (i / files.length) * 100;
         $('imgProgressBar').style.width = baseProgress + '%';
         $('imgProgressPercent').textContent = Math.floor(baseProgress) + '%';
@@ -203,7 +206,6 @@ async function startUploadPending(){
         const comp=await compressImage(file,msg=>{statusEl.textContent=`[${i+1}/${files.length}] ${msg}`;});
         const ratio=comp.origSize>0?(1-comp.newSize/comp.origSize)*100:0;
         
-        // 压缩完成，准备上传（变为蓝色）
         $('imgProgressBar').style.background = '#3b82f6';
         statusEl.textContent=`[${i+1}/${files.length}] 压缩 ${fmtSize(comp.origSize)} → ${fmtSize(comp.newSize)}（${ratio>0?'-'+ratio.toFixed(0)+'%':'无变化'}），上传中…`;
         $('imgProgressText').textContent = `[${i+1}/${files.length}] 上传中...`;
@@ -227,12 +229,11 @@ async function startUploadPending(){
         const b64=await blobToBase64(comp.blob);
         await ghPutRaw(rc,fullPath,b64,null,`upload ${relPath}`);
 
-        pendingImages.push({path:relPath,url:'',cat,size:comp.newSize,origSize:comp.origSize});
+        pendingImages.push({path:relPath,url:'',cat,tags:imgTags.slice(),size:comp.newSize,origSize:comp.origSize});
         renderPendingImgs();
         success++;
         statusEl.textContent=`[${i+1}/${files.length}] 完成：${fmtSize(comp.origSize)} → ${fmtSize(comp.newSize)}（${comp.via||''}）`;
 
-        // 更新进度条（完成）
         const doneProgress = ((i + 1) / files.length) * 100;
         $('imgProgressBar').style.width = doneProgress + '%';
         $('imgProgressPercent').textContent = Math.floor(doneProgress) + '%';
@@ -245,7 +246,6 @@ async function startUploadPending(){
       }
     }
 
-    // 全部完成
     $('imgProgressBar').style.background = fail > 0 ? 'var(--danger)' : '#10b981';
     $('imgProgressText').textContent = fail > 0 ? '部分失败' : '全部完成';
     
@@ -256,13 +256,13 @@ async function startUploadPending(){
         let source=sourceEl.value.trim();
         if(!source && currentSource!==ALL_SOURCES) source=currentSource;
         if(!source && db.fixedSource) source=db.fixedSource;
-        const tagsRaw=tagsEl.value.trim();
-        const tags=tagsRaw?tagsRaw.split(/[,，\s]+/).filter(Boolean):[];
-        if(!tags.length && db.fixedTags.length) tags.push(...db.fixedTags);
+        const tagsRawStr=tagsEl.value.trim();
+        const itemTags=tagsRawStr?tagsRawStr.split(/[,，\s]+/).filter(Boolean):[];
+        if(!itemTags.length && db.fixedTags.length) itemTags.push(...db.fixedTags);
 
         db.items.unshift({
           id:uid(), text:'', type:IMG_TYPE, source,
-          tags:[...new Set(tags)],
+          tags:[...new Set(itemTags)],
           images:pendingImages.slice(),
           createdAt:Date.now()
         });
@@ -309,6 +309,7 @@ function collectAllImages(){
         src: imageSrc(im),
         path: im.path||'',
         cat: im.cat||'其他',
+        tags: im.tags||[],
         itemId: item.id,
         itemText: item.text||''
       });
@@ -339,7 +340,6 @@ function _renderMasonryBatch(){
   $('imgMasonry').insertAdjacentHTML('beforeend', html);
   _imgViewRendered += next.length;
 
-  // 如果第一批还没填满一屏，继续加
   const wrap = document.querySelector('.img-masonry-wrap');
   if (wrap && _imgViewRendered < _imgViewFiltered.length && wrap.scrollHeight <= wrap.clientHeight) {
     _renderMasonryBatch();
@@ -403,7 +403,6 @@ function openImgView(){
   renderImgView();
   $('imgView').hidden=false;
   document.body.style.overflow='hidden';
-  // 重置滚动位置
   const wrap = document.querySelector('.img-masonry-wrap');
   if (wrap) wrap.scrollTop = 0;
 }

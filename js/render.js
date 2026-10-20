@@ -151,7 +151,6 @@ function renderTags(){
   }
 }
 
-/* ★ 修复：分类下拉列表去重，避免 IMG_TYPE / UNCAT 重复出现 */
 function renderCatFilter(){
   if ($('catFilterText')) {
     $('catFilterText').textContent = currentType === '全部' ? '全部分类' : currentType;
@@ -171,7 +170,6 @@ function renderCatFilterList() {
   const catCounts={};
   db.items.forEach(i=>catCounts[i.type]=(catCounts[i.type]||0)+1);
   
-  // ★ 用 Set 去重
   const catSet = new Set(['全部', IMG_TYPE, ...db.cats]);
   if ((catCounts[UNCAT]||0) > 0) catSet.add(UNCAT);
   
@@ -323,7 +321,10 @@ function renderList(){
     const isExpanded=expandedIds.has(i.id);
     const contentClass=isLongText?(isExpanded?'':'collapsed'):'';
     const expandBtn=isLongText?`<div class="expand-btn" data-expand="${i.id}">${isExpanded?'收起':'展开全文'}</div>`:'';
-    const tagsHtml=(i.tags&&i.tags.length)?i.tags.map(t=>`<span class="tag-chip" data-tag="${esc(t)}">#${esc(t)}</span>`).join(''):'';
+    
+    const itemTagSet = new Set(i.tags || []);
+    (i.images||[]).forEach(im => (im.tags||[]).forEach(t => itemTagSet.add(t)));
+    const tagsHtml=Array.from(itemTagSet).map(t=>`<span class="tag-chip" data-tag="${esc(t)}">#${esc(t)}</span>`).join('');
     
     const imgsHtml=(i.images&&i.images.length)?`<div class="card-imgs">${i.images.map(im=>{
       const src=imageSrc(im);
@@ -354,7 +355,6 @@ function renderList(){
 
   renderPagination(total,totalPages,start,pageItems.length);
   updateBatchBar(pageItems);
-  // ★ 删除了 bindDragEvents() 调用（现在是事件委托，不需要每次重绑）
 }
 
 function renderPagination(total,totalPages,start,pageCount){

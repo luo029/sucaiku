@@ -39,7 +39,14 @@ document.addEventListener('keydown',e=>{
   if(focusMode){setFocus(false);return;}
   if(zenMode){setZen(false);return;}
   if(!$('imgView').hidden){closeImgView();return;}
-  if(!$('imgManagerView').hidden){$('imgManagerView').hidden=true;document.body.style.overflow='';return;}
+  if(!$('imgManagerView').hidden){
+    if (imgMgrSelectMode) {
+      exitImgMgrSelectMode();
+    } else {
+      $('imgManagerView').hidden=true;document.body.style.overflow='';
+    }
+    return;
+  }
   const openMask=document.querySelector('.modal-mask.show');
   if(openMask){
     if(openMask.id==='modalMask'){closeModal();return;}
@@ -61,7 +68,7 @@ safeBind('modalMask', 'click', e => {if(e.target===$('modalMask'))closeModal();}
 // ★ 随机盲盒核心逻辑升级
 let randomAnimating = false;
 let randomFilterValue = 'all';
-let autoFlipTimer = null; // ★ 新增：自动翻动定时器
+let autoFlipTimer = null; 
 
 function getRandomPool() {
   if (randomFilterValue === 'all') return db.items;
@@ -78,7 +85,7 @@ function getRandomPool() {
   }
   if (randomFilterValue.startsWith('tag:')) {
     const t = randomFilterValue.slice(4);
-    return db.items.filter(i => (i.tags || []).includes(t));
+    return db.items.filter(i => (i.tags || []).includes(t) || (i.images||[]).some(im => (im.tags||[]).includes(t)));
   }
   return db.items;
 }
@@ -132,7 +139,6 @@ function renderRandomFilterList() {
   listEl.innerHTML = html;
 }
 
-// 自定义下拉面板交互
 safeBind('randomFilterBtn', 'click', e => {
   e.stopPropagation();
   const panel = $('randomFilterPanel');
@@ -188,7 +194,6 @@ document.addEventListener('click', e => {
   }
 });
 
-// ★ 新增：自动翻动核心逻辑
 function stopAutoFlip() {
   if (autoFlipTimer) {
     clearInterval(autoFlipTimer);
@@ -198,9 +203,6 @@ function stopAutoFlip() {
 }
 
 function startAutoFlip() {
-  // ★ 修复：只清理计时器，绝不重置复选框
-  // 原代码调用 stopAutoFlip() 会把 checkbox 重置为 false，
-  // 导致用户刚勾上就被判定为未勾选，计时器永远启动不了
   if (autoFlipTimer) {
     clearInterval(autoFlipTimer);
     autoFlipTimer = null;
@@ -212,10 +214,9 @@ function startAutoFlip() {
   if (isNaN(sec) || sec < 5) sec = 5;
   if (sec > 300) sec = 300;
   $('randomAutoFlipTime').value = sec;
-  localStorage.setItem('random-auto-flip-time', sec); // 记录用户的秒数偏好
+  localStorage.setItem('random-auto-flip-time', sec);
 
   autoFlipTimer = setInterval(() => {
-    // 如果弹窗被意外关闭了，自动清理定时器
     if (!$('randomMask').classList.contains('show')) {
       stopAutoFlip();
       return;
@@ -255,20 +256,17 @@ function drawRandomBox() {
     `;
   };
 
-  // 首次打开时直接显示
   if($('randomMask').classList.contains('show') === false) {
     $('randomContent').innerHTML = renderContent();
     $('randomMask').classList.add('show');
     return;
   }
 
-  // 判断是否开启动画
   if (db.settings.enableAnim === false) {
     $('randomContent').innerHTML = renderContent();
     return;
   }
 
-  // 执行翻转动画
   randomAnimating = true;
   const contentEl = $('randomContent');
   
@@ -299,7 +297,6 @@ safeBind('menuRandomBtn', 'click', () => {
   btn.style.color = '';
   btn.style.background = '';
   
-  // 从 localStorage 恢复上次设置的秒数，但默认不勾选自动翻动
   const savedTime = localStorage.getItem('random-auto-flip-time') || '30';
   $('randomAutoFlipTime').value = savedTime;
   $('randomAutoFlipCheck').checked = false;
@@ -307,7 +304,6 @@ safeBind('menuRandomBtn', 'click', () => {
   drawRandomBox();
 });
 
-// 绑定自动翻动的复选框
 safeBind('randomAutoFlipCheck', 'change', e => {
   if (e.target.checked) {
     startAutoFlip();
@@ -316,7 +312,6 @@ safeBind('randomAutoFlipCheck', 'change', e => {
   }
 });
 
-// 绑定秒数修改（修改后立刻生效并重置计时）
 safeBind('randomAutoFlipTime', 'change', e => {
   let sec = parseInt(e.target.value, 10);
   if (isNaN(sec) || sec < 5) sec = 5;
@@ -325,7 +320,7 @@ safeBind('randomAutoFlipTime', 'change', e => {
   localStorage.setItem('random-auto-flip-time', sec);
   
   if (autoFlipTimer) {
-    startAutoFlip(); // 重启定时器
+    startAutoFlip(); 
   }
 });
 
@@ -336,7 +331,7 @@ safeBind('randomCloseBtn', 'click', () => {
 safeBind('randomAgainBtn', 'click', () => {
   drawRandomBox();
   if (autoFlipTimer) {
-    startAutoFlip(); // 手动抽时重置计时，避免刚抽完又立刻自动抽
+    startAutoFlip(); 
   }
 });
 safeBind('randomMask', 'click', e => {
@@ -397,19 +392,291 @@ safeBind('menuImgManagerBtn', 'click', () => {
   openImgManager();
 });
 safeBind('imgMgrCloseBtn', 'click', () => {
+  if (imgMgrSelectMode) exitImgMgrSelectMode();
   $('imgManagerView').hidden = true;
   document.body.style.overflow = '';
 });
 safeBind('imgMgrRefreshBtn', 'click', loadRepoImages);
 safeBind('imgMgrCleanUnusedBtn', 'click', cleanAllUnusedImages);
 
+// ★ 新增：图床批量操作交互（动态状态切换）
+safeBind('imgMgrSelectBtn', 'click', () => {
+  imgMgrSelectMode = !imgMgrSelectMode;
+  imgMgrSelectedIds.clear(); 
+  renderImgMgrUI();
+  if (imgMgrSelectMode) toast('已进入批量管理，请点击图片进行选择');
+});
+
+safeBind('imgMgrBatchExit', 'click', () => {
+  exitImgMgrSelectMode();
+});
+
+safeBind('imgMgrSelectAllBtn', 'click', () => {
+  const pageItems = imgMgrFilteredFiles.slice(0, imgMgrRenderedCount); 
+  const allSel = pageItems.every(f => imgMgrSelectedIds.has(f.relPath));
+  if (allSel) {
+    pageItems.forEach(f => imgMgrSelectedIds.delete(f.relPath));
+  } else {
+    pageItems.forEach(f => imgMgrSelectedIds.add(f.relPath));
+  }
+  renderImgMgrUI();
+});
+
+// ★ 批量修改分类弹窗
+safeBind('imgMgrBatchCatBtn', 'click', () => {
+  if (!imgMgrSelectedIds.size) return toast('请先选择图片');
+  $('imgMgrBatchEditTitle').textContent = '批量修改分类';
+  $('imgMgrBatchEditCount').textContent = imgMgrSelectedIds.size;
+  $('imgMgrBatchCatWrap').style.display = 'block';
+  $('imgMgrBatchTagWrap').style.display = 'none';
+  
+  const cats = (db.imageCategories.length ? db.imageCategories : DEFAULT_IMG_CATS);
+  const grid = $('imgMgrBatchCatGrid');
+  grid.innerHTML = cats.map((c, i) => {
+    const palette = PALETTE[i % PALETTE.length];
+    return `<div class="batch-cat-item" data-cat="${esc(c)}">${esc(c)}</div>`;
+  }).join('');
+  
+  const first = grid.querySelector('.batch-cat-item');
+  if (first) {
+    first.classList.add('active');
+    grid.dataset.selected = first.dataset.cat;
+  }
+  
+  $('imgMgrBatchEditMask').classList.add('show');
+});
+
+// 分类选择网格（单选逻辑）
+$('imgMgrBatchCatGrid').addEventListener('click', e => {
+  const item = e.target.closest('.batch-cat-item');
+  if (!item) return;
+  const grid = $('imgMgrBatchCatGrid');
+  grid.querySelectorAll('.batch-cat-item').forEach(el => el.classList.remove('active'));
+  item.classList.add('active');
+  grid.dataset.selected = item.dataset.cat;
+});
+
+// ★ 批量修改标签弹窗
+let selectedBatchTags = new Set(); 
+
+safeBind('imgMgrBatchTagBtn', 'click', () => {
+  if (!imgMgrSelectedIds.size) return toast('请先选择图片');
+  $('imgMgrBatchEditTitle').textContent = '批量修改标签';
+  $('imgMgrBatchEditCount').textContent = imgMgrSelectedIds.size;
+  $('imgMgrBatchCatWrap').style.display = 'none';
+  $('imgMgrBatchTagWrap').style.display = 'block';
+  
+  $('imgMgrBatchTagSearch').value = '';
+  $('imgMgrBatchTagNewInput').value = '';
+  selectedBatchTags.clear();
+  
+  renderBatchTagPool();
+  $('imgMgrBatchEditMask').classList.add('show');
+});
+
+function renderBatchTagPool() {
+  const q = $('imgMgrBatchTagSearch').value.trim().toLowerCase();
+  const allTags = Object.keys(collectTags()).sort((a,b) => a.localeCompare(b,'zh'));
+  const pool = $('imgMgrBatchTagPool');
+  
+  if (!allTags.length) {
+    pool.innerHTML = '<div style="font-size:13px; color:var(--text-3); width:100%; text-align:center; padding:12px;">暂无标签，请在下方直接输入</div>';
+    return;
+  }
+  
+  const filtered = allTags.filter(t => !q || t.toLowerCase().includes(q));
+  
+  if (!filtered.length) {
+    pool.innerHTML = '<div style="font-size:13px; color:var(--text-3); width:100%; text-align:center; padding:12px;">没有找到匹配的标签</div>';
+    return;
+  }
+  
+  pool.innerHTML = filtered.map(t => {
+    const isSel = selectedBatchTags.has(t);
+    return `<div class="batch-tag-item ${isSel?'active':''}" data-tag="${esc(t)}">
+      ${isSel?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>':''}
+      #${esc(t)}
+    </div>`;
+  }).join('');
+}
+
+$('imgMgrBatchTagSearch').addEventListener('input', renderBatchTagPool);
+
+$('imgMgrBatchTagPool').addEventListener('click', e => {
+  const item = e.target.closest('.batch-tag-item');
+  if (!item) return;
+  const t = item.dataset.tag;
+  if (selectedBatchTags.has(t)) selectedBatchTags.delete(t);
+  else selectedBatchTags.add(t);
+  renderBatchTagPool();
+});
+
+safeBind('imgMgrBatchTagAddBtn', 'click', () => {
+  const val = $('imgMgrBatchTagNewInput').value.trim();
+  if (!val) return;
+  const tags = val.split(/[,，\s]+/).filter(Boolean);
+  tags.forEach(t => selectedBatchTags.add(t));
+  $('imgMgrBatchTagNewInput').value = '';
+  renderBatchTagPool();
+});
+
+safeBind('imgMgrBatchEditCancel', 'click', () => {
+  $('imgMgrBatchEditMask').classList.remove('show');
+});
+
+// ★ 确认修改逻辑
+safeBind('imgMgrBatchEditConfirm', 'click', () => {
+  const isCat = $('imgMgrBatchEditTitle').textContent.includes('分类');
+  let updatedCount = 0;
+  
+  if (isCat) {
+    const newCat = $('imgMgrBatchCatGrid').dataset.selected;
+    if (!newCat) return toast('请选择一个分类');
+    
+    repoImagesCache.forEach(f => {
+      if (imgMgrSelectedIds.has(f.relPath)) f.cat = newCat;
+    });
+    
+    db.items.forEach(item => {
+      if (item.images) {
+        item.images.forEach(im => {
+          if (!im.path) return;
+          const ip = String(im.path).trim();
+          for (const relPath of imgMgrSelectedIds) {
+            const rp = String(relPath).trim();
+            const filename = relPath.split('/').pop();
+            if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.includes(filename)) {
+              im.cat = newCat;
+              updatedCount++;
+              break;
+            }
+          }
+        });
+      }
+    });
+    toast(`已修改 ${imgMgrSelectedIds.size} 张图片的分类${updatedCount ? '，并同步了 '+updatedCount+' 处引用' : ''}`);
+  } else {
+    const newTags = Array.from(selectedBatchTags);
+    repoImagesCache.forEach(f => {
+      if (imgMgrSelectedIds.has(f.relPath)) f.tags = newTags.slice();
+    });
+    
+    db.items.forEach(item => {
+      if (item.images) {
+        item.images.forEach(im => {
+          if (!im.path) return;
+          const ip = String(im.path).trim();
+          for (const relPath of imgMgrSelectedIds) {
+            const rp = String(relPath).trim();
+            const filename = relPath.split('/').pop();
+            if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.includes(filename)) {
+              im.tags = newTags.slice();
+              updatedCount++;
+              break;
+            }
+          }
+        });
+      }
+    });
+    toast(`已修改 ${imgMgrSelectedIds.size} 张图片的标签${updatedCount ? '，并同步了 '+updatedCount+' 处引用' : ''}`);
+  }
+  
+  save();
+  $('imgMgrBatchEditMask').classList.remove('show');
+  exitImgMgrSelectMode();
+});
+
+safeBind('imgMgrBatchDelBtn', 'click', async () => {
+  if (!imgMgrSelectedIds.size) return toast('请先选择图片');
+  const count = imgMgrSelectedIds.size;
+  if (!confirm(`确定要彻底删除选中的 ${count} 张图片吗？\n\n这会直接向 GitHub 发送 ${count} 个删除请求，不可恢复！`)) return;
+  
+  const btn = $('imgMgrBatchDelBtn');
+  const origText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '正在删除...';
+  
+  const rc = ghRepoConfig('img');
+  let success = 0;
+  let fail = 0;
+  
+  const toDelete = repoImagesCache.filter(f => imgMgrSelectedIds.has(f.relPath));
+  
+  for (const f of toDelete) {
+    try {
+      const fullPath = `${rc.path}/${f.relPath}`;
+      const url = ghApiUrl(rc, fullPath);
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${rc.token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: `delete batch ${f.relPath}`, sha: f.sha, branch: rc.branch })
+      });
+      if (res.ok) {
+        success++;
+        repoImagesCache = repoImagesCache.filter(x => x.relPath !== f.relPath);
+      } else {
+        fail++;
+      }
+    } catch (e) {
+      fail++;
+    }
+    await new Promise(r => setTimeout(r, 300)); 
+  }
+  
+  const affectedIds = new Set();
+  let removedImagesCount = 0;
+  db.items.forEach(item => {
+    if (item.images) {
+      const beforeLen = item.images.length;
+      item.images = item.images.filter(im => {
+        if (!im.path) return true;
+        const ip = String(im.path).trim();
+        for (const f of toDelete) {
+          const rp = String(f.relPath).trim();
+          if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip)) {
+            removedImagesCount++;
+            return false;
+          }
+        }
+        return true;
+      });
+      if (item.images.length !== beforeLen) affectedIds.add(item.id);
+    }
+  });
+  
+  if (affectedIds.size > 0) {
+    db.items = db.items.filter(i => {
+      if (!affectedIds.has(i.id)) return true;
+      return i.text || (i.images && i.images.length > 0);
+    });
+    save();
+    render();
+  }
+  
+  btn.disabled = false;
+  btn.innerHTML = origText;
+  
+  toast(`清理完成：成功 ${success} 张，失败 ${fail} 张`);
+  exitImgMgrSelectMode();
+});
+
+// 普通点击模式下的删除和打开大图
 safeBind('imgMgrGrid', 'click', e => {
+  if (imgMgrSelectMode) {
+    const card = e.target.closest('.mgr-card');
+    if (card && card.dataset.relPath) {
+      toggleSelectImgMgr(card.dataset.relPath);
+    }
+    return;
+  }
+  
   const delBtn = e.target.closest('[data-del-img-mgr]');
   if (delBtn) {
     e.stopPropagation();
     deleteRepoImage(delBtn.dataset.delImgMgr, delBtn.dataset.sha);
     return;
   }
+  
   const img = e.target.closest('[data-open-img]');
   if (img) {
     window.open(img.dataset.openImg, '_blank', 'noopener');
@@ -443,7 +710,6 @@ safeBind('fileInput', 'change', e => {
   handleImportFile(f);e.target.value='';
 });
 
-/* 设置面板 */
 safeBind('settingCloseBtn', 'click', () => {
   const mask = $('settingMask');
   if (mask) mask.classList.remove('show');
@@ -478,7 +744,6 @@ function openSettings() {
 safeBind('menuSettingBtn', 'click', openSettings);
 safeBind('gearBtn', 'click', openSettings);
 
-// 安心输入模式
 safeBind('focusModeCatInput', 'change', e => {
   db.settings.focusModeCat = e.target.value.trim() || '收件箱';
   saveSettings();
@@ -552,9 +817,18 @@ safeBind('sidebarShowTag', 'change', e => {
 });
 
 safeBind('copyWithSource', 'change', e => {
-  db.settings.copyWithSource=e.target.checked;saveSettings();
-  toast(e.target.checked?'已开启复制附带来源':'已关闭');
+  db.settings.copyWithSource=e.target.checked;
+  if($('copySourceFormatWrap')) $('copySourceFormatWrap').style.display = e.target.checked ? 'block' : 'none';
+  saveSettings();
+  toast(e.target.checked?'已开启复制附带后缀':'已关闭');
 });
+
+safeBind('copySourceFormat', 'change', e => {
+  db.settings.copySourceFormat = e.target.value; 
+  saveSettings();
+  toast('自定义后缀格式已保存');
+});
+
 safeBind('trashTtlInput', 'change', e => {
   const v=Math.max(1,Math.min(365,parseInt(e.target.value,10)||30));
   e.target.value=v;db.settings.trashTtlDays=v;saveSettings();cleanTrash();renderTrash();
@@ -626,7 +900,6 @@ safeBind('tinypngProxy', 'change', e => {
   db.settings.tinypngProxy=e.target.value.trim();saveSettings();toast('已保存 TinyPNG 代理');
 });
 
-/* GitHub 表单 */
 ['ghToken','ghOwner','ghRepo','ghBranch','ghDataPath','ghSiteBase','ghImgOwner','ghImgRepo','ghImgBranch','ghImgPath','ghImgSite','ghImgToken'].forEach(id=>{
   safeBind(id, 'change', () => collectGHForm());
 });
@@ -688,7 +961,6 @@ if (oldImgCatsInput) {
     const editor = document.getElementById('imgCatsEditor');
     if (!editor) return;
     editor.innerHTML = db.imageCategories.map((c, idx) => {
-      // ★ 修复：直接按数组索引取色，绝不重复
       const palette = PALETTE[idx % PALETTE.length];
       return `
         <div style="display:inline-flex; align-items:center; gap:6px; background:${palette.bg}; color:${palette.fg}; padding:4px 10px 4px 12px; border-radius:99px; font-size:13px; font-weight:600; border:1px solid ${palette.fg};">

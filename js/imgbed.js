@@ -1,4 +1,4 @@
-/* js / imgbed.js · 图床管理：仓库图片列表 / 删除 / 清理 / 多维筛选 */
+/* js / imgbed.js · 图床管理：仓库图片列表 / 删除 / 清理 / 多维筛选 / 批量操作 */
 let imgMgrCurrentCat = 'all';
 let imgMgrCurrentTime = 'all';
 
@@ -112,23 +112,32 @@ async function loadRepoImages() {
     repoImagesCache = files.map(f => {
       const relPath = f.path.substring(prefix.length);
       const filename = f.path.split('/').pop();
-      const cat = parseCatFromFilename(filename);
       
+      let matchedCat = null;
+      let matchedTags = new Set();
       const isUsed = db.items.some(item => 
         item.images && item.images.some(im => {
           if (!im.path) return false;
           const ip = String(im.path).trim();
           const rp = String(relPath).trim();
-          return ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.includes(filename);
+          const isMatch = ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.includes(filename);
+          if (isMatch) {
+            if (im.cat) matchedCat = im.cat;
+            if (Array.isArray(im.tags)) im.tags.forEach(t => matchedTags.add(t));
+          }
+          return isMatch;
         })
       );
+      
+      const cat = matchedCat || parseCatFromFilename(filename);
+      const tags = Array.from(matchedTags);
       
       const parts = relPath.split('/');
       let yearMonth = '';
       if (parts.length >= 3) yearMonth = parts[0] + '年' + parts[1] + '月';
       else if (parts.length === 2) yearMonth = parts[0] + '年';
 
-      return { ...f, relPath, filename, cat, isUsed, yearMonth };
+      return { ...f, relPath, filename, cat, tags, isUsed, yearMonth };
     }).sort((a, b) => b.path.localeCompare(a.path));
 
     renderImgMgrUI();
@@ -142,6 +151,22 @@ async function loadRepoImages() {
 function renderImgMgrUI() {
   const status = $('imgMgrStatus');
   const grid = $('imgMgrGrid');
+  
+  // ★ 实时同步「批量管理」按钮的 UI 状态
+  const selectBtn = $('imgMgrSelectBtn');
+  if (selectBtn) {
+    if (imgMgrSelectMode) {
+      selectBtn.innerHTML = '✖️ 退出批量';
+      selectBtn.style.color = 'var(--danger)';
+      selectBtn.style.borderColor = 'var(--danger)';
+      selectBtn.style.background = 'var(--danger-soft)';
+    } else {
+      selectBtn.innerHTML = '☑️ 批量管理';
+      selectBtn.style.color = '';
+      selectBtn.style.borderColor = '';
+      selectBtn.style.background = '';
+    }
+  }
 
   if (repoImagesCache.length === 0) {
     if (status.innerHTML.includes('正在拉取')) status.innerHTML = '';
@@ -181,7 +206,6 @@ function renderImgMgrUI() {
 
     allCats.forEach(c => {
       const count = repoImagesCache.filter(f => f.cat === c).length;
-      // ★ 修复：直接按数组索引取色
       let idx = db.imageCategories.indexOf(c);
       if (idx < 0) idx = 0;
       const palette = PALETTE[idx % PALETTE.length];
@@ -234,6 +258,7 @@ function renderImgMgrUI() {
   if (warningHtml) grid.innerHTML = warningHtml;
 
   renderImgMgrBatch();
+  updateImgMgrBatchBar();
 }
 
 function renderImgMgrBatch() {
@@ -253,24 +278,31 @@ function renderImgMgrBatch() {
         ? '<span class="mgr-badge used">已引用</span>' 
         : '<span class="mgr-badge unused">未引用</span>';
 
-      // ★ 修复：直接按数组索引取色
       let idx = db.imageCategories.indexOf(f.cat);
       if (idx < 0) idx = 0;
       const palette = PALETTE[idx % PALETTE.length];
 
-      // ★ 修复：img 加 data-img-path，让 handleImgFallback 能兜底私有仓库图片
-      return `<div class="mgr-card">
-        <div class="mgr-img-wrap" data-open-img="${esc(url)}" data-img-path="${esc(f.relPath)}">
+      const tagsHtml = (f.tags && f.tags.length) 
+        ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; justify-content:center;">${f.tags.map(t => `<span class="tag-chip" style="font-size:10px; padding:1px 6px;">#${esc(t)}</span>`).join('')}</div>` 
+        : '';
+
+      const isSelected = imgMgrSelectedIds.has(f.relPath);
+      const checkHtml = imgMgrSelectMode ? `<div class="mgr-select-check" style="position:absolute; top:8px; left:8px; z-index:10; background:${isSelected?'var(--accent)':'rgba(0,0,0,0.4)'}; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; color:#fff; border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="${isSelected?'':'display:none;'}"><path d="M20 6 9 17l-5-5"/></svg></div>` : '';
+
+      return `<div class="mgr-card ${isSelected?'selected':''}" data-rel-path="${esc(f.relPath)}" style="position:relative; ${isSelected?'border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft);':''}">
+        <div class="mgr-img-wrap" ${imgMgrSelectMode?'':'data-open-img="'+esc(url)+'"'} data-img-path="${esc(f.relPath)}">
+          ${checkHtml}
           <img src="${esc(url)}" loading="lazy" data-img-path="${esc(f.relPath)}">
-          <button class="mgr-del-btn" data-del-img-mgr="${esc(f.relPath)}" data-sha="${esc(f.sha)}" title="彻底删除">
+          ${imgMgrSelectMode?'':`<button class="mgr-del-btn" data-del-img-mgr="${esc(f.relPath)}" data-sha="${esc(f.sha)}" title="彻底删除">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
-          </button>
+          </button>`}
         </div>
         <div class="mgr-info">
           <div class="mgr-info-top">
             <span class="tag" style="background:${palette.bg}; color:${palette.fg}; border:none; padding:2px 10px; border-radius:6px; font-size:12px; letter-spacing:0;">${esc(f.cat)}</span>
             ${usedBadge}
           </div>
+          ${tagsHtml}
           <div class="mgr-info-bottom">
             <span>${sizeStr}</span>
             ${f.yearMonth ? `<span style="opacity:0.6; font-size:11px;">${esc(f.yearMonth)}</span>` : ''}
@@ -300,6 +332,8 @@ function renderImgMgrBatch() {
       imgMgrObserver.disconnect();
       imgMgrObserver.observe(sentinel);
     }
+    
+    updateImgMgrBatchBar();
   });
 }
 
@@ -410,4 +444,45 @@ async function cleanAllUnusedImages() {
   
   toast(`清理完成：成功 ${success} 张，失败 ${fail} 张`);
   await loadRepoImages();
+}
+
+/* =========================================================
+   图床批量操作核心逻辑
+   ========================================================= */
+function updateImgMgrBatchBar() {
+  const bar = $('imgMgrBatchBar');
+  if (!bar) return;
+  
+  if (imgMgrSelectMode) {
+    bar.classList.add('show');
+    $('imgMgrBatchNum').textContent = imgMgrSelectedIds.size;
+  } else {
+    bar.classList.remove('show');
+  }
+}
+
+function toggleSelectImgMgr(relPath) {
+  if (imgMgrSelectedIds.has(relPath)) imgMgrSelectedIds.delete(relPath);
+  else imgMgrSelectedIds.add(relPath);
+  
+  const card = document.querySelector(`.mgr-card[data-rel-path="${relPath}"]`);
+  if (card) {
+    card.classList.toggle('selected', imgMgrSelectedIds.has(relPath));
+    card.style.borderColor = imgMgrSelectedIds.has(relPath) ? 'var(--accent)' : '';
+    card.style.boxShadow = imgMgrSelectedIds.has(relPath) ? '0 0 0 2px var(--accent-soft)' : '';
+    
+    const check = card.querySelector('.mgr-select-check');
+    if (check) {
+      check.style.background = imgMgrSelectedIds.has(relPath) ? 'var(--accent)' : 'rgba(0,0,0,0.4)';
+      const svg = check.querySelector('svg');
+      if (svg) svg.style.display = imgMgrSelectedIds.has(relPath) ? 'block' : 'none';
+    }
+  }
+  updateImgMgrBatchBar();
+}
+
+function exitImgMgrSelectMode() {
+  imgMgrSelectMode = false;
+  imgMgrSelectedIds.clear();
+  renderImgMgrUI();
 }

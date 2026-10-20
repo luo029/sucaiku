@@ -76,7 +76,6 @@ function save(){
   clearFilterCache();
   db._rev = (db._rev || 0) + 1;
   _scheduleSaveIDB();
-  // ★ 修复：加 typeof 保护，避免 github.js 尚未加载时 ReferenceError
   if(!suppressPush && typeof scheduleAutoPush === 'function') scheduleAutoPush();
 }
 
@@ -120,7 +119,6 @@ async function saveImmediate(){
 async function loadStore(){
   let data = null;
 
-  // 1. 优先从 IndexedDB 读
   try {
     const idbData = await idbGet(IDB_KEY);
     if (idbData && typeof idbData === 'object') data = idbData;
@@ -128,7 +126,6 @@ async function loadStore(){
     console.warn('IndexedDB 读取失败', e);
   }
 
-  // 2. 首次启动：从 localStorage 读取并迁移
   if (!data) {
     try {
       const raw = localStorage.getItem(STORE_KEY);
@@ -148,12 +145,10 @@ async function loadStore(){
     } catch(e) {}
   }
 
-  // 3. 应用数据
   if (data && typeof data === 'object') {
     applyLoadedData(data);
   }
 
-  // 4. 数据规范化
   db.items.forEach(i => {
     if (i.source && !db.sources.includes(i.source)) db.sources.push(i.source);
     if (!i.tags) i.tags = [];
@@ -172,21 +167,22 @@ function applyLoadedData(o) {
   if (Array.isArray(o.imageCategories) && o.imageCategories.length) {
     db.imageCategories = o.imageCategories.filter(s => typeof s === 'string' && s.trim());
   }
-  // ★ 修复：恢复时合并 settings，确保云端或本地的主题、配置不会丢
   if (o.settings && typeof o.settings === 'object') {
     db.settings = { ...db.settings, ...o.settings, statsDims: { ...db.settings.statsDims, ...(o.settings.statsDims || {}) } };
   }
   db._rev = Number(o._rev) || 0;
 }
 
+// ★ 图片标签处理
 function normalizeImages(arr){
   if(!Array.isArray(arr))return [];
   return arr.map(img=>{
-    if(typeof img==='string')return {url:img,path:'',cat:'其他',size:0,origSize:0};
+    if(typeof img==='string')return {url:img,path:'',cat:'其他',tags:[],size:0,origSize:0};
     if(img && (img.path || img.url)) return {
       path: img.path || '',
       url: img.url || '',
       cat: img.cat || '其他',
+      tags: Array.isArray(img.tags) ? [...new Set(img.tags.map(t => String(t).trim()).filter(Boolean))] : [],
       size: Number(img.size) || 0,
       origSize: Number(img.origSize) || 0
     };
@@ -256,12 +252,18 @@ function catColor(name){
   return{bg:`hsl(${hue}, 70%, 95%)`,fg:`hsl(${hue}, 60%, 40%)`};
 }
 
+// ★ 标签合并统计
 function collectTags(){
   const counts={};
-  db.items.forEach(i=>(i.tags||[]).forEach(t=>{counts[t]=(counts[t]||0)+1;}));
+  db.items.forEach(i=>{
+    const tSet = new Set(i.tags || []);
+    (i.images||[]).forEach(im => (im.tags||[]).forEach(t => tSet.add(t)));
+    tSet.forEach(t=>{counts[t]=(counts[t]||0)+1;});
+  });
   return counts;
 }
 
+// ★ 标签搜索合并
 function getFilteredItems(){
   const cacheKey = `${currentType}|${currentSource}|${currentTag}|${keyword}|${db._rev || 0}`;
   if (_filterCacheKey === cacheKey && _filterCacheResult) {
@@ -272,9 +274,15 @@ function getFilteredItems(){
   const arr=db.items.filter(i=>{
     if(currentType!=='全部'&&i.type!==currentType)return false;
     if(currentSource!==ALL_SOURCES&&i.source!==currentSource)return false;
-    if(currentTag&&!(i.tags||[]).includes(currentTag))return false;
+    
+    if(currentTag){
+      const hasTag = (i.tags||[]).includes(currentTag) || (i.images||[]).some(im => (im.tags||[]).includes(currentTag));
+      if(!hasTag) return false;
+    }
+    
     if(terms.length){
-      const hay=((i.text||'')+' '+(i.source||'')+' '+i.type+' '+(i.tags||[]).join(' ')+' '+(i.images||[]).map(im=>im.cat||'').join(' ')).toLowerCase();
+      const imgHay = (i.images||[]).map(im => (im.cat||'') + ' ' + (im.tags||[]).join(' ')).join(' ');
+      const hay=((i.text||'')+' '+(i.source||'')+' '+i.type+' '+(i.tags||[]).join(' ')+' '+imgHay).toLowerCase();
       if(!terms.every(t=>hay.includes(t)))return false;
     }
     return true;

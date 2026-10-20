@@ -20,7 +20,9 @@ const AVAILABLE_STYLES = [
 ];
 
 const DEFAULT_SETTINGS={
-  copyWithSource:false,trashTtlDays:30,statsDims:{cat:true,source:true,tag:true},statsLimit:8,
+  copyWithSource:false,
+  copySourceFormat:'—— {source}', // 默认格式
+  trashTtlDays:30,statsDims:{cat:true,source:true,tag:true},statsLimit:8,
   compressMode:'local',tinypngKey:'',tinypngProxy:'',
   catLimit:3, srcLimit:3, tagLimit:3,
   defaultType:'',
@@ -86,6 +88,10 @@ let draggedItemId=null;
 let currentImgViewCat='全部';
 let repoImagesCache = [];
 let imgMgrCurrentFilter = 'all';
+
+// 图床批量操作状态
+let imgMgrSelectMode = false;
+let imgMgrSelectedIds = new Set();
 
 function trashTtlMs(){
   const d=Number(db.settings.trashTtlDays)||30;
@@ -165,14 +171,25 @@ function fmtFull(ts){const d=new Date(ts||Date.now());return `${d.getFullYear()}
 let toastTimer;
 function toast(msg){
   const el=$('toast');el.textContent=msg;
-  el.classList.toggle('raised',batchBar.classList.contains('show'));
+  el.classList.toggle('raised',batchBar.classList.contains('show') || $('imgMgrBatchBar').classList.contains('show'));
   el.classList.add('show');clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>el.classList.remove('show'),2400);
 }
 
 function copyText(text,source){
   let finalText=String(text||'').replace(/[【】]|\*\*|==/g, '');
-  if(db.settings.copyWithSource&&source)finalText+='\n—— '+source;
+  if(db.settings.copyWithSource){
+    const fmt = db.settings.copySourceFormat; 
+    if (fmt) {
+      let suffix = '';
+      if (fmt.includes('{source}')) {
+        suffix = fmt.replace(/\{source\}/g, source || '');
+      } else {
+        suffix = fmt;
+      }
+      if(suffix.trim()) finalText += '\n' + suffix;
+    }
+  }
   if(navigator.clipboard&&window.isSecureContext){
     navigator.clipboard.writeText(finalText).then(()=>toast('已复制')).catch(()=>fallbackCopy(finalText));
   }else fallbackCopy(finalText);
@@ -250,6 +267,10 @@ function applySettingsToUI(){
   document.body.setAttribute('data-style', s.uiStyle || 'modern');
   
   if($('copyWithSource')) $('copyWithSource').checked=!!s.copyWithSource;
+  if($('copySourceFormat')) {
+    $('copySourceFormat').value = s.copySourceFormat !== undefined ? s.copySourceFormat : '—— {source}';
+    if($('copySourceFormatWrap')) $('copySourceFormatWrap').style.display = s.copyWithSource ? 'block' : 'none';
+  }
   if($('trashTtlInput')) $('trashTtlInput').value=Number(s.trashTtlDays)||30;
   if($('statDimCat')) $('statDimCat').checked=!s.statsDims||s.statsDims.cat!==false;
   if($('statDimSource')) $('statDimSource').checked=!s.statsDims||s.statsDims.source!==false;
@@ -338,7 +359,7 @@ function applySettingsToUI(){
 
   updateTinyUsageUI();
   if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor();
-  if (typeof renderStyleOptions === 'function') renderStyleOptions(); // ★ 修复：确保风格按钮高亮同步
+  if (typeof renderStyleOptions === 'function') renderStyleOptions();
 }
 
 function applyFontSize(mode) {

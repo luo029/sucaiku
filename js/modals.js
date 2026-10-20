@@ -13,6 +13,53 @@ const modalsHtml = `
   </div>
 </div>
 
+<!-- 图床批量操作栏 -->
+<div class="batch-bar" id="imgMgrBatchBar" style="background:linear-gradient(135deg,#1e3a8a,#1e40af); z-index: 200;">
+  <div class="batch-info">图片已选 <b id="imgMgrBatchNum" style="color:#93c5fd;">0</b> 张</div>
+  <div class="batch-actions">
+    <button class="btn" id="imgMgrSelectAllBtn">全选本页</button>
+    <button class="btn" id="imgMgrBatchCatBtn">修改分类</button>
+    <button class="btn" id="imgMgrBatchTagBtn">修改标签</button>
+    <button class="btn" id="imgMgrBatchExit">退出</button>
+    <button class="btn danger-solid" id="imgMgrBatchDelBtn">彻底删除</button>
+  </div>
+</div>
+
+<!-- 图床批量修改弹窗 -->
+<div class="modal-mask" id="imgMgrBatchEditMask" style="z-index: 210;">
+  <div class="modal" style="max-width:420px; border-radius:16px;">
+    <div class="modal-icon export-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
+    <h3 class="modal-title" id="imgMgrBatchEditTitle">批量修改</h3>
+    <p class="modal-desc">正在为选中的 <b id="imgMgrBatchEditCount">0</b> 张图片修改：</p>
+    
+    <!-- 分类单选网格 -->
+    <div id="imgMgrBatchCatWrap" class="export-field">
+      <label class="export-label">目标分类（单选）</label>
+      <div id="imgMgrBatchCatGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap:8px; margin-top:8px;">
+        <!-- JS 渲染分类块 -->
+      </div>
+    </div>
+    
+    <!-- 标签池多选 -->
+    <div id="imgMgrBatchTagWrap" class="export-field" style="display:none;">
+      <label class="export-label">目标标签（选中即替换，留空则清空）</label>
+      <input class="modal-input" id="imgMgrBatchTagSearch" placeholder="搜索现有标签..." style="margin-bottom:12px;" autocomplete="off">
+      <div id="imgMgrBatchTagPool" style="display:flex; flex-wrap:wrap; gap:8px; max-height:160px; overflow-y:auto; padding:4px; margin-bottom:12px;">
+        <!-- JS 渲染标签池 -->
+      </div>
+      <div style="display:flex; gap:8px;">
+        <input class="modal-input" id="imgMgrBatchTagNewInput" placeholder="直接输入新标签（逗号分隔）" autocomplete="off" style="flex:1;">
+        <button class="btn" id="imgMgrBatchTagAddBtn" style="padding:0 16px; border-radius:8px; white-space:nowrap;">添加</button>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:24px;">
+      <button class="btn" id="imgMgrBatchEditCancel">取消</button>
+      <button class="primary" id="imgMgrBatchEditConfirm" style="border-radius:8px;">确认修改</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-mask" id="modalMask">
   <div class="modal">
     <div class="modal-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg></div>
@@ -62,7 +109,6 @@ const modalsHtml = `
       <!-- 动态内容会插入到这里 -->
     </div>
 
-    <!-- ★ 新增：自动翻动控制栏 -->
     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
       <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-2);">
         <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
@@ -139,41 +185,58 @@ const modalsHtml = `
       <div class="st-card" data-group="general">
         <div class="st-card-head">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-          <div><div class="st-card-title">编辑与列表</div><div class="st-card-desc">默认分类、长文折叠、分页与回收站</div></div>
+          <div><div class="st-card-title">编辑与列表</div><div class="st-card-desc">默认分类、长文折叠、分页与复制格式</div></div>
         </div>
         <div class="st-card-body">
-          <div class="st-field">
-            <label>默认新建分类</label>
-            <select id="defaultTypeSelect" style="width:100%; text-align:left; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:14px; outline:none;"></select>
-            <div class="st-hint">新素材默认归入该分类</div>
-          </div>
-          <div class="st-grid-2" style="margin-top:16px;">
+          
+          <div class="st-grid-2">
+            <div class="st-field" style="margin-bottom:0;">
+              <label>默认新建分类</label>
+              <select id="defaultTypeSelect" style="width:100%; text-align:left; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:13.5px; outline:none;"></select>
+            </div>
+            <div class="st-field" style="margin-bottom:0;">
+              <label>默认每页显示条数</label>
+              <select id="defaultPageSizeSelect" class="setting-num" style="width:100%; text-align:left; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:13.5px; outline:none;">
+                <option value="12">12 条</option>
+                <option value="24">24 条</option>
+                <option value="48">48 条</option>
+                <option value="100">100 条</option>
+              </select>
+            </div>
             <div class="st-field" style="margin-bottom:0;">
               <label>长文本折叠阈值</label>
               <div class="st-inline">
-                <input type="number" class="setting-num" id="collapseLimitInput" min="50" max="9999" step="10" value="150" style="flex:1;">
+                <input type="number" class="setting-num" id="collapseLimitInput" min="50" max="9999" step="10" value="150" style="width:100%;">
                 <span class="st-suffix">字</span>
               </div>
             </div>
             <div class="st-field" style="margin-bottom:0;">
-              <label>默认每页显示条数</label>
-              <select id="defaultPageSizeSelect" class="setting-num" style="width:100%; text-align:left; padding:9px 12px; flex:1;"><option value="12">12 条</option><option value="24">24 条</option><option value="48">48 条</option><option value="100">100 条</option></select>
+              <label>回收站保留天数</label>
+              <div class="st-inline">
+                <input type="number" class="setting-num" id="trashTtlInput" min="1" max="365" step="1" value="30" style="width:100%;">
+                <span class="st-suffix">天</span>
+              </div>
             </div>
           </div>
-          <!-- ★ 新增：回收站保留天数 -->
-          <div class="st-field" style="margin-top:16px;">
-            <label>回收站保留天数</label>
-            <div class="st-inline">
-              <input type="number" class="setting-num" id="trashTtlInput" min="1" max="365" step="1" value="30">
-              <span class="st-suffix">天</span>
+
+          <div style="height: 1px; background: var(--line); margin: 20px 0;"></div>
+
+          <div class="st-field" style="margin-bottom:0;">
+            <label class="st-toggle" style="margin-bottom: 0; padding: 12px 14px;">
+              <div>
+                <div class="st-toggle-title">复制时附带自定义后缀</div>
+                <div class="st-toggle-desc">复制素材内容时自动在末尾追加文字</div>
+              </div>
+              <input type="checkbox" id="copyWithSource">
+            </label>
+            
+            <div id="copySourceFormatWrap" style="margin-top: 12px; display: none;">
+              <label style="font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; display: block;">自定义后缀格式</label>
+              <input type="text" id="copySourceFormat" placeholder="—— {source}" style="width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; color: var(--text); background: var(--card); outline: none;">
+              <div class="st-hint">可用 <code>{source}</code> 代表原来源。例如输入 <code>—— 摘抄</code>，或者 <code>（摘自：{source}）</code></div>
             </div>
-            <div class="st-hint">删除的素材会保留指定天数，过期自动清理</div>
           </div>
-          <!-- ★ 新增：复制时附带来源 -->
-          <label class="st-toggle" style="margin-bottom:0;">
-            <div><div class="st-toggle-title">复制时附带来源</div><div class="st-toggle-desc">复制素材内容时自动在末尾附上「—— 来源」</div></div>
-            <input type="checkbox" id="copyWithSource">
-          </label>
+
         </div>
       </div>
 
@@ -382,6 +445,10 @@ const modalsHtml = `
     <p class="modal-desc">共 <b id="imgCatCount">0</b> 张图片，选择分类后上传：</p>
     <div class="img-cat-list" id="imgCatList"></div>
     
+    <div class="st-field" style="margin-bottom:16px;">
+      <input class="modal-input" id="imgUploadTags" placeholder="添加标签（逗号分隔），与文字标签共用" autocomplete="off">
+    </div>
+    
     <div id="imgProgressWrap" style="display:none; margin-bottom:16px;">
       <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-3); margin-bottom:6px;">
         <span id="imgProgressText">准备中...</span>
@@ -416,7 +483,14 @@ const modalsHtml = `
       <span class="ivh-count" id="imgMgrRepoName">-</span>
     </div>
     <span class="ivh-spacer"></span>
-    <div style="display:flex; gap:8px;"><button class="btn" id="imgMgrRefreshBtn">刷新</button><button class="btn primary" id="imgMgrCloseBtn" style="padding:9px 20px;">返回素材库</button></div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn" id="imgMgrSelectBtn" style="transition: all 0.2s;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+        批量管理
+      </button>
+      <button class="btn" id="imgMgrRefreshBtn">刷新</button>
+      <button class="btn primary" id="imgMgrCloseBtn" style="padding:9px 20px;">返回素材库</button>
+    </div>
   </div>
   <div style="flex:1; overflow-y:auto; padding:24px; background:var(--bg);">
     <div id="imgMgrStatsPanel" style="display:flex; gap:16px; margin-bottom:24px; flex-wrap:wrap;"></div>

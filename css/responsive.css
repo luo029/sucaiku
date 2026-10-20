@@ -189,7 +189,7 @@
     flex-direction: column;
     align-items: stretch;
     border-radius: 14px;
-    transform: translateY(140%);
+    transform: translateY(20px);
   }
   .batch-bar.show { transform: translateY(0); }
   .batch-info { font-size: 13px; text-align: center; }
