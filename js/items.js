@@ -297,14 +297,13 @@ function cancelEdit() {
 
 function addCat(name) {
   name = name.trim();
-  if (!name) { newCatInput.focus(); return; }
+  if (!name) return;
   if (name === UNCAT || name === IMG_TYPE) { toast('「' + name + '」是系统保留名'); return; }
   if (db.cats.indexOf(name) >= 0) { toast('分类已存在'); return; }
   db.cats.push(name);
   ensureColors();
   save();
   render();
-  newCatInput.value = '';
   toast('已添加分类「' + name + '」');
 }
 

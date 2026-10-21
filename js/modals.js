@@ -286,11 +286,14 @@ var modalsHtml = ''
   + '<div class="modal-actions" style="margin-top:16px;"><button class="btn" id="settingCloseBtn" style="width:100%;">关闭</button></div>'
   + '</div></div>'
 
-  // ============ ★ 新增：分类管理弹窗（带分页） ============
+  // ============ ★ 新增：分类管理弹窗（带分页和添加入口） ============
   + '<div class="modal-mask" id="catManageMask"><div class="modal wide">'
   + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">'
   + '<h3 class="modal-title" style="margin:0;">分类管理</h3>'
+  + '<div style="display:flex; align-items:center; gap:12px;">'
   + '<div style="font-size:12px; color:var(--text-3);">点击名字可直接修改</div>'
+  + '<button class="btn tiny primary" id="addCatBtnModal">+ 新建分类</button>'
+  + '</div>'
   + '</div>'
   + '<div class="health-list" id="catManageList" style="max-height:50vh; overflow-y:auto;"></div>'
   + '<div id="catManagePagination" style="display:flex; justify-content:center; align-items:center; gap:12px; margin-top:16px; font-size:13px; color:var(--text-2);"></div>'

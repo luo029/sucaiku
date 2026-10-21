@@ -47,7 +47,6 @@ window.showCustomPrompt = function(options) {
   };
   mask.onclick = function(e) { if (e.target === mask) newCancel.click(); };
   
-  // 绑定建议标签点击
   if (options.suggestions && options.suggestions.length) {
     sugBox.onclick = function(e) {
       var chip = e.target.closest('.tag-suggestion-chip');
@@ -128,9 +127,17 @@ safeBind('modalMask', 'click', function (e) {
 // ★ 分类管理弹窗事件
 safeBind('catManageCloseBtn', 'click', function() { $('catManageMask').classList.remove('show'); });
 safeBind('catManageMask', 'click', function(e) { if (e.target === $('catManageMask')) $('catManageMask').classList.remove('show'); });
-safeBind('addCatBtnModal', 'click', function() { addCat($('newCatInputModal').value); });
-safeBind('newCatInputModal', 'keydown', function(e) {
-  if (e.key === 'Enter') { e.preventDefault(); addCat($('newCatInputModal').value); }
+safeBind('addCatBtnModal', 'click', function() {
+  window.showCustomPrompt({
+    title: '新建分类',
+    desc: '输入新分类的名称：',
+    placeholder: '分类名称',
+    onConfirm: function(val) {
+      if (val && val.trim()) {
+        addCat(val.trim());
+      }
+    }
+  });
 });
 safeBind('catManageList', 'change', function(e) {
   var inp = e.target.closest('.cat-name'); if (!inp) return;
@@ -142,6 +149,13 @@ safeBind('catManageList', 'keydown', function(e) {
 safeBind('catManageList', 'click', function(e) {
   var btn = e.target.closest('[data-cat-del]'); if (!btn) return;
   delCat(Number(btn.dataset.catDel));
+});
+safeBind('catManagePagination', 'click', function(e) {
+  if (e.target.id === 'catPagePrev') {
+    catManagerPage--; renderCatManager();
+  } else if (e.target.id === 'catPageNext') {
+    catManagerPage++; renderCatManager();
+  }
 });
 
 // ============ 随机盲盒 ============
@@ -1239,7 +1253,7 @@ safeBind('tagColorClear', 'click', function () {
 });
 safeBind('tagColorMask', 'click', function (e) { if (e.target === $('tagColorMask')) $('tagColorMask').classList.remove('show'); });
 
-// ============ 标签管理：批量选择 ============
+// ============ 标签管理：批量选择与分页 ============
 var _tagBatchMode = false;
 var _tagBatchSelected = new Set();
 safeBind('tagBatchToggleBtn', 'click', function () {
@@ -1301,15 +1315,36 @@ safeBind('tagBatchMergeBtn', 'click', function () {
   });
 });
 
+safeBind('tagManagePagination', 'click', function(e) {
+  if (e.target.id === 'tagPagePrev') {
+    tagManagerPage--; renderTagManagerWithBatch();
+  } else if (e.target.id === 'tagPageNext') {
+    tagManagerPage++; renderTagManagerWithBatch();
+  }
+});
+
 function renderTagManagerWithBatch() {
   var counts = collectTags();
   var tags = Object.keys(counts).sort(function (a, b) {
     return counts[b] - counts[a] || a.localeCompare(b, 'zh');
   });
   var list = $('tagManageList');
+  var pagEl = $('tagManagePagination');
   if (!list) return;
-  if (!tags.length) { list.innerHTML = '<div class="sp-empty">还没有标签</div>'; return; }
-  list.innerHTML = tags.map(function (t) {
+  if (!tags.length) { 
+    list.innerHTML = '<div class="sp-empty" style="text-align:center; padding:40px; color:var(--text-3);">还没有标签</div>'; 
+    if (pagEl) pagEl.innerHTML = '';
+    return; 
+  }
+  
+  var totalPages = Math.ceil(tags.length / TAG_PAGE_SIZE);
+  if (tagManagerPage > totalPages) tagManagerPage = totalPages;
+  if (tagManagerPage < 1) tagManagerPage = 1;
+  
+  var start = (tagManagerPage - 1) * TAG_PAGE_SIZE;
+  var slice = tags.slice(start, start + TAG_PAGE_SIZE);
+  
+  list.innerHTML = slice.map(function (t) {
     var isFixed = db.fixedTags.indexOf(t) >= 0;
     var pinFill = isFixed ? 'currentColor' : 'none';
     var color = (db.tagColors && db.tagColors[t]) || '';
@@ -1319,10 +1354,20 @@ function renderTagManagerWithBatch() {
       + '<span class="dot" style="background:' + (color || 'var(--accent)') + '; cursor:pointer;" data-tag-color="' + esc(t) + '" title="点击设置颜色"></span>'
       + '<input class="cat-name" data-tag-old="' + esc(t) + '" value="' + esc(t) + '" maxlength="20">'
       + '<span class="cat-n">' + counts[t] + '</span>'
-      + (_tagBatchMode ? '' : '<button class="btn tiny" data-tag-pin="' + esc(t) + '" style="padding:4px 8px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="' + pinFill + '" stroke="currentColor" stroke-width="2"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg></button>'
+      + (_tagBatchMode ? '' : '<button class="btn tiny" data-tag-pin="' + esc(t) + '" style="padding:4px 8px;" title="' + (isFixed ? '取消固定' : '固定为默认标签') + '"><svg width="13" height="13" viewBox="0 0 24 24" fill="' + pinFill + '" stroke="currentColor" stroke-width="2"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg></button>'
       + '<button class="btn tiny danger" data-tag-del="' + esc(t) + '">删除</button>')
       + '</div>';
   }).join('');
+
+  if (pagEl) {
+    if (totalPages <= 1) {
+      pagEl.innerHTML = '';
+    } else {
+      pagEl.innerHTML = '<button class="btn tiny" id="tagPagePrev" ' + (tagManagerPage === 1 ? 'disabled' : '') + '>上一页</button>' +
+        '<span>第 <b>' + tagManagerPage + '</b> / ' + totalPages + ' 页</span>' +
+        '<button class="btn tiny" id="tagPageNext" ' + (tagManagerPage === totalPages ? 'disabled' : '') + '>下一页</button>';
+    }
+  }
 
   list.querySelectorAll('[data-tag-color]').forEach(function (el) {
     el.addEventListener('click', function () { openTagColorPicker(el.dataset.tagColor); });

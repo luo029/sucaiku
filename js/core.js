@@ -83,7 +83,7 @@ function $(id) { return document.getElementById(id); }
 
 var inputEl = $('input'), typeEl = $('type'), sourceEl = $('source'), tagsEl = $('tags');
 var addBtn = $('addBtn'), cancelBtn = $('cancelBtn'), listEl = $('list'), searchEl = $('search');
-var catManager = $('catManager'), catListEl = $('catList'), newCatInput = $('newCatInput');
+// ★ 移除旧版分类管理 DOM 变量
 var batchBar = $('batchBar'), sourcePicker = $('sourcePicker'), sourcePanel = $('sourcePanel');
 var spList = $('spList'), spSearch = $('spSearch'), tagPicker = $('tagPicker');
 var tagPanel = $('tagPanel'), tpList = $('tpList'), tpSearch = $('tpSearch');
@@ -139,7 +139,7 @@ function fetchHitokoto() { var txtEl = $('hitokotoText'), fromEl = $('hitokotoFr
 
 function applyLayout() { document.body.classList.toggle('layout-sidebar', layoutMode === 'sidebar'); document.body.classList.toggle('layout-compact', layoutMode === 'compact'); updateLayoutBtn(); }
 function updateLayoutBtn() { var btn = $('layoutBtn'); if (!btn) return; if (layoutMode === 'sidebar') { btn.title = '收起侧栏'; btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m10 9 3 3-3 3"/></svg>'; } else { btn.title = '展开侧栏'; btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m13 9-3 3 3 3"/></svg>'; } }
-function setLayout(mode) { layoutMode = mode; localStorage.setItem(LAYOUT_KEY, mode); applyLayout(); closeSidebar(); if (catManager) catManager.hidden = true; renderSourceFilter(); }
+function setLayout(mode) { layoutMode = mode; localStorage.setItem(LAYOUT_KEY, mode); applyLayout(); closeSidebar(); renderSourceFilter(); }
 function setTheme(mode, persist) { if (typeof persist === 'undefined') persist = true; themeMode = mode; document.documentElement.setAttribute('data-theme', mode); if (persist) localStorage.setItem(THEME_KEY, mode); var sun = $('themeIconSun'), moon = $('themeIconMoon'); if (sun) sun.style.display = mode === 'dark' ? 'none' : 'block'; if (moon) moon.style.display = mode === 'dark' ? 'block' : 'none'; }
 function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(db.settings)); if (typeof save === 'function') save(); if (typeof scheduleAutoPush === 'function' && !window.suppressPush) scheduleAutoPush(); }
 
