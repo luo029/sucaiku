@@ -436,6 +436,58 @@ const modalsHtml = `
         <div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg><div><div class="st-card-title">图片分类</div><div class="st-card-desc">上传图片时可选的分类</div></div></div>
         <div class="st-card-body"><div class="st-field"><input type="text" id="imgCatsInput" placeholder="梗图, 情节, 插画, 其他" autocomplete="off"></div></div>
       </div>
+
+      <!-- ★ 新增：图片命名规则卡片 -->
+      <div class="st-card" data-group="images" style="display:none;">
+        <div class="st-card-head">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          <div>
+            <div class="st-card-title">图片命名规则</div>
+            <div class="st-card-desc">自定义上传到图床后的文件名格式</div>
+          </div>
+        </div>
+        <div class="st-card-body">
+          <div class="st-field">
+            <label>命名模板</label>
+            <input type="text" id="imgNamingTemplate" placeholder="{cat}-{timestamp}-{rand}" autocomplete="off">
+            <div class="st-hint" style="line-height:1.8; margin-top:10px;">
+              可用变量：
+              <code>{cat}</code> 分类 ·
+              <code>{filename}</code> 原文件名 ·
+              <code>{index}</code> 本批第几张 ·
+              <code>{total}</code> 本批共几张 ·
+              <code>{yyyy}</code> <code>{MM}</code> <code>{dd}</code> 年月日 ·
+              <code>{HH}</code> <code>{mm}</code> <code>{ss}</code> 时分秒 ·
+              <code>{date}</code> <code>{time}</code> <code>{datetime}</code> ·
+              <code>{timestamp}</code> 毫秒时间戳 ·
+              <code>{rand}</code> 6 位随机
+            </div>
+          </div>
+
+          <div class="st-field" style="margin-bottom:14px;">
+            <label>快捷模板</label>
+            <div id="imgNamingPresets" style="display:flex; flex-wrap:wrap; gap:6px;">
+              <button type="button" class="btn tiny" data-naming-tpl="{cat}-{timestamp}-{rand}" title="分类-毫秒时间戳-6位随机（默认）">默认</button>
+              <button type="button" class="btn tiny" data-naming-tpl="{cat}-{date}-{rand}" title="分类-日期-6位随机">简洁</button>
+              <button type="button" class="btn tiny" data-naming-tpl="{date}-{time}-{index}" title="日期-时间-序号（不可重名）">时间序</button>
+              <button type="button" class="btn tiny" data-naming-tpl="{filename}" title="保留上传时的原始文件名（可能重名）">保留原名</button>
+              <button type="button" class="btn tiny" data-naming-tpl="{rand}" title="只保留 6 位随机">纯随机</button>
+            </div>
+          </div>
+
+          <div class="st-field" style="margin-bottom:0;">
+            <label>文件名预览</label>
+            <div id="imgNamingPreview" style="padding:10px 12px; background:var(--bg); border:1px dashed var(--line-2); border-radius:10px; font-size:13px; color:var(--text-2); word-break:break-all; font-family:ui-monospace,Menlo,Consolas,'Courier New',monospace; line-height:1.5;">梗图-20250121143025123-a8k2x1.jpg</div>
+            <div id="imgNamingWarn" class="st-hint" style="color:var(--danger); display:none; margin-top:8px; padding:8px 10px; background:var(--danger-soft); border-radius:8px;">
+              ⚠️ 当前模板不含「时间 / 随机 / 序号」变量，一次上传多张同名文件可能互相覆盖。建议加 <code>{rand}</code> 或 <code>{timestamp}</code>。
+            </div>
+            <div class="st-hint" style="margin-top:8px;">
+              提示：文件仍按 <code>年/月/文件名</code> 存储，只有文件名会按模板生成。
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
     <div class="modal-actions" style="margin-top:16px;"><button class="btn" id="settingCloseBtn" style="width:100%;">关闭</button></div>
   </div>

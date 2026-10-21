@@ -14,7 +14,7 @@ safeBind('layoutBtn', 'click', () => {
 });
 safeBind('sidebarCollapseBtn', 'click', () => setLayout('compact'));
 safeBind('themeToggleBtn', 'click', () => {
-  setTheme(themeMode==='light'?'dark':'light');  // ★ 用户手动切换，persist=true 默认
+  setTheme(themeMode==='light'?'dark':'light');
 });
 safeBind('zenBtn', 'click', () => setZen(true));
 safeBind('zenExitBtn', 'click', () => setZen(false));
@@ -329,7 +329,7 @@ function drawRandomBox() {
 }
 
 safeBind('menuRandomBtn', 'click', () => {
-  stopAutoFlip();  // ★ 修复：确保自动翻动停止
+  stopAutoFlip();
   randomFilterValue = 'all';
   $('randomFilterText').textContent = '全随机';
   const btn = $('randomFilterBtn');
@@ -430,7 +430,6 @@ safeBind('imgMgrCloseBtn', 'click', () => {
   document.body.style.overflow = '';
 });
 safeBind('imgMgrRefreshBtn', 'click', loadRepoImages);
-// safeBind('imgMgrCleanUnusedBtn', 'click', cleanAllUnusedImages);  // ★ 移除冗余绑定
 
 safeBind('imgMgrSelectBtn', 'click', () => {
   imgMgrSelectMode = !imgMgrSelectMode;
@@ -864,6 +863,11 @@ function openSettings() {
   if (scrollEl) scrollEl.scrollTop = 0;
   
   $('settingMask').classList.add('show');
+
+  // ★ 打开设置时，刷新一次图片命名预览
+  if (typeof window.updateImgNamingPreview === 'function') {
+    setTimeout(() => window.updateImgNamingPreview(), 50);
+  }
 }
 safeBind('menuSettingBtn', 'click', openSettings);
 safeBind('gearBtn', 'click', openSettings);
@@ -1049,6 +1053,33 @@ safeBind('tinypngKey', 'change', e => {
 });
 safeBind('tinypngProxy', 'change', e => {
   db.settings.tinypngProxy=e.target.value.trim();saveSettings();toast('已保存 TinyPNG 代理');
+});
+
+/* ★ 新增：图片命名模板实时监听 */
+safeBind('imgNamingTemplate', 'input', () => {
+  const tpl = $('imgNamingTemplate').value;
+  db.settings.imgNamingTemplate = (tpl || '').trim() || '{cat}-{timestamp}-{rand}';
+  saveSettings();
+  if (typeof window.updateImgNamingPreview === 'function') window.updateImgNamingPreview();
+});
+
+/* ★ 新增：快捷模板按钮点击 */
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-naming-tpl]');
+  if (!btn) return;
+  const tpl = btn.getAttribute('data-naming-tpl');
+  if (!tpl) return;
+  if ($('imgNamingTemplate')) {
+    $('imgNamingTemplate').value = tpl;
+    db.settings.imgNamingTemplate = tpl;
+    saveSettings();
+    if (typeof window.updateImgNamingPreview === 'function') window.updateImgNamingPreview();
+    // 按钮短暂高亮
+    const allBtns = document.querySelectorAll('[data-naming-tpl]');
+    allBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    setTimeout(() => btn.classList.remove('active'), 500);
+  }
 });
 
 ['ghToken','ghOwner','ghRepo','ghBranch','ghDataPath','ghSiteBase','ghImgOwner','ghImgRepo','ghImgBranch','ghImgPath','ghImgSite','ghImgToken'].forEach(id=>{

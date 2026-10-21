@@ -139,6 +139,93 @@ async function compressImage(file,onProgress){
 }
 
 /* =========================================================
+   ★ 新增：图片文件名模板解析
+   ---------------------------------------------------------
+   支持变量：
+     {cat}        分类
+     {filename}   原文件名（不含扩展名）
+     {index}      本批第几张（1 起）
+     {total}      本批共几张
+     {yyyy} {MM} {dd} {HH} {mm} {ss}   单独的年月日时分秒
+     {date}       YYYYMMDD
+     {time}       HHmmss
+     {datetime}   YYYYMMDDHHmmss
+     {timestamp}  YYYYMMDDHHmmssSSS（毫秒级，默认）
+     {rand}       6 位随机字母数字
+   ========================================================= */
+function formatImageFilename(template, ctx) {
+  ctx = ctx || {};
+  const now = new Date();
+  const pad = (n, w) => String(n).padStart(w || 2, '0');
+  const yyyy = String(now.getFullYear());
+  const MM = pad(now.getMonth() + 1);
+  const dd = pad(now.getDate());
+  const HH = pad(now.getHours());
+  const mm = pad(now.getMinutes());
+  const ss = pad(now.getSeconds());
+  const ms = pad(now.getMilliseconds(), 3);
+  const date = `${yyyy}${MM}${dd}`;
+  const time = `${HH}${mm}${ss}`;
+  const datetime = `${date}${time}`;
+  const timestamp = `${datetime}${ms}`;
+  const rand = Math.random().toString(36).slice(2, 8);
+
+  let result = String(template || '');
+
+  const map = {
+    '{cat}':      ctx.cat || '',
+    '{filename}': ctx.filename || '',
+    '{index}':    String(ctx.index || 1),
+    '{total}':    String(ctx.total || 1),
+    '{yyyy}':     yyyy,
+    '{MM}':       MM,
+    '{dd}':       dd,
+    '{HH}':       HH,
+    '{mm}':       mm,
+    '{ss}':       ss,
+    '{date}':     date,
+    '{time}':     time,
+    '{datetime}': datetime,
+    '{timestamp}':timestamp,
+    '{rand}':     rand
+  };
+
+  Object.keys(map).forEach(k => {
+    result = result.split(k).join(map[k]);
+  });
+
+  // 清理非法字符（Windows / GitHub 都不喜欢这些），并限制长度
+  result = result
+    .replace(/[\\/:*?"<>|#%\s]+/g, '_')
+    .replace(/^[._]+|[._]+$/g, '')
+    .replace(/_{2,}/g, '_')
+    .slice(0, 100);
+
+  return result || 'img';
+}
+
+/* ★ 新增：实时预览（供设置面板调用） */
+window.updateImgNamingPreview = function () {
+  const tplEl = document.getElementById('imgNamingTemplate');
+  const previewEl = document.getElementById('imgNamingPreview');
+  const warnEl = document.getElementById('imgNamingWarn');
+  if (!tplEl || !previewEl) return;
+
+  const tpl = (tplEl.value || '').trim() || '{cat}-{timestamp}-{rand}';
+  const preview = formatImageFilename(tpl, {
+    cat: '梗图',
+    filename: 'example',
+    index: 1,
+    total: 1
+  }) + '.jpg';
+  previewEl.textContent = preview;
+
+  // 检查是否含"防重名"变量
+  const hasUnique = /\{(timestamp|datetime|time|rand|index|ss|mm|HH)\}/.test(tpl);
+  if (warnEl) warnEl.style.display = hasUnique ? 'none' : 'block';
+};
+
+/* =========================================================
    图片上传流程
    ========================================================= */
 let uploadInProgress=false;
@@ -175,7 +262,7 @@ function sanitizeFilename(s){
   return String(s||'').replace(/[\\/:*?"<>|#%\s]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40) || 'img';
 }
 
-/* ★ 优化：改为 3 并发 worker 上传，速度快 2-3 倍 */
+/* ★ 优化：改为 3 并发 worker 上传；★ 新增：支持自定义命名模板 */
 async function startUploadPending(){
   if(!pendingUploadFiles.length||uploadInProgress)return;
   const cfg=loadGH();
@@ -195,21 +282,34 @@ async function startUploadPending(){
   $('imgProgressWrap').style.display = 'block';
   $('imgProgressText').textContent = `共 ${files.length} 张，并发上传中...`;
 
-  // 生成唯一文件名（并发时防止时间戳冲突，精确到毫秒）
-  function makeFilename(file, comp) {
-    const now=new Date();
-    const year=now.getFullYear();
-    const month=String(now.getMonth()+1).padStart(2,'0');
-    const ts=`${year}${month}${String(now.getDate()).padStart(2,'0')}${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}${String(now.getMilliseconds()).padStart(3,'0')}`;
-    const rand=Math.random().toString(36).slice(2,8);
-    const safeCat=sanitizeFilename(cat);
-    let ext=(file.name.split('.').pop()||'jpg').toLowerCase();
-    if(comp.blob && comp.blob.type){
-      if(comp.blob.type==='image/webp') ext='webp';
-      else if(comp.blob.type==='image/jpeg') ext='jpg';
-      else if(comp.blob.type==='image/png') ext='png';
+  // ★ 核心：用用户设置的模板生成文件名
+  const namingTemplate = (db.settings.imgNamingTemplate || '{cat}-{timestamp}-{rand}').trim();
+
+  function makeFilename(file, comp, index) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+
+    const origBase = String(file.name || '').replace(/\.[^.]+$/, '');
+    const safeCat = sanitizeFilename(cat);
+
+    let baseName = formatImageFilename(namingTemplate, {
+      cat: safeCat,
+      filename: origBase,
+      index: index + 1,
+      total: files.length
+    });
+
+    if (!baseName || !baseName.trim()) baseName = 'img';
+
+    let ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    if (comp.blob && comp.blob.type) {
+      if (comp.blob.type === 'image/webp') ext = 'webp';
+      else if (comp.blob.type === 'image/jpeg') ext = 'jpg';
+      else if (comp.blob.type === 'image/png') ext = 'png';
     }
-    return { year, month, filename: `${safeCat}-${ts}-${rand}.${ext}` };
+
+    return { year, month, filename: `${baseName}.${ext}` };
   }
 
   async function uploadOne(file, idx) {
@@ -220,7 +320,7 @@ async function startUploadPending(){
       
       statusEl.textContent = `[${idx + 1}/${files.length}] 压缩 ${fmtSize(comp.origSize)} → ${fmtSize(comp.newSize)}（${ratio > 0 ? '-' + ratio.toFixed(0) + '%' : '无变化'}），上传中…`;
 
-      const { year, month, filename } = makeFilename(file, comp);
+      const { year, month, filename } = makeFilename(file, comp, idx);
       const relPath = `${year}/${month}/${filename}`;
       const fullPath = `${rc.path}/${relPath}`;
 
@@ -230,7 +330,7 @@ async function startUploadPending(){
       pendingImages.push({ path: relPath, url: '', cat, tags: imgTags.slice(), size: comp.newSize, origSize: comp.origSize });
       renderPendingImgs();
       success++;
-      statusEl.textContent = `[${idx + 1}/${files.length}] 完成`;
+      statusEl.textContent = `[${idx + 1}/${files.length}] 完成：${filename}`;
     } catch (err) {
       console.error(err);
       fail++;

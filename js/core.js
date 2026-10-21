@@ -48,7 +48,9 @@ const DEFAULT_SETTINGS={
   copyWithoutMarks:true,
   copyKeepBlankLines:true,
   focusImgAutoUpload:true,
-  focusImgDefaultCat:'其他'
+  focusImgDefaultCat:'其他',
+  // ★ 新增：图片命名模板（可自定义变量替换）
+  imgNamingTemplate:'{cat}-{timestamp}-{rand}'
 };
 
 const PALETTE=[
@@ -399,6 +401,15 @@ function applySettingsToUI(){
     sel.value = s.focusImgDefaultCat || '其他';
   }
 
+  // ★ 新增：图片命名模板
+  if ($('imgNamingTemplate')) {
+    $('imgNamingTemplate').value = s.imgNamingTemplate || '{cat}-{timestamp}-{rand}';
+  }
+  // 如果 images.js 里的预览函数已就绪，刷新一次
+  if (typeof window.updateImgNamingPreview === 'function') {
+    window.updateImgNamingPreview();
+  }
+
   updateTinyUsageUI();
   if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor();
   if (typeof renderStyleOptions === 'function') renderStyleOptions();
@@ -427,6 +438,10 @@ function loadSettings(){
   db.settings.syncCheckInterval=Math.max(10,Math.min(3600,Number(db.settings.syncCheckInterval)||60));
   if(!['none','local','tinypng'].includes(db.settings.compressMode)) db.settings.compressMode='local';
   if(!['normal','large','xlarge'].includes(db.settings.fontSizeMode)) db.settings.fontSizeMode='normal';
+  // ★ 兜底：图片命名模板不能为空
+  if (typeof db.settings.imgNamingTemplate !== 'string' || !db.settings.imgNamingTemplate.trim()) {
+    db.settings.imgNamingTemplate = DEFAULT_SETTINGS.imgNamingTemplate;
+  }
   
   pageSize = db.settings.defaultPageSize;
   applySettingsToUI();
