@@ -1,320 +1,416 @@
-/* js / items.js · 素材增删改：回收站 / 标签管理 / 待上传图 / 拖拽分类 */
-let zenQueue = []; // 专门用于自动跳转的队列
-let isProcessingInbox = false; // ★ 记录当前是否处于收件箱处理流
+// js/items.js - 素材增删改：回收站 / 标签管理 / 待上传图 / 拖拽分类
 
-/* =========================================================
-   回收站
-   ========================================================= */
-function moveToTrash(ids){
-  const set=new Set(ids);const now=Date.now();const moved=[];
-  db.items=db.items.filter(i=>{
-    if(set.has(i.id)){moved.push({...i,deletedAt:now});return false;}
+var zenQueue = [];
+var isProcessingInbox = false;
+
+// ============ 回收站 ============
+function moveToTrash(ids) {
+  var set = new Set(ids);
+  var now = Date.now();
+  var moved = [];
+  db.items = db.items.filter(function (i) {
+    if (set.has(i.id)) {
+      var copy = {};
+      for (var k in i) { if (i.hasOwnProperty(k)) copy[k] = i[k]; }
+      copy.deletedAt = now;
+      moved.push(copy);
+      return false;
+    }
     return true;
   });
-  db.trash.unshift(...moved);return moved.length;
+  db.trash.unshift.apply(db.trash, moved);
+  return moved.length;
 }
-function restoreFromTrash(id){
-  const idx=db.trash.findIndex(i=>i.id===id);
-  if(idx<0)return;
-  const item=db.trash.splice(idx,1)[0];
+
+function restoreFromTrash(id) {
+  var idx = db.trash.findIndex(function (i) { return i.id === id; });
+  if (idx < 0) return;
+  var item = db.trash.splice(idx, 1)[0];
   delete item.deletedAt;
-  if(db.items.some(x=>x.id===item.id))item.id=uid();
+  if (db.items.some(function (x) { return x.id === item.id; })) item.id = uid();
   db.items.push(item);
-  db.items.sort((a,b)=>b.createdAt-a.createdAt);
-  save();render();renderTrash();toast('已恢复');
+  db.items.sort(function (a, b) { return b.createdAt - a.createdAt; });
+  save();
+  render();
+  renderTrash();
+  toast('已恢复');
 }
-function purgeTrashItem(id){db.trash=db.trash.filter(i=>i.id!==id);save();renderTrash();}
-function renderTrash(){
-  const list=$('trashList');
-  const days=Math.max(1,Math.min(365,Number(db.settings.trashTtlDays)||30));
-  $('trashDesc').textContent=`删除的素材会保留 ${days} 天，可随时恢复。`;
-  if(!db.trash.length){list.innerHTML=`<div class="sp-empty">回收站是空的</div>`;return;}
-  list.innerHTML=db.trash.map(i=>{
-    const c=catColor(i.type);
-    const txt=i.text ? (i.text.length>120?i.text.slice(0,120)+'…':i.text) : `（图片素材 ${i.images ? i.images.length : 0} 张）`;
-    return `<div class="trash-item">
-      <div class="trash-head">
-        <span class="tag${i.type===IMG_TYPE?' tag-img':''}" style="${i.type===IMG_TYPE?'':`background:${c.bg};color:${c.fg}`}">${esc(i.type)}</span>
-        ${i.source?`<span class="src" style="max-width:none">${esc(i.source)}</span>`:''}
-        <span class="date" style="margin-left:auto">${fmtDate(i.deletedAt)} 删除</span>
-      </div>
-      <div class="trash-text">${esc(txt)}</div>
-      <div class="trash-ops">
-        <button class="btn tiny" data-restore="${i.id}">恢复</button>
-        <button class="btn tiny danger" data-purge="${i.id}">彻底删除</button>
-      </div>
-    </div>`;
+
+function purgeTrashItem(id) {
+  db.trash = db.trash.filter(function (i) { return i.id !== id; });
+  save();
+  renderTrash();
+}
+
+function renderTrash() {
+  var list = $('trashList');
+  var days = Math.max(1, Math.min(365, Number(db.settings.trashTtlDays) || 30));
+  $('trashDesc').textContent = '删除的素材会保留 ' + days + ' 天，可随时恢复。';
+  if (!db.trash.length) {
+    list.innerHTML = '<div class="sp-empty">回收站是空的</div>';
+    return;
+  }
+  list.innerHTML = db.trash.map(function (i) {
+    var c = catColor(i.type);
+    var txt = i.text ? (i.text.length > 120 ? i.text.slice(0, 120) + '…' : i.text) : '（图片素材 ' + (i.images ? i.images.length : 0) + ' 张）';
+    return '<div class="trash-item">'
+      + '<div class="trash-head">'
+      + '<span class="tag' + (i.type === IMG_TYPE ? ' tag-img' : '') + '" style="' + (i.type === IMG_TYPE ? '' : 'background:' + c.bg + ';color:' + c.fg) + '">' + esc(i.type) + '</span>'
+      + (i.source ? '<span class="src" style="max-width:none">' + esc(i.source) + '</span>' : '')
+      + '<span class="date" style="margin-left:auto">' + fmtDate(i.deletedAt) + ' 删除</span>'
+      + '</div>'
+      + '<div class="trash-text">' + esc(txt) + '</div>'
+      + '<div class="trash-ops">'
+      + '<button class="btn tiny" data-restore="' + i.id + '">恢复</button>'
+      + '<button class="btn tiny danger" data-purge="' + i.id + '">彻底删除</button>'
+      + '</div>'
+      + '</div>';
   }).join('');
 }
 
-/* =========================================================
-   标签管理
-   ========================================================= */
-function renderTagManager(){
-  const counts=collectTags();
-  const tags=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]||a.localeCompare(b,'zh'));
-  const list=$('tagManageList');
-  if(!tags.length){list.innerHTML=`<div class="sp-empty">还没有标签</div>`;return;}
-  list.innerHTML=tags.map(t=>{
-    const isFixed=db.fixedTags.includes(t);const pinFill=isFixed?'currentColor':'none';
-    return `<div class="cat-row" style="gap:10px">
-      <span class="dot" style="background:var(--accent)"></span>
-      <input class="cat-name" data-tag-old="${esc(t)}" value="${esc(t)}" maxlength="20">
-      <span class="cat-n">${counts[t]}</span>
-      <button class="btn tiny" data-tag-pin="${esc(t)}" title="${isFixed?'取消固定':'固定为默认标签'}" style="padding:4px 8px;">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="${pinFill}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>
-      </button>
-      <button class="btn tiny danger" data-tag-del="${esc(t)}">删除</button>
-    </div>`;
+// ============ 标签管理 ============
+function renderTagManager() {
+  var counts = collectTags();
+  var tags = Object.keys(counts).sort(function (a, b) {
+    return counts[b] - counts[a] || a.localeCompare(b, 'zh');
+  });
+  var list = $('tagManageList');
+  if (!tags.length) {
+    list.innerHTML = '<div class="sp-empty">还没有标签</div>';
+    return;
+  }
+  list.innerHTML = tags.map(function (t) {
+    var isFixed = db.fixedTags.indexOf(t) >= 0;
+    var pinFill = isFixed ? 'currentColor' : 'none';
+    return '<div class="cat-row" style="gap:10px">'
+      + '<span class="dot" style="background:var(--accent)"></span>'
+      + '<input class="cat-name" data-tag-old="' + esc(t) + '" value="' + esc(t) + '" maxlength="20">'
+      + '<span class="cat-n">' + counts[t] + '</span>'
+      + '<button class="btn tiny" data-tag-pin="' + esc(t) + '" title="' + (isFixed ? '取消固定' : '固定为默认标签') + '" style="padding:4px 8px;">'
+      + '<svg width="13" height="13" viewBox="0 0 24 24" fill="' + pinFill + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>'
+      + '</button>'
+      + '<button class="btn tiny danger" data-tag-del="' + esc(t) + '">删除</button>'
+      + '</div>';
   }).join('');
 }
-function renameTag(oldName,newName){
-  newName=newName.trim();
-  if(!newName||newName===oldName){renderTagManager();return;}
-  const existed=db.items.some(i=>(i.tags||[]).includes(newName));
-  db.items.forEach(i=>{
-    if(!Array.isArray(i.tags))i.tags=[];
-    if(i.tags.includes(oldName)){
-      i.tags=[...new Set(i.tags.map(t=>t===oldName?newName:t))];
-      i.updatedAt=Date.now();
+
+function renameTag(oldName, newName) {
+  newName = newName.trim();
+  if (!newName || newName === oldName) { renderTagManager(); return; }
+  var existed = db.items.some(function (i) { return (i.tags || []).indexOf(newName) >= 0; });
+  db.items.forEach(function (i) {
+    if (!Array.isArray(i.tags)) i.tags = [];
+    if (i.tags.indexOf(oldName) >= 0) {
+      i.tags = Array.from(new Set(i.tags.map(function (t) { return t === oldName ? newName : t; })));
+      i.updatedAt = Date.now();
     }
   });
-  const fi=db.fixedTags.indexOf(oldName);
-  if(fi>=0)db.fixedTags[fi]=newName;
-  db.fixedTags=[...new Set(db.fixedTags)];
-  if(currentTag===oldName)currentTag=newName;
-  save();render();renderTagManager();
-  toast(existed?`已合并到「${newName}」`:'已重命名标签');
+  var fi = db.fixedTags.indexOf(oldName);
+  if (fi >= 0) db.fixedTags[fi] = newName;
+  db.fixedTags = Array.from(new Set(db.fixedTags));
+  if (currentTag === oldName) currentTag = newName;
+  if (currentTags && currentTags.has && currentTags.has(oldName)) {
+    currentTags.delete(oldName);
+    currentTags.add(newName);
+  }
+  save();
+  render();
+  renderTagManager();
+  toast(existed ? '已合并到「' + newName + '」' : '已重命名标签');
 }
-function delTag(name){
-  const n=db.items.filter(i=>(i.tags||[]).includes(name)).length;
-  if(!confirm(`确定要删除标签「${name}」吗？\n${n} 条素材会移除该标签。`))return;
-  db.items.forEach(i=>{
-    if(Array.isArray(i.tags)&&i.tags.includes(name)){
-      i.tags=i.tags.filter(t=>t!==name);i.updatedAt=Date.now();
+
+function delTag(name) {
+  var n = db.items.filter(function (i) { return (i.tags || []).indexOf(name) >= 0; }).length;
+  if (!confirm('确定要删除标签「' + name + '」吗？\n' + n + ' 条素材会移除该标签。')) return;
+  db.items.forEach(function (i) {
+    if (Array.isArray(i.tags) && i.tags.indexOf(name) >= 0) {
+      i.tags = i.tags.filter(function (t) { return t !== name; });
+      i.updatedAt = Date.now();
     }
   });
-  db.fixedTags=db.fixedTags.filter(t=>t!==name);
-  if(currentTag===name)currentTag='';
-  save();render();renderTagManager();toast('已删除标签');
+  db.fixedTags = db.fixedTags.filter(function (t) { return t !== name; });
+  if (currentTag === name) currentTag = '';
+  if (currentTags && currentTags.has) currentTags.delete(name);
+  save();
+  render();
+  renderTagManager();
+  toast('已删除标签');
 }
 
-/* =========================================================
-   待上传图片
-   ========================================================= */
-function renderPendingImgs(){
-  if(!pendingImages.length){pendingImgsEl.innerHTML='';return;}
-  pendingImgsEl.innerHTML=pendingImages.map((im,idx)=>{
-    const src=imageSrc(im);
-    return `<div class="pi"><img src="${esc(src)}" alt="" data-img-path="${esc(im.path||'')}"><button data-rm-img="${idx}" title="移除">✕</button><span class="pi-cat">${esc(im.cat||'')}</span></div>`;
+// ============ 待上传图片 ============
+function renderPendingImgs() {
+  if (!pendingImages.length) {
+    pendingImgsEl.innerHTML = '';
+    return;
+  }
+  pendingImgsEl.innerHTML = pendingImages.map(function (im, idx) {
+    var src = imageSrc(im);
+    return '<div class="pi"><img src="' + esc(src) + '" alt="" data-img-path="' + esc(im.path || '') + '"><button data-rm-img="' + idx + '" title="移除">✕</button><span class="pi-cat">' + esc(im.cat || '') + '</span></div>';
   }).join('');
 }
-function setPendingImages(list){pendingImages=(list||[]).map(x=>typeof x==='string'?{url:x,path:'',cat:'其他',size:0,origSize:0}:x);renderPendingImgs();}
 
-/* =========================================================
-   增删改（包含核心自动跳转逻辑）
-   ========================================================= */
-function addOrUpdate(){
-  const text=inputEl.value.trim();
-  const hasImgs=pendingImages.length>0;
-  if(!text&&!hasImgs){toast('内容不能为空');inputEl.focus();return;}
+function setPendingImages(list) {
+  pendingImages = (list || []).map(function (x) {
+    return typeof x === 'string' ? { url: x, path: '', cat: '其他', size: 0, origSize: 0 } : x;
+  });
+  renderPendingImgs();
+}
 
-  let type = typeEl.value || UNCAT;
-  let source = sourceEl.value.trim();
-  let tagsRaw = tagsEl.value.trim();
-  
+// ============ 增删改 ============
+function addOrUpdate() {
+  var text = inputEl.value.trim();
+  var hasImgs = pendingImages.length > 0;
+  if (!text && !hasImgs) {
+    toast('内容不能为空');
+    inputEl.focus();
+    return;
+  }
+
+  var type = typeEl.value || UNCAT;
+  var source = sourceEl.value.trim();
+  var tagsRaw = tagsEl.value.trim();
+
   if (focusMode) {
     type = db.settings.focusModeCat || '收件箱';
     source = '';
     tagsRaw = '';
-    if(!db.cats.includes(type)) db.cats.push(type);
+    if (db.cats.indexOf(type) < 0) db.cats.push(type);
   }
 
-  const tags=tagsRaw?tagsRaw.split(/[,，\s]+/).filter(Boolean):[];
-  if(!source&&currentSource!==ALL_SOURCES)source=currentSource;
-  if(!source&&db.fixedSource)source=db.fixedSource;
-  if(!tags.length&&db.fixedTags.length)tags.push(...db.fixedTags);
+  var tags = tagsRaw ? tagsRaw.split(/[,，\s]+/).filter(Boolean) : [];
+  if (!source && currentSource !== ALL_SOURCES) source = currentSource;
+  if (!source && db.fixedSource) source = db.fixedSource;
+  if (!tags.length && db.fixedTags.length) tags.push.apply(tags, db.fixedTags);
 
-  const wasEditingId = editingId;
+  var wasEditingId = editingId;
 
-  if(editingId){
-    const item=db.items.find(i=>i.id===editingId);
-    if(item){
-      item.text=text;item.type=type;item.source=source;
-      item.tags=[...new Set(tags)];
-      item.images=pendingImages.slice();
-      item.updatedAt=Date.now();
+  if (editingId) {
+    var item = db.items.find(function (i) { return i.id === editingId; });
+    if (item) {
+      item.text = text;
+      item.type = type;
+      item.source = source;
+      item.tags = Array.from(new Set(tags));
+      item.images = pendingImages.slice();
+      item.updatedAt = Date.now();
     }
-  }else{
-    db.items.unshift({id:uid(),text,type,source,tags:[...new Set(tags)],images:pendingImages.slice(),createdAt:Date.now()});
+  } else {
+    db.items.unshift({
+      id: uid(),
+      text: text,
+      type: type,
+      source: source,
+      tags: Array.from(new Set(tags)),
+      images: pendingImages.slice(),
+      createdAt: Date.now()
+    });
   }
 
-  if(source&&!db.sources.includes(source))db.sources.push(source);
-  if(currentSource!==ALL_SOURCES&&source!==currentSource)currentSource=ALL_SOURCES;
+  if (source && db.sources.indexOf(source) < 0) db.sources.push(source);
+  if (currentSource !== ALL_SOURCES && source !== currentSource) currentSource = ALL_SOURCES;
 
   save();
 
-  // ★ 队列跳转逻辑：只要你刚才编辑的是收件箱的素材，保存后自动找下一条
   if (wasEditingId && isProcessingInbox) {
-    const focusCat = db.settings.focusModeCat || '收件箱';
-    
+    var focusCat = db.settings.focusModeCat || '收件箱';
+
     while (zenQueue.length > 0) {
-      const nextId = zenQueue.shift();
-      const candidate = db.items.find(i => i.id === nextId);
-      
-      // 确保下一条依然存在且属于收件箱
+      var nextId = zenQueue.shift();
+      var candidate = db.items.find(function (i) { return i.id === nextId; });
       if (candidate && candidate.type === focusCat) {
         keyword = '';
         if (searchEl) searchEl.value = '';
-        currentType = '全部'; 
+        currentType = '全部';
         currentPage = 1;
-
-        render(); 
-        startEdit(nextId); 
+        render();
+        startEdit(nextId);
         toast('已保存，自动跳至下一条收件箱');
         return;
       }
     }
-    
-    // 队列空了，提示整理完毕
+
     cancelEdit();
     render();
     toast('收件箱已全部处理完毕！');
     return;
   }
 
-  // 普通保存
   cancelEdit();
   toast(wasEditingId ? '已更新素材' : '已加入素材库');
-  currentPage=1;
+  currentPage = 1;
   save();
   render();
   if (!focusMode) inputEl.focus();
 }
 
-function startEdit(id){
-  const item=db.items.find(i=>i.id===id);
-  if(!item)return;
-  
-  const focusCat = db.settings.focusModeCat || '收件箱';
-  
+function startEdit(id) {
+  var item = db.items.find(function (i) { return i.id === id; });
+  if (!item) return;
+
+  var focusCat = db.settings.focusModeCat || '收件箱';
+
   if (editingId !== id) {
     zenQueue = [];
-    // ★ 只要点开编辑的是收件箱分类的素材，就启动流转引擎，无视模式
     isProcessingInbox = (item.type === focusCat);
-    
+
     if (isProcessingInbox) {
-      const sameCats = db.items
-        .filter(i => i.type === focusCat)
-        .sort((a,b) => b.createdAt - a.createdAt) // 按创建时间排序
-        .map(i => i.id);
-        
-      const idx = sameCats.indexOf(id);
+      var sameCats = db.items
+        .filter(function (i) { return i.type === focusCat; })
+        .sort(function (a, b) { return b.createdAt - a.createdAt; })
+        .map(function (i) { return i.id; });
+
+      var idx = sameCats.indexOf(id);
       if (idx !== -1) {
         zenQueue = sameCats.slice(idx + 1).concat(sameCats.slice(0, idx));
       }
     }
   }
 
-  editingId=id;
-  inputEl.value=item.text;
+  editingId = id;
+  inputEl.value = item.text;
   refreshTypeSelect(item.type);
-  sourceEl.value=item.source||'';
-  tagsEl.value=item.tags?item.tags.join(', '):'';
-  setPendingImages(item.images||[]);
-  updateSourcePickerUI();updateTagPickerUI();
-  addBtn.textContent='更新';
-  cancelBtn.style.display='';
-  inputEl.focus();scrollTop();
+  sourceEl.value = item.source || '';
+  tagsEl.value = item.tags ? item.tags.join(', ') : '';
+  setPendingImages(item.images || []);
+  updateSourcePickerUI();
+  updateTagPickerUI();
+  addBtn.textContent = '更新';
+  cancelBtn.style.display = '';
+  inputEl.focus();
+  scrollTop();
 }
 
-function cancelEdit(){
-  editingId=null;
+function cancelEdit() {
+  editingId = null;
   zenQueue = [];
   isProcessingInbox = false;
-  addBtn.textContent='保存';cancelBtn.style.display='none';
-  inputEl.value='';
-  tagsEl.value=db.fixedTags.length?db.fixedTags.join(', '):'';
-  sourceEl.value=db.fixedSource||'';
+  addBtn.textContent = '保存';
+  cancelBtn.style.display = 'none';
+  inputEl.value = '';
+  tagsEl.value = db.fixedTags.length ? db.fixedTags.join(', ') : '';
+  sourceEl.value = db.fixedSource || '';
   setPendingImages([]);
-  updateSourcePickerUI();updateTagPickerUI();
-  refreshTypeSelect(db.cats[0]||'');
+  updateSourcePickerUI();
+  updateTagPickerUI();
+  refreshTypeSelect(db.cats[0] || '');
 }
 
-function addCat(name){
-  name=name.trim();
-  if(!name){newCatInput.focus();return;}
-  if(name===UNCAT||name===IMG_TYPE){toast(`「${name}」是系统保留名`);return;}
-  if(db.cats.includes(name)){toast('分类已存在');return;}
-  db.cats.push(name);ensureColors();save();render();newCatInput.value='';
-  toast(`已添加分类「${name}」`);
+function addCat(name) {
+  name = name.trim();
+  if (!name) { newCatInput.focus(); return; }
+  if (name === UNCAT || name === IMG_TYPE) { toast('「' + name + '」是系统保留名'); return; }
+  if (db.cats.indexOf(name) >= 0) { toast('分类已存在'); return; }
+  db.cats.push(name);
+  ensureColors();
+  save();
+  render();
+  newCatInput.value = '';
+  toast('已添加分类「' + name + '」');
 }
-function renameCat(idx,newName){
-  const oldName=db.cats[idx];
-  if(oldName===undefined)return;
-  newName=newName.trim();
-  if(!newName){toast('名称不能为空');renderCatManager();return;}
-  if(newName===oldName)return;
-  if(newName===UNCAT||newName===IMG_TYPE){toast(`「${newName}」是系统保留名`);renderCatManager();return;}
-  if(db.cats.some((c,i)=>i!==idx&&c===newName)){toast('已存在同名分类');renderCatManager();return;}
-  db.cats[idx]=newName;
-  db.items.forEach(i=>{if(i.type===oldName)i.type=newName;});
-  if(db.colors[oldName]!==undefined){db.colors[newName]=db.colors[oldName];delete db.colors[oldName];}
-  if(currentType===oldName)currentType=newName;
-  save();render();toast('已重命名');
+
+function renameCat(idx, newName) {
+  var oldName = db.cats[idx];
+  if (oldName === undefined) return;
+  newName = newName.trim();
+  if (!newName) { toast('名称不能为空'); renderCatManager(); return; }
+  if (newName === oldName) return;
+  if (newName === UNCAT || newName === IMG_TYPE) { toast('「' + newName + '」是系统保留名'); renderCatManager(); return; }
+  if (db.cats.some(function (c, i) { return i !== idx && c === newName; })) {
+    toast('已存在同名分类');
+    renderCatManager();
+    return;
+  }
+  db.cats[idx] = newName;
+  db.items.forEach(function (i) { if (i.type === oldName) i.type = newName; });
+  if (db.colors[oldName] !== undefined) {
+    db.colors[newName] = db.colors[oldName];
+    delete db.colors[oldName];
+  }
+  if (currentType === oldName) currentType = newName;
+  save();
+  render();
+  toast('已重命名');
 }
-function delCat(idx){
-  const name=db.cats[idx];if(name===undefined)return;
-  const n=db.items.filter(i=>i.type===name).length;
-  const msg=n?`删除分类「${name}」？其中 ${n} 条素材会移到「${UNCAT}」。`:`删除分类「${name}」？`;
-  if(!confirm(msg))return;
-  db.cats.splice(idx,1);
-  db.items.forEach(i=>{if(i.type===name)i.type=UNCAT;});
+
+function delCat(idx) {
+  var name = db.cats[idx];
+  if (name === undefined) return;
+  var n = db.items.filter(function (i) { return i.type === name; }).length;
+  var msg = n ? '删除分类「' + name + '」？其中 ' + n + ' 条素材会移到「' + UNCAT + '」。' : '删除分类「' + name + '」？';
+  if (!confirm(msg)) return;
+  db.cats.splice(idx, 1);
+  db.items.forEach(function (i) { if (i.type === name) i.type = UNCAT; });
   delete db.colors[name];
-  if(currentType===name)currentType='全部';
-  ensureColors();save();render();toast('已删除分类');
+  if (currentType === name) currentType = '全部';
+  ensureColors();
+  save();
+  render();
+  toast('已删除分类');
 }
 
-/* =========================================================
-   拖拽移动分类
-   ========================================================= */
-function bindDragEvents(){
-  // 保留此函数是为了兼容 render.js 里的调用
+// ============ 拖拽移动分类 ============
+function bindDragEvents() {}
+
+function setupDropZones() {
+  $('catNav').addEventListener('dragover', function (e) {
+    var target = e.target.closest('.nav-item[data-type]');
+    if (target) { e.preventDefault(); target.classList.add('drag-over'); }
+  });
+  $('catNav').addEventListener('dragleave', function (e) {
+    var target = e.target.closest('.nav-item[data-type]');
+    if (target) target.classList.remove('drag-over');
+  });
+  $('catNav').addEventListener('drop', function (e) {
+    var target = e.target.closest('.nav-item[data-type]');
+    if (target && draggedItemId) {
+      e.preventDefault();
+      target.classList.remove('drag-over');
+      moveItemCategory(draggedItemId, target.dataset.type);
+    }
+  });
+
+  listEl.addEventListener('dragstart', function (e) {
+    if (selectMode || zenMode) { e.preventDefault(); return; }
+    var card = e.target.closest('.card');
+    if (!card) return;
+    draggedItemId = card.dataset.id;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', draggedItemId);
+    setTimeout(function () { card.style.opacity = '0.4'; }, 0);
+  });
+  listEl.addEventListener('dragend', function (e) {
+    var card = e.target.closest('.card');
+    if (card) card.style.opacity = '1';
+    draggedItemId = null;
+  });
 }
 
-function setupDropZones(){
-  $('catNav').addEventListener('dragover',e=>{
-    const target=e.target.closest('.nav-item[data-type]');
-    if(target){e.preventDefault();target.classList.add('drag-over');}
-  });
-  $('catNav').addEventListener('dragleave',e=>{
-    const target=e.target.closest('.nav-item[data-type]');
-    if(target)target.classList.remove('drag-over');
-  });
-  $('catNav').addEventListener('drop',e=>{
-    const target=e.target.closest('.nav-item[data-type]');
-    if(target&&draggedItemId){e.preventDefault();target.classList.remove('drag-over');moveItemCategory(draggedItemId,target.dataset.type);}
-  });
-
-  listEl.addEventListener('dragstart',e=>{
-    if(selectMode||zenMode){e.preventDefault();return;}
-    const card=e.target.closest('.card');
-    if(!card)return;
-    draggedItemId=card.dataset.id;
-    e.dataTransfer.effectAllowed='move';
-    e.dataTransfer.setData('text/plain',draggedItemId);
-    setTimeout(()=>card.style.opacity='0.4',0);
-  });
-  listEl.addEventListener('dragend',e=>{
-    const card=e.target.closest('.card');
-    if(card)card.style.opacity='1';
-    draggedItemId=null;
-  });
-}
-
-function moveItemCategory(itemId,newType){
-  const item=db.items.find(i=>i.id===itemId);
-  if(item&&item.type!==newType){
-    item.type=newType;item.updatedAt=Date.now();save();render();toast(`已移动至「${newType}」`);
+function moveItemCategory(itemId, newType) {
+  var item = db.items.find(function (i) { return i.id === itemId; });
+  if (item && item.type !== newType) {
+    item.type = newType;
+    item.updatedAt = Date.now();
+    save();
+    render();
+    toast('已移动至「' + newType + '」');
   }
 }
+
+// 全局暴露
+window.moveToTrash = moveToTrash;
+window.restoreFromTrash = restoreFromTrash;
+window.purgeTrashItem = purgeTrashItem;
+window.renderTrash = renderTrash;
+window.renderTagManager = renderTagManager;
+window.renameTag = renameTag;
+window.delTag = delTag;
+window.renderPendingImgs = renderPendingImgs;
+window.setPendingImages = setPendingImages;
+window.addOrUpdate = addOrUpdate;
+window.startEdit = startEdit;
+window.cancelEdit = cancelEdit;
+window.addCat = addCat;
+window.renameCat = renameCat;
+window.delCat = delCat;
+window.setupDropZones = setupDropZones;
+window.moveItemCategory = moveItemCategory;

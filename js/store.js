@@ -1,349 +1,454 @@
-/* js / store.js · 本地存储：IndexedDB 主存储 / localStorage 自动迁移 / 数据规范化 / 筛选 */
+// js/store.js - 本地存储：IndexedDB 主存储 / localStorage 自动迁移 / 数据规范化 / 筛选
 
-/* =========================================================
-   IndexedDB 辅助
-   ========================================================= */
-const IDB_NAME = 'material-library-db';
-const IDB_STORE = 'kv';
-const IDB_KEY = 'main';
-let _idb = null;
+var IDB_NAME = 'material-library-db';
+var IDB_STORE = 'kv';
+var IDB_KEY = 'main';
+var _idb = null;
 
 function openIDB() {
   if (_idb) return Promise.resolve(_idb);
-  return new Promise((resolve, reject) => {
-    if (!window.indexedDB) { reject(new Error('IndexedDB not supported')); return; }
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = e => {
-      const d = e.target.result;
+  return new Promise(function (resolve, reject) {
+    if (!window.indexedDB) {
+      reject(new Error('IndexedDB not supported'));
+      return;
+    }
+    var req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = function (e) {
+      var d = e.target.result;
       if (!d.objectStoreNames.contains(IDB_STORE)) d.createObjectStore(IDB_STORE);
     };
-    req.onsuccess = e => { _idb = e.target.result; resolve(_idb); };
-    req.onerror = e => reject(e.target.error);
+    req.onsuccess = function (e) {
+      _idb = e.target.result;
+      resolve(_idb);
+    };
+    req.onerror = function (e) { reject(e.target.error); };
   });
 }
 
-async function idbGet(key) {
-  const d = await openIDB();
-  return new Promise((resolve, reject) => {
-    const tx = d.transaction(IDB_STORE, 'readonly');
-    const req = tx.objectStore(IDB_STORE).get(key);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+function idbGet(key) {
+  return openIDB().then(function (d) {
+    return new Promise(function (resolve, reject) {
+      var tx = d.transaction(IDB_STORE, 'readonly');
+      var req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
   });
 }
 
-async function idbPut(key, value) {
-  const d = await openIDB();
-  return new Promise((resolve, reject) => {
-    const tx = d.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(value, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+function idbPut(key, value) {
+  return openIDB().then(function (d) {
+    return new Promise(function (resolve, reject) {
+      var tx = d.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = function () { resolve(); };
+      tx.onerror = function () { reject(tx.error); };
+    });
   });
 }
 
-/* =========================================================
-   容量警告
-   ========================================================= */
-let _warningShown = false;
+var _warningShown = false;
 function showStorageWarning(size) {
   if (_warningShown) return;
   _warningShown = true;
-  let bar = document.getElementById('storageWarningBar');
+  var bar = document.getElementById('storageWarningBar');
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'storageWarningBar';
     bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;padding:10px 16px;font-size:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;';
     document.body.appendChild(bar);
   }
-  bar.innerHTML = `<span>⚠️ 数据已达 ${(size/1024/1024).toFixed(2)} MB，请定期导出备份或开启云端推送</span><button style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:13px;" onclick="document.getElementById('storageWarningBar').remove()">知道了</button>`;
+  bar.innerHTML = '<span>⚠️ 数据已达 ' + (size / 1024 / 1024).toFixed(2) + ' MB，请定期导出备份或开启云端推送</span>' +
+    '<button style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:13px;" onclick="document.getElementById(\'storageWarningBar\').remove()">知道了</button>';
 }
 
-/* =========================================================
-   存储主逻辑
-   ========================================================= */
-let suppressPush = false;
-let _filterCacheKey = '';
-let _filterCacheResult = [];
-let _pendingSave = false;
-let _needNormalize = true;
-function markNeedNormalize(){ _needNormalize = true; }
+var suppressPush = false;
+var _filterCacheKey = '';
+var _filterCacheResult = [];
+var _pendingSave = false;
+var _needNormalize = true;
+
+function markNeedNormalize() { _needNormalize = true; }
 
 function clearFilterCache() {
   _filterCacheKey = '';
 }
 
-let _idbSaveTimer = null;
+var _idbSaveTimer = null;
 
-function save(){
+function save() {
   clearFilterCache();
   db._rev = (db._rev || 0) + 1;
   _pendingSave = true;
   _scheduleSaveIDB();
-  if(!suppressPush && typeof scheduleAutoPush === 'function') scheduleAutoPush();
+  if (!suppressPush && typeof scheduleAutoPush === 'function') {
+    scheduleAutoPush();
+  }
 }
 
-function _scheduleSaveIDB(){
+function _scheduleSaveIDB() {
   clearTimeout(_idbSaveTimer);
-  _idbSaveTimer = setTimeout(async () => {
-    try {
-      await idbPut(IDB_KEY, db);
+  _idbSaveTimer = setTimeout(function () {
+    idbPut(IDB_KEY, db).then(function () {
       _pendingSave = false;
-      const size = JSON.stringify(db).length;
+      var size = JSON.stringify(db).length;
       if (size > 4 * 1024 * 1024) showStorageWarning(size);
-    } catch(e) {
+    }).catch(function (e) {
       console.error('IndexedDB 保存失败', e);
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify(db));
         _pendingSave = false;
         toast('已降级保存到 localStorage');
-      } catch(e2) {
+      } catch (e2) {
         toast('保存失败！请立即导出备份');
       }
-    }
+    });
   }, 300);
 }
 
-async function saveImmediate(){
+function saveImmediate() {
   clearTimeout(_idbSaveTimer);
   db._rev = (db._rev || 0) + 1;
   clearFilterCache();
-  try {
-    await idbPut(IDB_KEY, db);
+  return idbPut(IDB_KEY, db).then(function () {
     _pendingSave = false;
-    const size = JSON.stringify(db).length;
+    var size = JSON.stringify(db).length;
     if (size > 4 * 1024 * 1024) showStorageWarning(size);
-  } catch(e) {
+  }).catch(function (e) {
     console.error('IndexedDB 立即保存失败', e);
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(db));
       _pendingSave = false;
-    } catch(e2) {
+    } catch (e2) {
       toast('保存失败！请立即导出备份');
     }
-  }
+  });
 }
 
-/* ★ 修复：关标签页/切后台时，如果还有待保存的数据，同步写入 localStorage 兜底 */
 function _flushPendingToLocalStorage() {
   if (!_pendingSave) return;
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(db));
-  } catch(e) {}
+  } catch (e) {}
 }
 window.addEventListener('beforeunload', _flushPendingToLocalStorage);
 window.addEventListener('pagehide', _flushPendingToLocalStorage);
 
-async function loadStore(){
-  let idbData = null;
-  let lsData = null;
+function loadStore() {
+  var idbData = null;
+  var lsData = null;
 
-  try {
-    const d = await idbGet(IDB_KEY);
+  return idbGet(IDB_KEY).then(function (d) {
     if (d && typeof d === 'object') idbData = d;
-  } catch(e) {
+  }).catch(function (e) {
     console.warn('IndexedDB 读取失败', e);
-  }
-
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') lsData = parsed;
-    }
-  } catch(e) {}
-
-  const idbRev = Number(idbData && idbData._rev) || 0;
-  const lsRev = Number(lsData && lsData._rev) || 0;
-
-  let data = null;
-  if (idbData && lsData) {
-    if (lsRev > idbRev) {
-      data = lsData;
-      try { await idbPut(IDB_KEY, lsData); } catch(e) {}
-      console.log('✅ 从 localStorage 兜底恢复到 IndexedDB');
-    } else {
-      data = idbData;
-    }
-    try { localStorage.removeItem(STORE_KEY); } catch(e) {}
-  } else if (idbData) {
-    data = idbData;
-  } else if (lsData) {
-    data = lsData;
+  }).then(function () {
     try {
-      await idbPut(IDB_KEY, lsData);
-      localStorage.removeItem(STORE_KEY);
-      console.log('✅ 已将 localStorage 数据迁移到 IndexedDB');
-    } catch(e2) {
-      console.warn('迁移到 IndexedDB 失败', e2);
+      var raw = localStorage.getItem(STORE_KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') lsData = parsed;
+      }
+    } catch (e) {}
+
+    var idbRev = Number(idbData && idbData._rev) || 0;
+    var lsRev = Number(lsData && lsData._rev) || 0;
+
+    var data = null;
+    if (idbData && lsData) {
+      if (lsRev > idbRev) {
+        data = lsData;
+        idbPut(IDB_KEY, lsData).catch(function () {});
+        console.log('✅ 从 localStorage 兜底恢复到 IndexedDB');
+      } else {
+        data = idbData;
+      }
+      try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+    } else if (idbData) {
+      data = idbData;
+    } else if (lsData) {
+      data = lsData;
+      return idbPut(IDB_KEY, lsData).then(function () {
+        localStorage.removeItem(STORE_KEY);
+        console.log('✅ 已将 localStorage 数据迁移到 IndexedDB');
+      }).catch(function (e2) {
+        console.warn('迁移到 IndexedDB 失败', e2);
+      }).then(function () {
+        if (data && typeof data === 'object') applyLoadedData(data);
+      });
     }
-  }
 
-  if (data && typeof data === 'object') {
-    applyLoadedData(data);
-  }
+    if (data && typeof data === 'object') {
+      applyLoadedData(data);
+    }
 
-  db.items.forEach(i => {
-    if (i.source && !db.sources.includes(i.source)) db.sources.push(i.source);
-    if (!i.tags) i.tags = [];
-    i.images = normalizeImages(i.images);
+    db.items.forEach(function (i) {
+      if (i.source && db.sources.indexOf(i.source) < 0) db.sources.push(i.source);
+      if (!i.tags) i.tags = [];
+      i.images = normalizeImages(i.images);
+    });
   });
 }
 
 function applyLoadedData(o) {
-  if (Array.isArray(o.items)) db.items = o.items.filter(i => i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0)));
-  if (Array.isArray(o.cats)) db.cats = o.cats.filter(c => typeof c === 'string' && c.trim() && c !== UNCAT && c !== IMG_TYPE);
+  if (Array.isArray(o.items)) {
+    db.items = o.items.filter(function (i) {
+      return i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0));
+    });
+  }
+  if (Array.isArray(o.cats)) {
+    db.cats = o.cats.filter(function (c) {
+      return typeof c === 'string' && c.trim() && c !== UNCAT && c !== IMG_TYPE;
+    });
+  }
   if (o.colors && typeof o.colors === 'object') db.colors = o.colors;
-  if (Array.isArray(o.sources)) db.sources = o.sources.filter(s => typeof s === 'string' && s.trim());
+  if (Array.isArray(o.sources)) {
+    db.sources = o.sources.filter(function (s) {
+      return typeof s === 'string' && s.trim();
+    });
+  }
   if (typeof o.fixedSource === 'string') db.fixedSource = o.fixedSource;
-  if (Array.isArray(o.fixedTags)) db.fixedTags = o.fixedTags.filter(s => typeof s === 'string' && s.trim());
-  if (Array.isArray(o.trash)) db.trash = o.trash.filter(i => i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0)));
+  if (Array.isArray(o.fixedTags)) {
+    db.fixedTags = o.fixedTags.filter(function (s) {
+      return typeof s === 'string' && s.trim();
+    });
+  }
+  if (Array.isArray(o.trash)) {
+    db.trash = o.trash.filter(function (i) {
+      return i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0));
+    });
+  }
   if (Array.isArray(o.imageCategories) && o.imageCategories.length) {
-    db.imageCategories = o.imageCategories.filter(s => typeof s === 'string' && s.trim());
+    db.imageCategories = o.imageCategories.filter(function (s) {
+      return typeof s === 'string' && s.trim();
+    });
   }
   if (o.settings && typeof o.settings === 'object') {
-    db.settings = { ...db.settings, ...o.settings, statsDims: { ...db.settings.statsDims, ...(o.settings.statsDims || {}) } };
+    var merged = {};
+    var k;
+    for (k in db.settings) {
+      if (db.settings.hasOwnProperty(k)) merged[k] = db.settings[k];
+    }
+    for (k in o.settings) {
+      if (o.settings.hasOwnProperty(k)) merged[k] = o.settings[k];
+    }
+    merged.statsDims = {};
+    for (k in db.settings.statsDims) {
+      if (db.settings.statsDims.hasOwnProperty(k)) merged.statsDims[k] = db.settings.statsDims[k];
+    }
+    if (o.settings.statsDims) {
+      for (k in o.settings.statsDims) {
+        if (o.settings.statsDims.hasOwnProperty(k)) merged.statsDims[k] = o.settings.statsDims[k];
+      }
+    }
+    db.settings = merged;
   }
+
   db._rev = Number(o._rev) || 0;
+
+  // 分片快照恢复（第 2 批真正用上，现在无副作用）
+  db._shardSnapshots = o._shardSnapshots || {};
+  db._trashSnapshot = o._trashSnapshot || '';
+  db._metaSnapshot = o._metaSnapshot || '';
+
   markNeedNormalize();
 }
 
-// 图片标签处理
-function normalizeImages(arr){
-  if(!Array.isArray(arr))return [];
-  return arr.map(img=>{
-    if(typeof img==='string')return {url:img,path:'',cat:'其他',tags:[],size:0,origSize:0};
-    if(img && (img.path || img.url)) return {
-      path: img.path || '',
-      url: img.url || '',
-      cat: img.cat || '其他',
-      tags: Array.isArray(img.tags) ? [...new Set(img.tags.map(t => String(t).trim()).filter(Boolean))] : [],
-      size: Number(img.size) || 0,
-      origSize: Number(img.origSize) || 0
-    };
+function normalizeImages(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(function (img) {
+    if (typeof img === 'string') {
+      return { url: img, path: '', cat: '其他', tags: [], size: 0, origSize: 0 };
+    }
+    if (img && (img.path || img.url)) {
+      return {
+        path: img.path || '',
+        url: img.url || '',
+        cat: img.cat || '其他',
+        tags: Array.isArray(img.tags) ? Array.from(new Set(img.tags.map(function (t) { return String(t).trim(); }).filter(Boolean))) : [],
+        size: Number(img.size) || 0,
+        origSize: Number(img.origSize) || 0
+      };
+    }
     return null;
   }).filter(Boolean);
 }
 
-function cleanTrash(){
-  const now=Date.now();const ttl=trashTtlMs();const before=db.trash.length;
-  db.trash=db.trash.filter(i=>(i.deletedAt||now)>now-ttl);
-  if(db.trash.length!==before)save();
+function cleanTrash() {
+  var now = Date.now();
+  var ttl = trashTtlMs();
+  var before = db.trash.length;
+  db.trash = db.trash.filter(function (i) {
+    return (i.deletedAt || now) > now - ttl;
+  });
+  if (db.trash.length !== before) save();
 }
 
-function ensureColors(){
-  if(!db.colors||typeof db.colors!=='object')db.colors={};
-  let dirty=false;const catSet=new Set(db.cats);
-  Object.keys(db.colors).forEach(k=>{
-    if(!catSet.has(k)||typeof db.colors[k]!=='number'){delete db.colors[k];dirty=true;}
+function ensureColors() {
+  if (!db.colors || typeof db.colors !== 'object') db.colors = {};
+  var dirty = false;
+  var catSet = new Set(db.cats);
+  Object.keys(db.colors).forEach(function (k) {
+    if (!catSet.has(k) || typeof db.colors[k] !== 'number') {
+      delete db.colors[k];
+      dirty = true;
+    }
   });
-  const used=new Set(Object.values(db.colors));
-  db.cats.forEach(c=>{
-    if(!(c in db.colors)){
-      let i=0;while(used.has(i))i++;
-      db.colors[c]=i;used.add(i);dirty=true;
+  var used = new Set(Object.values(db.colors));
+  db.cats.forEach(function (c) {
+    if (!(c in db.colors)) {
+      var i = 0;
+      while (used.has(i)) i++;
+      db.colors[c] = i;
+      used.add(i);
+      dirty = true;
     }
   });
   return dirty;
 }
 
-/* ★ 重写：快速路径只做 O(cats) 的 ensureColors，全量修复仅在数据来源可疑时跑 */
-function normalize(){
+function normalize() {
   if (!_needNormalize) {
     if (ensureColors()) save();
     return;
   }
 
-  const catSet = new Set(db.cats);
-  const sourceSet = new Set(db.sources);
-  let dirty = false;
+  var catSet = new Set(db.cats);
+  var sourceSet = new Set(db.sources);
+  var dirty = false;
 
-  db.items.forEach(i => {
+  db.items.forEach(function (i) {
     if (i.type !== IMG_TYPE && !i.text && Array.isArray(i.images) && i.images.length > 0) {
-      i.type = IMG_TYPE; dirty = true;
+      i.type = IMG_TYPE;
+      dirty = true;
     }
     if (i.type !== UNCAT && i.type !== IMG_TYPE && !catSet.has(i.type)) {
-      catSet.add(i.type); dirty = true;
+      catSet.add(i.type);
+      dirty = true;
     }
     if (i.source && !sourceSet.has(i.source)) {
-      db.sources.push(i.source); sourceSet.add(i.source); dirty = true;
+      db.sources.push(i.source);
+      sourceSet.add(i.source);
+      dirty = true;
     }
     if (!Array.isArray(i.tags)) {
-      i.tags = []; dirty = true;
+      i.tags = [];
+      dirty = true;
     } else {
-      const t = [...new Set(i.tags.map(x => String(x).trim()).filter(Boolean))];
-      if (t.length !== i.tags.length) { i.tags = t; dirty = true; }
+      var t = Array.from(new Set(i.tags.map(function (x) { return String(x).trim(); }).filter(Boolean)));
+      if (t.length !== i.tags.length) {
+        i.tags = t;
+        dirty = true;
+      }
     }
-    const ni = normalizeImages(i.images);
-    if (JSON.stringify(ni) !== JSON.stringify(i.images || [])) { i.images = ni; dirty = true; }
+    var ni = normalizeImages(i.images);
+    if (JSON.stringify(ni) !== JSON.stringify(i.images || [])) {
+      i.images = ni;
+      dirty = true;
+    }
   });
 
-  if (dirty) db.cats = [...catSet];
-  if (db.fixedSource && !db.sources.includes(db.fixedSource)) { db.fixedSource = ''; dirty = true; }
+  if (dirty) db.cats = Array.from(catSet);
+  if (db.fixedSource && db.sources.indexOf(db.fixedSource) < 0) {
+    db.fixedSource = '';
+    dirty = true;
+  }
   if (ensureColors()) dirty = true;
 
   _needNormalize = false;
   if (dirty) save();
 }
 
-function cleanupSources(){
-  const activeSources=new Set(db.items.map(i=>i.source).filter(Boolean));
-  let changed=false;
-  db.sources=db.sources.filter(s=>{
-    if(!activeSources.has(s)){if(db.fixedSource===s)db.fixedSource='';changed=true;return false;}
+function cleanupSources() {
+  var activeSources = new Set(db.items.map(function (i) { return i.source; }).filter(Boolean));
+  var changed = false;
+  db.sources = db.sources.filter(function (s) {
+    if (!activeSources.has(s)) {
+      if (db.fixedSource === s) db.fixedSource = '';
+      changed = true;
+      return false;
+    }
     return true;
   });
-  if(currentSource!==ALL_SOURCES&&!db.sources.includes(currentSource)){currentSource=ALL_SOURCES;changed=true;}
-  if(changed)save();
+  if (currentSource !== ALL_SOURCES && db.sources.indexOf(currentSource) < 0) {
+    currentSource = ALL_SOURCES;
+    changed = true;
+  }
+  if (changed) save();
 }
 
-function catColor(name){
-  if(name===UNCAT)return{bg:'#f1f5f9',fg:'#64748b'};
-  if(name===IMG_TYPE)return{bg:'#f5f3ff',fg:'#a855f7'};
-  const idx=db.colors[name];
-  if(typeof idx!=='number')return PALETTE[0];
-  if(idx<PALETTE.length)return PALETTE[idx];
-  const hue=Math.round((idx*137.508)%360);
-  return{bg:`hsl(${hue}, 70%, 95%)`,fg:`hsl(${hue}, 60%, 40%)`};
+function catColor(name) {
+  if (name === UNCAT) return { bg: '#f1f5f9', fg: '#64748b' };
+  if (name === IMG_TYPE) return { bg: '#f5f3ff', fg: '#a855f7' };
+  var idx = db.colors[name];
+  if (typeof idx !== 'number') return PALETTE[0];
+  if (idx < PALETTE.length) return PALETTE[idx];
+  var hue = Math.round((idx * 137.508) % 360);
+  return {
+    bg: 'hsl(' + hue + ', 70%, 95%)',
+    fg: 'hsl(' + hue + ', 60%, 40%)'
+  };
 }
 
-// 标签合并统计
-function collectTags(){
-  const counts={};
-  db.items.forEach(i=>{
-    const tSet = new Set(i.tags || []);
-    (i.images||[]).forEach(im => (im.tags||[]).forEach(t => tSet.add(t)));
-    tSet.forEach(t=>{counts[t]=(counts[t]||0)+1;});
+function collectTags() {
+  var counts = {};
+  db.items.forEach(function (i) {
+    var tSet = new Set(i.tags || []);
+    (i.images || []).forEach(function (im) {
+      (im.tags || []).forEach(function (t) { tSet.add(t); });
+    });
+    tSet.forEach(function (t) {
+      counts[t] = (counts[t] || 0) + 1;
+    });
   });
   return counts;
 }
 
-// 标签搜索合并
-function getFilteredItems(){
-  const cacheKey = `${currentType}|${currentSource}|${currentTag}|${keyword}|${db._rev || 0}`;
+function getFilteredItems() {
+  var cacheKey = currentType + '|' + currentSource + '|' + currentTag + '|' + keyword + '|' + (db._rev || 0);
   if (_filterCacheKey === cacheKey && _filterCacheResult) {
     return _filterCacheResult;
   }
-  
-  const terms=getSearchTerms();
-  const arr=db.items.filter(i=>{
-    if(currentType!=='全部'&&i.type!==currentType)return false;
-    if(currentSource!==ALL_SOURCES&&i.source!==currentSource)return false;
-    
-    if(currentTag){
-      const hasTag = (i.tags||[]).includes(currentTag) || (i.images||[]).some(im => (im.tags||[]).includes(currentTag));
-      if(!hasTag) return false;
+
+  var terms = getSearchTerms();
+  var arr = db.items.filter(function (i) {
+    if (currentType !== '全部' && i.type !== currentType) return false;
+    if (currentSource !== ALL_SOURCES && i.source !== currentSource) return false;
+
+    if (currentTag) {
+      var hasTag = (i.tags || []).indexOf(currentTag) >= 0 ||
+        (i.images || []).some(function (im) { return (im.tags || []).indexOf(currentTag) >= 0; });
+      if (!hasTag) return false;
     }
-    
-    if(terms.length){
-      const imgHay = (i.images||[]).map(im => (im.cat||'') + ' ' + (im.tags||[]).join(' ')).join(' ');
-      const hay=((i.text||'')+' '+(i.source||'')+' '+i.type+' '+(i.tags||[]).join(' ')+' '+imgHay).toLowerCase();
-      if(!terms.every(t=>hay.includes(t)))return false;
+
+    if (terms.length) {
+      var imgHay = (i.images || []).map(function (im) {
+        return (im.cat || '') + ' ' + (im.tags || []).join(' ');
+      }).join(' ');
+      var hay = ((i.text || '') + ' ' + (i.source || '') + ' ' + i.type + ' ' + (i.tags || []).join(' ') + ' ' + imgHay).toLowerCase();
+      if (!terms.every(function (t) { return hay.indexOf(t) >= 0; })) return false;
     }
     return true;
-  }).sort((a,b)=>b.createdAt-a.createdAt);
+  }).sort(function (a, b) { return b.createdAt - a.createdAt; });
 
   _filterCacheKey = cacheKey;
   _filterCacheResult = arr;
   return arr;
 }
+
+// 全局暴露
+window.save = save;
+window.loadStore = loadStore;
+window.applyLoadedData = applyLoadedData;
+window.normalize = normalize;
+window.normalizeImages = normalizeImages;
+window.cleanTrash = cleanTrash;
+window.cleanupSources = cleanupSources;
+window.ensureColors = ensureColors;
+window.catColor = catColor;
+window.collectTags = collectTags;
+window.getFilteredItems = getFilteredItems;
+window.saveImmediate = saveImmediate;
+window.markNeedNormalize = markNeedNormalize;
+window.clearFilterCache = clearFilterCache;
+window.saveSettings = saveSettings;

@@ -1,200 +1,190 @@
-/* js / images.js · 图片压缩 / 上传流程 / 瀑布流浏览（分批加载） */
-/* =========================================================
-   图片压缩
-   ========================================================= */
-let webpSupported = false;
-try{webpSupported = document.createElement('canvas').toDataURL('image/webp').indexOf('data:image/webp') === 0;}catch(e){}
+// js/images.js - 图片压缩 / 上传流程 / 瀑布流浏览（分批加载）
 
-async function tinifyCompress(file,apiKey,proxyUrl){
-  const auth='Basic '+btoa('api:'+apiKey);
-  const target='https://api.tinify.com/shrink';
-  const proxy=(proxyUrl||'').trim();
-  const url = proxy || target;
-  
-  const res=await fetch(url,{
-    method:'POST',
-    headers:{Authorization:auth,'Content-Type':file.type||'application/octet-stream'},
-    body:file
-  });
+var webpSupported = false;
+try {
+  webpSupported = document.createElement('canvas').toDataURL('image/webp').indexOf('data:image/webp') === 0;
+} catch (e) {}
 
-  if(!res.ok){
-    if(res.status===429)throw new Error('TinyPNG 本月额度已用完');
-    if(res.status===401)throw new Error('TinyPNG API Key 无效');
-    throw new Error('TinyPNG HTTP '+res.status);
-  }
+function tinifyCompress(file, apiKey, proxyUrl) {
+  var auth = 'Basic ' + btoa('api:' + apiKey);
+  var target = 'https://api.tinify.com/shrink';
+  var proxy = (proxyUrl || '').trim();
+  var url = proxy || target;
 
-  if(proxy){
-    const blob = await res.blob();
-    if(!blob.type.startsWith('image/')){
-      const text = await blob.text();
-      throw new Error('代理返回非图片内容: ' + text.slice(0, 50));
+  return fetch(url, {
+    method: 'POST',
+    headers: { Authorization: auth, 'Content-Type': file.type || 'application/octet-stream' },
+    body: file
+  }).then(function (res) {
+    if (!res.ok) {
+      if (res.status === 429) throw new Error('TinyPNG 本月额度已用完');
+      if (res.status === 401) throw new Error('TinyPNG API Key 无效');
+      throw new Error('TinyPNG HTTP ' + res.status);
     }
-    return {blob, origSize: file.size, newSize: blob.size, via:'tinypng'};
-  } 
-  
-  const location=res.headers.get('Location');
-  const body=await res.json().catch(()=>({}));
-  const outUrl=location||(body&&body.output&&body.output.url);
-  if(!outUrl)throw new Error('TinyPNG 未返回压缩地址');
-  const outRes=await fetch(outUrl);
-  if(!outRes.ok)throw new Error('下载压缩图失败 HTTP '+outRes.status);
-  const blob=await outRes.blob();
-  return{blob,origSize:file.size,newSize:blob.size,via:'tinypng'};
+    if (proxy) {
+      return res.blob().then(function (blob) {
+        if (blob.type.indexOf('image/') !== 0) {
+          return blob.text().then(function (text) {
+            throw new Error('代理返回非图片内容: ' + text.slice(0, 50));
+          });
+        }
+        return { blob: blob, origSize: file.size, newSize: blob.size, via: 'tinypng' };
+      });
+    }
+    var location = res.headers.get('Location');
+    return res.json().catch(function () { return {}; }).then(function (body) {
+      var outUrl = location || (body && body.output && body.output.url);
+      if (!outUrl) throw new Error('TinyPNG 未返回压缩地址');
+      return fetch(outUrl).then(function (outRes) {
+        if (!outRes.ok) throw new Error('下载压缩图失败 HTTP ' + outRes.status);
+        return outRes.blob();
+      }).then(function (blob) {
+        return { blob: blob, origSize: file.size, newSize: blob.size, via: 'tinypng' };
+      });
+    });
+  });
 }
 
-function canvasCompress(file,maxDim=1920,quality=0.85){
-  return new Promise((resolve,reject)=>{
-    const img=new Image();
-    img.onload=()=>{
-      const {width:origW, height:origH} = img;
-      const shortSide = Math.min(origW, origH);
-      const longSide  = Math.max(origW, origH);
-      const aspect    = longSide / shortSide;
-
-      const isLongImage = aspect >= 2;
-      let scale = 1;
+function canvasCompress(file, maxDim, quality) {
+  maxDim = maxDim || 1920;
+  quality = quality || 0.85;
+  return new Promise(function (resolve, reject) {
+    var img = new Image();
+    img.onload = function () {
+      var origW = img.width;
+      var origH = img.height;
+      var shortSide = Math.min(origW, origH);
+      var longSide = Math.max(origW, origH);
+      var aspect = longSide / shortSide;
+      var isLongImage = aspect >= 2;
+      var scale = 1;
 
       if (isLongImage) {
-        const SHORT_MIN  = 720;
-        const LONG_MAX   = 12000;
-        const MAX_PIXELS = 12 * 1000 * 1000;
-
-        if (longSide > LONG_MAX) {
-          scale = Math.min(scale, LONG_MAX / longSide);
-        }
-        if (origW * origH * scale * scale > MAX_PIXELS) {
-          scale = Math.min(scale, Math.sqrt(MAX_PIXELS / (origW * origH)));
-        }
+        var SHORT_MIN = 720;
+        var LONG_MAX = 12000;
+        var MAX_PIXELS = 12 * 1000 * 1000;
+        if (longSide > LONG_MAX) scale = Math.min(scale, LONG_MAX / longSide);
+        if (origW * origH * scale * scale > MAX_PIXELS) scale = Math.min(scale, Math.sqrt(MAX_PIXELS / (origW * origH)));
         if (shortSide >= SHORT_MIN && shortSide * scale < SHORT_MIN) {
-          const minScaleForShort = SHORT_MIN / shortSide;
-          const maxScaleForLong  = longSide > LONG_MAX ? LONG_MAX / longSide : 1;
+          var minScaleForShort = SHORT_MIN / shortSide;
+          var maxScaleForLong = longSide > LONG_MAX ? LONG_MAX / longSide : 1;
           scale = Math.min(minScaleForShort, maxScaleForLong);
         }
       } else {
-        if (longSide > maxDim) {
-          scale = maxDim / longSide;
-        }
+        if (longSide > maxDim) scale = maxDim / longSide;
       }
 
-      const width  = Math.round(origW * scale);
-      const height = Math.round(origH * scale);
+      var width = Math.round(origW * scale);
+      var height = Math.round(origH * scale);
 
-      const canvas=document.createElement('canvas');
-      canvas.width=width;canvas.height=height;
-      const ctx=canvas.getContext('2d');
-      ctx.drawImage(img,0,0,width,height);
+      var canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
 
-      const tryBlob=(type,q,fallback)=>{
-        canvas.toBlob(blob=>{
-          if(blob){
+      function tryBlob(type, q, fallback) {
+        canvas.toBlob(function (blob) {
+          if (blob) {
             URL.revokeObjectURL(img.src);
-            resolve({blob,origSize:file.size,newSize:blob.size,via:'canvas-'+(type.split('/')[1]||'')});
-          }else if(fallback){
+            resolve({ blob: blob, origSize: file.size, newSize: blob.size, via: 'canvas-' + (type.split('/')[1] || '') });
+          } else if (fallback) {
             fallback();
-          }else{
+          } else {
             URL.revokeObjectURL(img.src);
             reject(new Error('canvas 压缩失败'));
           }
-        },type,q);
-      };
-      if(webpSupported){
-        tryBlob('image/webp',quality,()=>tryBlob('image/jpeg',quality));
-      }else{
-        tryBlob('image/jpeg',quality);
+        }, type, q);
+      }
+
+      if (webpSupported) {
+        tryBlob('image/webp', quality, function () { tryBlob('image/jpeg', quality); });
+      } else {
+        tryBlob('image/jpeg', quality);
       }
     };
-    img.onerror=()=>{URL.revokeObjectURL(img.src);reject(new Error('图片加载失败'));};
-    img.src=URL.createObjectURL(file);
+    img.onerror = function () {
+      URL.revokeObjectURL(img.src);
+      reject(new Error('图片加载失败'));
+    };
+    img.src = URL.createObjectURL(file);
   });
 }
 
-async function compressImage(file,onProgress){
-  const mode = db.settings.compressMode || 'local';
+function compressImage(file, onProgress) {
+  var mode = db.settings.compressMode || 'local';
   if (mode === 'none') {
-    return { blob: file, origSize: file.size, newSize: file.size, via: 'none' };
+    return Promise.resolve({ blob: file, origSize: file.size, newSize: file.size, via: 'none' });
   }
   if (mode === 'tinypng') {
-    const key = (db.settings.tinypngKey || '').trim();
-    const proxy = (db.settings.tinypngProxy || '').trim();
+    var key = (db.settings.tinypngKey || '').trim();
+    var proxy = (db.settings.tinypngProxy || '').trim();
     if (key && proxy) {
-      try {
-        onProgress && onProgress('TinyPNG 压缩中…');
-        const r = await tinifyCompress(file, key, proxy);
+      if (onProgress) onProgress('TinyPNG 压缩中…');
+      return tinifyCompress(file, key, proxy).then(function (r) {
         bumpTinyCount();
         return r;
-      } catch (err) {
+      }).catch(function (err) {
         console.warn('TinyPNG 失败', err);
         toast('TinyPNG 失败：' + err.message + '，改用本地压缩');
-      }
+        if (onProgress) onProgress('本地压缩中…');
+        return canvasCompress(file).catch(function (err2) {
+          console.warn('本地压缩失败', err2);
+          return { blob: file, origSize: file.size, newSize: file.size, via: 'none' };
+        });
+      });
     } else {
       toast('TinyPNG 未配置 Key 或代理，改用本地压缩');
     }
   }
-  onProgress && onProgress('本地压缩中…');
-  try { return await canvasCompress(file); }
-  catch (err) {
+  if (onProgress) onProgress('本地压缩中…');
+  return canvasCompress(file).catch(function (err) {
     console.warn('本地压缩失败', err);
     return { blob: file, origSize: file.size, newSize: file.size, via: 'none' };
-  }
+  });
 }
 
-/* =========================================================
-   ★ 新增：图片文件名模板解析
-   ---------------------------------------------------------
-   支持变量：
-     {cat}        分类
-     {filename}   原文件名（不含扩展名）
-     {index}      本批第几张（1 起）
-     {total}      本批共几张
-     {yyyy} {MM} {dd} {HH} {mm} {ss}   单独的年月日时分秒
-     {date}       YYYYMMDD
-     {time}       HHmmss
-     {datetime}   YYYYMMDDHHmmss
-     {timestamp}  YYYYMMDDHHmmssSSS（毫秒级，默认）
-     {rand}       6 位随机字母数字
-   ========================================================= */
+// 图片文件名模板解析
 function formatImageFilename(template, ctx) {
   ctx = ctx || {};
-  const now = new Date();
-  const pad = (n, w) => String(n).padStart(w || 2, '0');
-  const yyyy = String(now.getFullYear());
-  const MM = pad(now.getMonth() + 1);
-  const dd = pad(now.getDate());
-  const HH = pad(now.getHours());
-  const mm = pad(now.getMinutes());
-  const ss = pad(now.getSeconds());
-  const ms = pad(now.getMilliseconds(), 3);
-  const date = `${yyyy}${MM}${dd}`;
-  const time = `${HH}${mm}${ss}`;
-  const datetime = `${date}${time}`;
-  const timestamp = `${datetime}${ms}`;
-  const rand = Math.random().toString(36).slice(2, 8);
+  var now = new Date();
+  function pad(n, w) { return String(n).padStart(w || 2, '0'); }
+  var yyyy = String(now.getFullYear());
+  var MM = pad(now.getMonth() + 1);
+  var dd = pad(now.getDate());
+  var HH = pad(now.getHours());
+  var mm = pad(now.getMinutes());
+  var ss = pad(now.getSeconds());
+  var ms = pad(now.getMilliseconds(), 3);
+  var date = yyyy + MM + dd;
+  var time = HH + mm + ss;
+  var datetime = date + time;
+  var timestamp = datetime + ms;
+  var rand = Math.random().toString(36).slice(2, 8);
 
-  let result = String(template || '');
-
-  const map = {
-    '{cat}':      ctx.cat || '',
+  var result = String(template || '');
+  var map = {
+    '{cat}': ctx.cat || '',
     '{filename}': ctx.filename || '',
-    '{index}':    String(ctx.index || 1),
-    '{total}':    String(ctx.total || 1),
-    '{yyyy}':     yyyy,
-    '{MM}':       MM,
-    '{dd}':       dd,
-    '{HH}':       HH,
-    '{mm}':       mm,
-    '{ss}':       ss,
-    '{date}':     date,
-    '{time}':     time,
+    '{index}': String(ctx.index || 1),
+    '{total}': String(ctx.total || 1),
+    '{yyyy}': yyyy,
+    '{MM}': MM,
+    '{dd}': dd,
+    '{HH}': HH,
+    '{mm}': mm,
+    '{ss}': ss,
+    '{date}': date,
+    '{time}': time,
     '{datetime}': datetime,
-    '{timestamp}':timestamp,
-    '{rand}':     rand
+    '{timestamp}': timestamp,
+    '{rand}': rand
   };
 
-  Object.keys(map).forEach(k => {
+  Object.keys(map).forEach(function (k) {
     result = result.split(k).join(map[k]);
   });
 
-  // 清理非法字符（Windows / GitHub 都不喜欢这些），并限制长度
   result = result
     .replace(/[\\/:*?"<>|#%\s]+/g, '_')
     .replace(/^[._]+|[._]+$/g, '')
@@ -204,48 +194,40 @@ function formatImageFilename(template, ctx) {
   return result || 'img';
 }
 
-/* ★ 新增：实时预览（供设置面板调用） */
 window.updateImgNamingPreview = function () {
-  const tplEl = document.getElementById('imgNamingTemplate');
-  const previewEl = document.getElementById('imgNamingPreview');
-  const warnEl = document.getElementById('imgNamingWarn');
+  var tplEl = document.getElementById('imgNamingTemplate');
+  var previewEl = document.getElementById('imgNamingPreview');
+  var warnEl = document.getElementById('imgNamingWarn');
   if (!tplEl || !previewEl) return;
 
-  const tpl = (tplEl.value || '').trim() || '{cat}-{timestamp}-{rand}';
-  const preview = formatImageFilename(tpl, {
-    cat: '梗图',
-    filename: 'example',
-    index: 1,
-    total: 1
-  }) + '.jpg';
+  var tpl = (tplEl.value || '').trim() || '{cat}-{timestamp}-{rand}';
+  var preview = formatImageFilename(tpl, { cat: '梗图', filename: 'example', index: 1, total: 1 }) + '.jpg';
   previewEl.textContent = preview;
 
-  // 检查是否含"防重名"变量
-  const hasUnique = /\{(timestamp|datetime|time|rand|index|ss|mm|HH)\}/.test(tpl);
+  var hasUnique = /\{(timestamp|datetime|time|rand|index|ss|mm|HH)\}/.test(tpl);
   if (warnEl) warnEl.style.display = hasUnique ? 'none' : 'block';
 };
 
-/* =========================================================
-   图片上传流程
-   ========================================================= */
-let uploadInProgress=false;
+var uploadInProgress = false;
 
-function renderImgCatChooser(){
-  const list=$('imgCatList');
-  const cats=db.imageCategories.length?db.imageCategories:DEFAULT_IMG_CATS;
-  list.innerHTML=cats.map(c=>`<div class="img-cat-opt" data-cat="${esc(c)}">${esc(c)}</div>`).join('');
-  if(!pendingUploadCat||!cats.includes(pendingUploadCat))pendingUploadCat=cats[0];
-  list.querySelectorAll('.img-cat-opt').forEach(el=>{
-    el.classList.toggle('active',el.dataset.cat===pendingUploadCat);
+function renderImgCatChooser() {
+  var list = $('imgCatList');
+  var cats = db.imageCategories.length ? db.imageCategories : DEFAULT_IMG_CATS;
+  list.innerHTML = cats.map(function (c) {
+    return '<div class="img-cat-opt" data-cat="' + esc(c) + '">' + esc(c) + '</div>';
+  }).join('');
+  if (!pendingUploadCat || cats.indexOf(pendingUploadCat) < 0) pendingUploadCat = cats[0];
+  list.querySelectorAll('.img-cat-opt').forEach(function (el) {
+    el.classList.toggle('active', el.dataset.cat === pendingUploadCat);
   });
 }
 
-function openImgCatChooser(files){
-  pendingUploadFiles=files.slice();
-  pendingUploadCat=db.imageCategories[0]||DEFAULT_IMG_CATS[0];
-  $('imgCatCount').textContent=files.length;
-  $('imgUploadStatus').textContent='';
-  
+function openImgCatChooser(files) {
+  pendingUploadFiles = files.slice();
+  pendingUploadCat = db.imageCategories[0] || DEFAULT_IMG_CATS[0];
+  $('imgCatCount').textContent = files.length;
+  $('imgUploadStatus').textContent = '';
+
   if ($('imgUploadTags')) $('imgUploadTags').value = '';
 
   $('imgProgressWrap').style.display = 'none';
@@ -258,42 +240,39 @@ function openImgCatChooser(files){
   $('imgCatMask').classList.add('show');
 }
 
-function sanitizeFilename(s){
-  return String(s||'').replace(/[\\/:*?"<>|#%\s]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40) || 'img';
+function sanitizeFilename(s) {
+  return String(s || '').replace(/[\\/:*?"<>|#%\s]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'img';
 }
 
-/* ★ 优化：改为 3 并发 worker 上传；★ 新增：支持自定义命名模板 */
-async function startUploadPending(){
-  if(!pendingUploadFiles.length||uploadInProgress)return;
-  const cfg=loadGH();
-  if(!ghReady(cfg)){toast('请先在设置中配置 GitHub');return;}
-  uploadInProgress=true;
-  const cat=pendingUploadCat||'其他';
-  
-  const tagsRaw = $('imgUploadTags') ? $('imgUploadTags').value.trim() : '';
-  const imgTags = tagsRaw ? tagsRaw.split(/[,，\s]+/).filter(Boolean) : [];
+function startUploadPending() {
+  if (!pendingUploadFiles.length || uploadInProgress) return;
+  var cfg = loadGH();
+  if (!ghReady(cfg)) { toast('请先在设置中配置 GitHub'); return; }
+  uploadInProgress = true;
+  var cat = pendingUploadCat || '其他';
 
-  const statusEl=$('imgUploadStatus');
-  const rc=ghRepoConfig('img');
-  const files=pendingUploadFiles.slice();
-  let success=0,fail=0;
-  let done=0;
+  var tagsRaw = $('imgUploadTags') ? $('imgUploadTags').value.trim() : '';
+  var imgTags = tagsRaw ? tagsRaw.split(/[,，\s]+/).filter(Boolean) : [];
+
+  var statusEl = $('imgUploadStatus');
+  var rc = ghRepoConfig('img');
+  var files = pendingUploadFiles.slice();
+  var success = 0, fail = 0;
+  var done = 0;
 
   $('imgProgressWrap').style.display = 'block';
-  $('imgProgressText').textContent = `共 ${files.length} 张，并发上传中...`;
+  $('imgProgressText').textContent = '共 ' + files.length + ' 张，并发上传中...';
 
-  // ★ 核心：用用户设置的模板生成文件名
-  const namingTemplate = (db.settings.imgNamingTemplate || '{cat}-{timestamp}-{rand}').trim();
+  var namingTemplate = (db.settings.imgNamingTemplate || '{cat}-{timestamp}-{rand}').trim();
 
   function makeFilename(file, comp, index) {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
+    var now = new Date();
+    var year = now.getFullYear();
+    var month = String(now.getMonth() + 1).padStart(2, '0');
+    var origBase = String(file.name || '').replace(/\.[^.]+$/, '');
+    var safeCat = sanitizeFilename(cat);
 
-    const origBase = String(file.name || '').replace(/\.[^.]+$/, '');
-    const safeCat = sanitizeFilename(cat);
-
-    let baseName = formatImageFilename(namingTemplate, {
+    var baseName = formatImageFilename(namingTemplate, {
       cat: safeCat,
       filename: origBase,
       index: index + 1,
@@ -302,167 +281,170 @@ async function startUploadPending(){
 
     if (!baseName || !baseName.trim()) baseName = 'img';
 
-    let ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    var ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
     if (comp.blob && comp.blob.type) {
       if (comp.blob.type === 'image/webp') ext = 'webp';
       else if (comp.blob.type === 'image/jpeg') ext = 'jpg';
       else if (comp.blob.type === 'image/png') ext = 'png';
     }
 
-    return { year, month, filename: `${baseName}.${ext}` };
+    return { year: year, month: month, filename: baseName + '.' + ext };
   }
 
-  async function uploadOne(file, idx) {
-    try {
-      statusEl.textContent = `[${idx + 1}/${files.length}] 压缩中…`;
-      const comp = await compressImage(file, msg => { statusEl.textContent = `[${idx + 1}/${files.length}] ${msg}`; });
-      const ratio = comp.origSize > 0 ? (1 - comp.newSize / comp.origSize) * 100 : 0;
-      
-      statusEl.textContent = `[${idx + 1}/${files.length}] 压缩 ${fmtSize(comp.origSize)} → ${fmtSize(comp.newSize)}（${ratio > 0 ? '-' + ratio.toFixed(0) + '%' : '无变化'}），上传中…`;
+  function uploadOne(file, idx) {
+    return compressImage(file, function (msg) {
+      statusEl.textContent = '[' + (idx + 1) + '/' + files.length + '] ' + msg;
+    }).then(function (comp) {
+      var ratio = comp.origSize > 0 ? (1 - comp.newSize / comp.origSize) * 100 : 0;
+      statusEl.textContent = '[' + (idx + 1) + '/' + files.length + '] 压缩 ' + fmtSize(comp.origSize) + ' → ' + fmtSize(comp.newSize) + '（' + (ratio > 0 ? '-' + ratio.toFixed(0) + '%' : '无变化') + '），上传中…';
 
-      const { year, month, filename } = makeFilename(file, comp, idx);
-      const relPath = `${year}/${month}/${filename}`;
-      const fullPath = `${rc.path}/${relPath}`;
+      var f = makeFilename(file, comp, idx);
+      var relPath = f.year + '/' + f.month + '/' + f.filename;
+      var fullPath = rc.path + '/' + relPath;
 
-      const b64 = await blobToBase64(comp.blob);
-      await ghPutRaw(rc, fullPath, b64, null, `upload ${relPath}`);
-
-      pendingImages.push({ path: relPath, url: '', cat, tags: imgTags.slice(), size: comp.newSize, origSize: comp.origSize });
-      renderPendingImgs();
-      success++;
-      statusEl.textContent = `[${idx + 1}/${files.length}] 完成：${filename}`;
-    } catch (err) {
+      return blobToBase64(comp.blob).then(function (b64) {
+        return ghPutRaw(rc, fullPath, b64, null, 'upload ' + relPath);
+      }).then(function () {
+        pendingImages.push({ path: relPath, url: '', cat: cat, tags: imgTags.slice(), size: comp.newSize, origSize: comp.origSize });
+        renderPendingImgs();
+        success++;
+        statusEl.textContent = '[' + (idx + 1) + '/' + files.length + '] 完成：' + f.filename;
+      });
+    }).catch(function (err) {
       console.error(err);
       fail++;
-      statusEl.textContent = `[${idx + 1}/${files.length}] 失败：${err.message}`;
-    } finally {
+      statusEl.textContent = '[' + (idx + 1) + '/' + files.length + '] 失败：' + err.message;
+    }).then(function () {
       done++;
-      const pct = (done / files.length) * 100;
+      var pct = (done / files.length) * 100;
       $('imgProgressBar').style.width = pct + '%';
       $('imgProgressPercent').textContent = Math.floor(pct) + '%';
       if (fail > 0 && done < files.length) $('imgProgressBar').style.background = 'var(--danger)';
       else if (done < files.length) $('imgProgressBar').style.background = 'var(--accent)';
-    }
+    });
   }
 
-  try {
-    // 3 并发同时上传；文件少时并发数降级
-    const CONCURRENCY = Math.min(3, files.length);
-    let cursor = 0;
-    async function worker() {
-      while (cursor < files.length) {
-        const i = cursor++;
-        await uploadOne(files[i], i);
-        // 轻微节流，避免 GitHub API 限流
-        await new Promise(r => setTimeout(r, 150));
-      }
-    }
-    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+  var CONCURRENCY = Math.min(3, files.length);
+  var cursor = 0;
 
+  function worker() {
+    if (cursor >= files.length) return Promise.resolve();
+    var i = cursor++;
+    return uploadOne(files[i], i).then(function () {
+      return new Promise(function (r) { setTimeout(r, 150); });
+    }).then(function () {
+      return worker();
+    });
+  }
+
+  var workers = [];
+  for (var w = 0; w < CONCURRENCY; w++) workers.push(worker());
+
+  Promise.all(workers).then(function () {
     $('imgProgressBar').style.background = fail > 0 ? 'var(--danger)' : '#10b981';
     $('imgProgressText').textContent = fail > 0 ? '部分失败' : '全部完成';
-    
-    if(fail===0){
-      const isEditing=!!editingId;
-      const hasText = inputEl.value.trim().length > 0;
-      if(!isEditing && !hasText){
-        let source=sourceEl.value.trim();
-        if(!source && currentSource!==ALL_SOURCES) source=currentSource;
-        if(!source && db.fixedSource) source=db.fixedSource;
-        const tagsRawStr=tagsEl.value.trim();
-        const itemTags=tagsRawStr?tagsRawStr.split(/[,，\s]+/).filter(Boolean):[];
-        if(!itemTags.length && db.fixedTags.length) itemTags.push(...db.fixedTags);
+
+    if (fail === 0) {
+      var isEditing = !!editingId;
+      var hasText = inputEl.value.trim().length > 0;
+      if (!isEditing && !hasText) {
+        var source = sourceEl.value.trim();
+        if (!source && currentSource !== ALL_SOURCES) source = currentSource;
+        if (!source && db.fixedSource) source = db.fixedSource;
+        var tagsRawStr = tagsEl.value.trim();
+        var itemTags = tagsRawStr ? tagsRawStr.split(/[,，\s]+/).filter(Boolean) : [];
+        if (!itemTags.length && db.fixedTags.length) itemTags.push.apply(itemTags, db.fixedTags);
 
         db.items.unshift({
-          id:uid(), text:'', type:IMG_TYPE, source,
-          tags:[...new Set(itemTags)],
-          images:pendingImages.slice(),
-          createdAt:Date.now()
+          id: uid(), text: '', type: IMG_TYPE, source: source,
+          tags: Array.from(new Set(itemTags)),
+          images: pendingImages.slice(),
+          createdAt: Date.now()
         });
-        if(source && !db.sources.includes(source)) db.sources.push(source);
-        pendingImages=[];
+        if (source && db.sources.indexOf(source) < 0) db.sources.push(source);
+        pendingImages = [];
         renderPendingImgs();
-        tagsEl.value=db.fixedTags.length?db.fixedTags.join(', '):'';
-        sourceEl.value=db.fixedSource||'';
-        updateSourcePickerUI();updateTagPickerUI();
-        currentPage=1;
-        save();render();
-        statusEl.textContent=`上传成功 ${success} 张，已自动保存到素材库`;
-        toast(`已上传 ${success} 张图片并自动保存`);
-        setTimeout(()=>{ $('imgCatMask').classList.remove('show'); }, 800);
-      }else{
-        statusEl.textContent=`上传成功 ${success} 张，点击「保存」加入素材库`;
-        toast(`已上传 ${success} 张图片，点保存加入素材库`);
-        setTimeout(()=>{ $('imgCatMask').classList.remove('show'); }, 800);
+        tagsEl.value = db.fixedTags.length ? db.fixedTags.join(', ') : '';
+        sourceEl.value = db.fixedSource || '';
+        updateSourcePickerUI();
+        updateTagPickerUI();
+        currentPage = 1;
+        save();
+        render();
+        statusEl.textContent = '上传成功 ' + success + ' 张，已自动保存到素材库';
+        toast('已上传 ' + success + ' 张图片并自动保存');
+        setTimeout(function () { $('imgCatMask').classList.remove('show'); }, 800);
+      } else {
+        statusEl.textContent = '上传成功 ' + success + ' 张，点击「保存」加入素材库';
+        toast('已上传 ' + success + ' 张图片，点保存加入素材库');
+        setTimeout(function () { $('imgCatMask').classList.remove('show'); }, 800);
       }
-    }else{
-      statusEl.textContent=`完成：成功 ${success}，失败 ${fail}`;
-      toast(`上传 ${success} 张，失败 ${fail} 张`);
+    } else {
+      statusEl.textContent = '完成：成功 ' + success + '，失败 ' + fail;
+      toast('上传 ' + success + ' 张，失败 ' + fail + ' 张');
     }
-  }finally{
-    uploadInProgress=false;
-    pendingUploadFiles=[];
-  }
+  }).then(function () {
+    uploadInProgress = false;
+    pendingUploadFiles = [];
+  });
 }
 
-/* =========================================================
-   图片浏览（瀑布流）· 分批加载
-   ========================================================= */
-const IMG_VIEW_BATCH_SIZE = 60;
-let _imgViewFiltered = [];
-let _imgViewRendered = 0;
-let _imgViewObserver = null;
+// 图片浏览（瀑布流）
+var IMG_VIEW_BATCH_SIZE = 60;
+var _imgViewFiltered = [];
+var _imgViewRendered = 0;
+var _imgViewObserver = null;
 
-function collectAllImages(){
-  const arr=[];
-  db.items.forEach(item=>{
-    (item.images||[]).forEach(im=>{
+function collectAllImages() {
+  var arr = [];
+  db.items.forEach(function (item) {
+    (item.images || []).forEach(function (im) {
       arr.push({
-        im,
+        im: im,
         src: imageSrc(im),
-        path: im.path||'',
-        cat: im.cat||'其他',
-        tags: im.tags||[],
+        path: im.path || '',
+        cat: im.cat || '其他',
+        tags: im.tags || [],
         itemId: item.id,
-        itemText: item.text||''
+        itemText: item.text || ''
       });
     });
   });
   return arr;
 }
 
-function _renderMasonryBatch(){
+function _renderMasonryBatch() {
   if (_imgViewRendered >= _imgViewFiltered.length) {
     if (_imgViewObserver) {
       _imgViewObserver.disconnect();
       _imgViewObserver = null;
     }
-    const sentinel = document.getElementById('imgMasonrySentinel');
+    var sentinel = document.getElementById('imgMasonrySentinel');
     if (sentinel) sentinel.style.display = 'none';
     return;
   }
-  const next = _imgViewFiltered.slice(_imgViewRendered, _imgViewRendered + IMG_VIEW_BATCH_SIZE);
-  const html = next.map(x => {
-    const cap = (x.itemText || '').slice(0, 40);
-    return `<div class="mi">
-      <img src="${esc(x.src)}" alt="" loading="lazy" data-open-img="${esc(x.src)}" data-img-path="${esc(x.path)}">
-      <span class="mi-cat">${esc(x.cat)}</span>
-      ${cap ? `<div class="mi-cap">${esc(cap)}${x.itemText.length > 40 ? '…' : ''}</div>` : ''}
-    </div>`;
+  var next = _imgViewFiltered.slice(_imgViewRendered, _imgViewRendered + IMG_VIEW_BATCH_SIZE);
+  var html = next.map(function (x) {
+    var cap = (x.itemText || '').slice(0, 40);
+    return '<div class="mi">'
+      + '<img src="' + esc(x.src) + '" alt="" loading="lazy" data-open-img="' + esc(x.src) + '" data-img-path="' + esc(x.path) + '">'
+      + '<span class="mi-cat">' + esc(x.cat) + '</span>'
+      + (cap ? '<div class="mi-cap">' + esc(cap) + (x.itemText.length > 40 ? '…' : '') + '</div>' : '')
+      + '</div>';
   }).join('');
   $('imgMasonry').insertAdjacentHTML('beforeend', html);
   _imgViewRendered += next.length;
 
-  const wrap = document.querySelector('.img-masonry-wrap');
+  var wrap = document.querySelector('.img-masonry-wrap');
   if (wrap && _imgViewRendered < _imgViewFiltered.length && wrap.scrollHeight <= wrap.clientHeight) {
     _renderMasonryBatch();
   }
 }
 
-function _setupMasonryObserver(){
+function _setupMasonryObserver() {
   if (_imgViewObserver) _imgViewObserver.disconnect();
 
-  let sentinel = document.getElementById('imgMasonrySentinel');
+  var sentinel = document.getElementById('imgMasonrySentinel');
   if (!sentinel) {
     sentinel = document.createElement('div');
     sentinel.id = 'imgMasonrySentinel';
@@ -471,8 +453,8 @@ function _setupMasonryObserver(){
   }
   sentinel.style.display = 'block';
 
-  const wrap = document.querySelector('.img-masonry-wrap');
-  _imgViewObserver = new IntersectionObserver(entries => {
+  var wrap = document.querySelector('.img-masonry-wrap');
+  _imgViewObserver = new IntersectionObserver(function (entries) {
     if (entries[0].isIntersecting) {
       _renderMasonryBatch();
     }
@@ -481,24 +463,24 @@ function _setupMasonryObserver(){
   _imgViewObserver.observe(sentinel);
 }
 
-function renderImgView(){
-  const all=collectAllImages();
-  const counts={};
-  all.forEach(x=>counts[x.cat]=(counts[x.cat]||0)+1);
-  const catList=['全部',...Object.keys(counts).sort((a,b)=>counts[b]-counts[a])];
-  if(!catList.includes(currentImgViewCat))currentImgViewCat='全部';
+function renderImgView() {
+  var all = collectAllImages();
+  var counts = {};
+  all.forEach(function (x) { counts[x.cat] = (counts[x.cat] || 0) + 1; });
+  var catList = ['全部'].concat(Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }));
+  if (catList.indexOf(currentImgViewCat) < 0) currentImgViewCat = '全部';
 
-  $('imgCatTabs').innerHTML=catList.map(c=>{
-    const n=c==='全部'?all.length:(counts[c]||0);
-    return `<div class="ic-tab ${currentImgViewCat===c?'active':''}" data-ic="${esc(c)}">${esc(c)}<span class="n">${n}</span></div>`;
+  $('imgCatTabs').innerHTML = catList.map(function (c) {
+    var n = c === '全部' ? all.length : (counts[c] || 0);
+    return '<div class="ic-tab ' + (currentImgViewCat === c ? 'active' : '') + '" data-ic="' + esc(c) + '">' + esc(c) + '<span class="n">' + n + '</span></div>';
   }).join('');
 
-  const filtered = currentImgViewCat === '全部' ? all : all.filter(x => x.cat === currentImgViewCat);
-  $('imgViewCount').textContent = `${filtered.length} 张`;
+  var filtered = currentImgViewCat === '全部' ? all : all.filter(function (x) { return x.cat === currentImgViewCat; });
+  $('imgViewCount').textContent = filtered.length + ' 张';
 
-  if(!filtered.length){
-    $('imgMasonry').innerHTML = `<div class="img-view-empty">还没有图片</div>`;
-    const s = document.getElementById('imgMasonrySentinel');
+  if (!filtered.length) {
+    $('imgMasonry').innerHTML = '<div class="img-view-empty">还没有图片</div>';
+    var s = document.getElementById('imgMasonrySentinel');
     if (s) s.style.display = 'none';
     if (_imgViewObserver) { _imgViewObserver.disconnect(); _imgViewObserver = null; }
     return;
@@ -511,17 +493,27 @@ function renderImgView(){
   _setupMasonryObserver();
 }
 
-function openImgView(){
-  currentImgViewCat='全部';
+function openImgView() {
+  currentImgViewCat = '全部';
   renderImgView();
-  $('imgView').hidden=false;
-  document.body.style.overflow='hidden';
-  const wrap = document.querySelector('.img-masonry-wrap');
+  $('imgView').hidden = false;
+  document.body.style.overflow = 'hidden';
+  var wrap = document.querySelector('.img-masonry-wrap');
   if (wrap) wrap.scrollTop = 0;
 }
 
-function closeImgView(){
-  $('imgView').hidden=true;
-  document.body.style.overflow='';
+function closeImgView() {
+  $('imgView').hidden = true;
+  document.body.style.overflow = '';
   if (_imgViewObserver) { _imgViewObserver.disconnect(); _imgViewObserver = null; }
 }
+
+// 全局暴露
+window.formatImageFilename = formatImageFilename;
+window.renderImgCatChooser = renderImgCatChooser;
+window.openImgCatChooser = openImgCatChooser;
+window.startUploadPending = startUploadPending;
+window.renderImgView = renderImgView;
+window.openImgView = openImgView;
+window.closeImgView = closeImgView;
+window.collectAllImages = collectAllImages;
