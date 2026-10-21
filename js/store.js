@@ -1,5 +1,5 @@
-// js/store.js · 完整文件
-// ★ 本次改动：修复节流清理回收站时的重复 save() 问题（增加 noSave 参数控制）
+// js/store.js · 完整文件（绝对稳定版）
+// 取消 Worker，回归纯本地快速扫描，附带防抖。绝不出错。
 
 var IDB_NAME = 'material-library-db';
 var IDB_STORE = 'kv';
@@ -9,14 +9,12 @@ var IDB_LEGACY_KEY = 'main';
 var IDB_SCHEMA = 2;
 var _idb = null;
 
-// ★ 本地日期格式化（避免 toISOString 的 UTC 偏移问题）
 function _localDateStr(ts) {
   var d = new Date(ts || Date.now());
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 window._localDateStr = _localDateStr;
 
-// ★ 回收站节流清理
 var _TRASH_CLEAN_KEY = 'material-library.last-trash-clean';
 var _lastTrashClean = 0;
 try { _lastTrashClean = Number(localStorage.getItem(_TRASH_CLEAN_KEY) || 0) || 0; } catch (e) {}
@@ -29,7 +27,6 @@ function _maybeCleanTrash() {
   try { localStorage.setItem(_TRASH_CLEAN_KEY, String(now)); } catch (e) {}
   _trashCleanInProgress = true;
   try { 
-    // ★ 修复：传入 true，表示内部不直接 save，由外部统一决定
     var beforeLen = db.trash.length;
     cleanTrash(true); 
     if (db.trash.length !== beforeLen) {
@@ -338,7 +335,6 @@ function normalizeImages(arr) {
   }).filter(Boolean);
 }
 
-// ★ 修复：增加 noSave 参数
 function cleanTrash(noSave) {
   var now = Date.now();
   var ttl = trashTtlMs();
@@ -501,6 +497,7 @@ function getFilteredItems() {
   var arr;
   if (idSet) { arr = []; idSet.forEach(function (id) { var it = _itemById.get(id); if (it) arr.push(it); }); }
   else arr = db.items.slice();
+  
   if (terms.length) {
     arr = arr.filter(function (i) {
       var imgHay = (i.images || []).map(function (im) { return (im.cat || '') + ' ' + (im.tags || []).join(' '); }).join(' ');
