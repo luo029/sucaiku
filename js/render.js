@@ -153,12 +153,21 @@ function renderTags(){
   }
 }
 
+/* ★ 新增：判断当前是否是窄屏（手机） */
+function _isMobileViewport(){
+  return window.matchMedia('(max-width: 768px)').matches;
+}
+
+/* ★ 修复：分类筛选按钮文字在手机上简写，防止重叠 */
 function renderCatFilter(){
+  const isEmpty = currentType === '全部';
+  const emptyLabel = _isMobileViewport() ? '分类' : '全部分类';
   if ($('catFilterText')) {
-    $('catFilterText').textContent = currentType === '全部' ? '全部分类' : currentType;
+    $('catFilterText').textContent = isEmpty ? emptyLabel : currentType;
   }
   if ($('catFilterBtn')) {
-    $('catFilterBtn').classList.toggle('active-filter', currentType !== '全部');
+    $('catFilterBtn').classList.toggle('active-filter', !isEmpty);
+    $('catFilterBtn').title = isEmpty ? '按分类筛选' : `当前筛选：${currentType}（点击切换）`;
   }
   if ($('catFilterPanel') && !$('catFilterPanel').hidden) {
     renderCatFilterList();
@@ -192,12 +201,16 @@ function renderCatFilterList() {
   $('catFilterList').innerHTML = html;
 }
 
+/* ★ 修复：来源筛选按钮文字在手机上简写，防止重叠 */
 function renderSourceFilter(){
+  const isEmpty = currentSource === ALL_SOURCES;
+  const emptyLabel = _isMobileViewport() ? '来源' : '全部来源';
   if ($('sourceFilterText')) {
-    $('sourceFilterText').textContent = currentSource === ALL_SOURCES ? '全部来源' : currentSource;
+    $('sourceFilterText').textContent = isEmpty ? emptyLabel : currentSource;
   }
   if ($('sourceFilterBtn')) {
-    $('sourceFilterBtn').classList.toggle('active-filter', currentSource !== ALL_SOURCES);
+    $('sourceFilterBtn').classList.toggle('active-filter', !isEmpty);
+    $('sourceFilterBtn').title = isEmpty ? '按来源筛选' : `当前筛选：${currentSource}（点击切换）`;
   }
   if ($('sourceFilterPanel') && !$('sourceFilterPanel').hidden) {
     renderSourceFilterList();
@@ -516,3 +529,16 @@ function requestDeleteConfirm(count,onConfirm){
   $('noRemind').checked=false;$('modalMask').classList.add('show');
 }
 function closeModal(){$('modalMask').classList.remove('show');pendingConfirm=null;}
+
+/* =========================================================
+   ★ resize 时更新筛选按钮文字（手机↔桌面切换）
+   ========================================================= */
+let _lastIsMobileViewport = _isMobileViewport();
+window.addEventListener('resize', () => {
+  const now = _isMobileViewport();
+  if (now !== _lastIsMobileViewport) {
+    _lastIsMobileViewport = now;
+    renderCatFilter();
+    renderSourceFilter();
+  }
+}, { passive: true });

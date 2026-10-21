@@ -143,17 +143,64 @@
   .composer-actions .btn { padding: 8px 14px; font-size: 13.5px; }
   .composer-actions .primary { padding: 9px 22px; font-size: 14px; }
 
-  /* ---- 工具栏：搜索占一行，按钮一行 ---- */
+  /* =========================================================
+     ★ 修复：工具栏分类/来源筛选按钮重叠
+     ---------------------------------------------------------
+     原因：两个筛选按钮硬编码了 min-width: 140px，
+           加上其他图标按钮，手机一行放不下 → 溢出/重叠。
+     方案：
+       1. 两个筛选按钮各占 50% 宽度，稳稳并列
+       2. 文字在手机端简写："全部分类" → "分类"
+       3. 图标按钮自动换到下一行，不会挤压筛选按钮
+     ========================================================= */
   .toolbar { gap: 8px; margin-bottom: 14px; }
   .search-wrap { flex: 1 0 100%; }
   #search { font-size: 16px !important; padding: 11px 14px 11px 40px; }
-  .source-filter-wrap { flex: 1; min-width: 0; }
-  #sourceFilter {
-    width: 100%; max-width: none; min-width: 0;
-    padding: 10px 32px 10px 34px;
-    font-size: 14px !important;
+
+  /* 两个筛选按钮各占 50% 宽度，flex-shrink 不允许收缩 */
+  .source-filter-wrap {
+    flex: 0 0 calc(50% - 4px);
+    max-width: calc(50% - 4px);
+    min-width: 0;
   }
-  .icon-btn { width: 40px; height: 40px; }
+
+  /* 彻底解除 min-width 140px 的硬限制 */
+  .custom-source-filter-btn {
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 0 10px !important;
+    gap: 2px;
+    font-size: 13px;
+    width: 100%;
+    height: 40px;
+  }
+
+  /* 文字允许收缩 + 省略号 */
+  .custom-source-filter-btn span {
+    font-size: 13px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 图标缩小并固定不收缩 */
+  .custom-source-filter-btn svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    margin-right: 4px !important;
+  }
+
+  /* 下拉箭头缩小并固定不收缩 */
+  .custom-source-filter-btn::after {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    margin-left: 2px;
+  }
+
+  .icon-btn { width: 40px; height: 40px; flex: none; }
   .more-wrap { flex: none; }
 
   /* ---- 分类页签（compact 模式下） ---- */
@@ -363,6 +410,10 @@
   
   /* 超小屏的 3 个折叠框可能太窄，调整字体 */
   .st-grid-3 .setting-num { font-size: 14px !important; }
+
+  /* 超小屏筛选按钮字号再小一点 */
+  .custom-source-filter-btn { font-size: 12px !important; }
+  .custom-source-filter-btn span { font-size: 12px !important; }
 }
 
 /* =========================================================
