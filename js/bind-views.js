@@ -1,5 +1,5 @@
 // js/bind-views.js · 完整文件
-// 【改动】去除了进入批量管理时多余的 Toast 提示
+// 【改动】修改了 zenAutoClosePanel 开关绑定的提示语，状态更清晰
 
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
@@ -257,6 +257,14 @@ safeBind('saveShortcut', 'click', function (e) { var b = e.target.closest('butto
 safeBind('uiStyleMode', 'click', function (e) { var b = e.target.closest('button[data-style]'); if (!b) return; db.settings.uiStyle = b.dataset.style; saveSettings(); renderStyleOptions(); applySettingsToUI(); var name = AVAILABLE_STYLES.find(function (s) { return s.id === db.settings.uiStyle; }); toast('已切换至「' + (name ? name.name : '新风格') + '」'); });
 safeBind('listStyleMode', 'click', function (e) { var b = e.target.closest('button[data-style]'); if (!b) return; db.settings.listStyle = b.dataset.style; saveSettings(); applySettingsToUI(); toast('列表排版已调整'); });
 safeBind('zenFontSize', 'click', function (e) { var b = e.target.closest('button[data-zfs]'); if (!b) return; db.settings.zenFontSize = b.dataset.zfs; saveSettings(); applySettingsToUI(); toast('极简模式字号已调整'); });
+
+// ★ 新增：极简模式滚动关闭筛选面板开关
+safeBind('zenAutoClosePanel', 'change', function (e) {
+  db.settings.zenAutoClosePanel = e.target.checked;
+  saveSettings();
+  toast(e.target.checked ? '✅ 已开启：滑动页面时面板自动收起' : '❌ 已关闭：滑动时面板不收起');
+});
+
 safeBind('sidebarShowCat', 'change', function (e) { db.settings.sidebarShowCat = e.target.checked; saveSettings(); applySettingsToUI(); });
 safeBind('sidebarShowSrc', 'change', function (e) { db.settings.sidebarShowSrc = e.target.checked; saveSettings(); applySettingsToUI(); });
 safeBind('sidebarShowTag', 'change', function (e) { db.settings.sidebarShowTag = e.target.checked; saveSettings(); applySettingsToUI(); });

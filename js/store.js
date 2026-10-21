@@ -1,8 +1,5 @@
 // js/store.js · 完整文件
-// ★ 本次改动：
-//   1) save() 里节流清理回收站（1 小时一次，通过 localStorage 持久化时间戳）
-//   2) 新增 _localDateStr() 本地日期格式化函数，暴露到 window，供 snapshots.js / github.js 使用
-//   3) 其余逻辑保留
+// ★ 本次改动：修复节流清理回收站时的重复 save() 问题（增加 noSave 参数控制）
 
 var IDB_NAME = 'material-library-db';
 var IDB_STORE = 'kv';
@@ -31,7 +28,14 @@ function _maybeCleanTrash() {
   _lastTrashClean = now;
   try { localStorage.setItem(_TRASH_CLEAN_KEY, String(now)); } catch (e) {}
   _trashCleanInProgress = true;
-  try { cleanTrash(); } catch (e) { console.warn('回收站清理失败', e); }
+  try { 
+    // ★ 修复：传入 true，表示内部不直接 save，由外部统一决定
+    var beforeLen = db.trash.length;
+    cleanTrash(true); 
+    if (db.trash.length !== beforeLen) {
+      save(); 
+    }
+  } catch (e) { console.warn('回收站清理失败', e); }
   _trashCleanInProgress = false;
 }
 
@@ -186,7 +190,6 @@ function save() {
   if (typeof _recordSnapshotChange === 'function') { try { _recordSnapshotChange(); } catch (e) {} }
   _scheduleSaveIDB();
   if (!suppressPush && typeof scheduleAutoPush === 'function') scheduleAutoPush();
-  // ★ 新增：节流清理回收站（1 小时一次）
   _maybeCleanTrash();
 }
 
@@ -335,7 +338,8 @@ function normalizeImages(arr) {
   }).filter(Boolean);
 }
 
-function cleanTrash() {
+// ★ 修复：增加 noSave 参数
+function cleanTrash(noSave) {
   var now = Date.now();
   var ttl = trashTtlMs();
   var before = db.trash.length;
@@ -345,7 +349,7 @@ function cleanTrash() {
     db.trash.sort(function (a, b) { return (b.deletedAt || 0) - (a.deletedAt || 0); });
     db.trash = db.trash.slice(0, threshold);
   }
-  if (db.trash.length !== before) save();
+  if (db.trash.length !== before && !noSave) save();
 }
 
 function ensureColors() {

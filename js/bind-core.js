@@ -1,5 +1,7 @@
 // js/bind-core.js · 完整文件
-// ★ 本次改动：handleImgFallback 增加 data-retry 重试上限，防止死循环
+// ★ 本次改动：
+//   修复了：关闭“滑动收起筛选”开关后，顶部按钮栏依然被隐藏的问题
+//   现在只要开关关闭，无论是弹窗还是顶部栏，都会稳稳固定住，不会乱动。
 
 addBtn.addEventListener('click', addOrUpdate);
 cancelBtn.addEventListener('click', cancelEdit);
@@ -126,6 +128,25 @@ document.addEventListener('click', function (e) {
 
 $('hitokotoRefresh').addEventListener('click', fetchHitokoto);
 
+// ★ 新增：极简模式下，向下滑动页面自动隐藏顶部筛选栏；向上滑动恢复
+// ★ 修复：如果开关关闭，顶部栏绝不隐藏，保持固定
+var lastZenScroll = window.scrollY || 0;
+window.addEventListener('scroll', function() {
+  if (!document.body.classList.contains('zen-mode')) return;
+  // 如果关掉了开关，那么顶部栏固定显示，不跟着滑走
+  if (db.settings && db.settings.zenAutoClosePanel === false) {
+    document.body.classList.remove('zen-hide-bar');
+    return;
+  }
+  var y = window.scrollY || window.pageYOffset;
+  if (y > lastZenScroll && y > 60) {
+    document.body.classList.add('zen-hide-bar');
+  } else if (y < lastZenScroll - 10 || y <= 60) {
+    document.body.classList.remove('zen-hide-bar');
+  }
+  lastZenScroll = y;
+}, { passive: true });
+
 var searchDebounceTimer = null;
 searchEl.addEventListener('input', function () {
   clearTimeout(searchDebounceTimer);
@@ -251,6 +272,21 @@ function openZenFilterPanel(type) {
     if (left > maxLeft) left = maxLeft;
     panel.style.left = left + 'px';
   }
+
+  // ★ 核心逻辑：同时监听 scroll, touchmove, wheel，只要滑动必定关闭（受设置开关控制）
+  function closePanelOnScroll() {
+    if (db.settings && db.settings.zenAutoClosePanel === false) return;
+    if (panel && panel.parentNode) {
+      panel.remove();
+      window.removeEventListener('scroll', closePanelOnScroll);
+      window.removeEventListener('touchmove', closePanelOnScroll);
+      window.removeEventListener('wheel', closePanelOnScroll);
+    }
+  }
+  window.addEventListener('scroll', closePanelOnScroll, { passive: true });
+  window.addEventListener('touchmove', closePanelOnScroll, { passive: true });
+  window.addEventListener('wheel', closePanelOnScroll, { passive: true });
+
   var searchInput = document.getElementById('zenFilterSearch');
   setTimeout(function () { searchInput.focus(); }, 50);
   var renderZenList = function (q) {
@@ -307,6 +343,9 @@ function openZenFilterPanel(type) {
     currentPage = 1;
     renderList(); renderHeader();
     panel.hidden = true;
+    window.removeEventListener('scroll', closePanelOnScroll);
+    window.removeEventListener('touchmove', closePanelOnScroll);
+    window.removeEventListener('wheel', closePanelOnScroll);
   });
 }
 

@@ -1,6 +1,7 @@
 // js/render.js · 完整文件（修复标签颜色与模式不生效的问题）
 // 优化：getCachedFormat 用 id+updatedAt 做 key， _formatCache 扩大到 1000 条， deleteSource 换 showCustomConfirm
-// ★ 新增：超长文本（>5000 字）且有搜索词时，只对前 5000 字高亮，其余直接 esc（防止大文本卡顿）
+// ★ 新增：超长文本（>5000 字）且有搜索词时，只对前 5000 字高亮，其余走安全切分点渲染
+// ★ 新增：_findSafeSplitPoint 保证 【】/==/** 标签不会被腰斩
 
 var tagExpanded = false, catExpanded = false, srcExpanded = false;
 var catManagerPage = 1, tagManagerPage = 1;
@@ -157,16 +158,33 @@ var _FORMAT_CACHE_MAX = 1000;
 // ★ 新增：超过此长度的文本，仅有搜索词时只高亮前 N 字
 var _FORMAT_HIGHLIGHT_LIMIT = 5000;
 
+// ★ 新增：找安全切分点，保证 【】/==/** 标签不被腰斩
+//   思路：扫描所有标签，如果某个标签横跨 limit，则把切分点后移到该标签结束后
+//   这样 head 里的所有标签都是完整的，tail 从安全位置开始，同样走 formatText 渲染
+function _findSafeSplitPoint(text, limit) {
+  var re = /\u3010[\s\S]*?\u3011|==[\s\S]*?==|\*\*[\s\S]*?\*\*/g;
+  var m;
+  while ((m = re.exec(text))) {
+    var start = m.index;
+    var end = start + m[0].length;
+    if (end <= limit) continue;           // 整个标签都在 limit 之前，跳过
+    if (start >= limit) return start;     // 整个标签在 limit 之后，切在它前面
+    return end;                           // 标签横跨 limit → 切在它后面，保它完整
+  }
+  return limit;                           // 后面没标签了，正常切
+}
+
 function getCachedFormat(item, terms) {
   var key = item.id + ':' + (item.updatedAt || item.createdAt || 0) + ':' + (terms || []).join(',');
   if (_formatCache.has(key)) return _formatCache.get(key);
   var text = item.text || '';
   var html;
-  // ★ 优化：长文本 + 有搜索词 → 只对前 5000 字做高亮，后续文字直接转义
+  // ★ 优化：长文本 + 有搜索词 → 只对前 5000 字（按安全切点）做高亮，尾部正常渲染
   if (text.length > _FORMAT_HIGHLIGHT_LIMIT && terms && terms.length) {
-    var head = text.slice(0, _FORMAT_HIGHLIGHT_LIMIT);
-    var tail = text.slice(_FORMAT_HIGHLIGHT_LIMIT);
-    html = formatText(head, terms) + esc(tail);
+    var splitAt = _findSafeSplitPoint(text, _FORMAT_HIGHLIGHT_LIMIT);
+    var head = text.slice(0, splitAt);
+    var tail = text.slice(splitAt);
+    html = formatText(head, terms) + formatText(tail, []);
   } else {
     html = formatText(text, terms);
   }

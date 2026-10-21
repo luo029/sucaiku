@@ -1,4 +1,6 @@
-// js/core.js · 完整文件（修复所有按钮回显 + 增加自检钩子）
+// js/core.js · 完整文件
+// ★ 本次改动：DEFAULT_SETTINGS 新增 zenAutoClosePanel 开关，并在 applySettingsToUI 中回显
+
 var UNCAT = '未分类'; var IMG_TYPE = '图片'; var ALL_SOURCES = '__all__';
 var DEFAULT_CATS = ['句子', '段落', '梗', '情话', '吐槽', '点子'];
 var DEFAULT_IMG_CATS = ['梗图', '情节', '插画', '其他'];
@@ -19,6 +21,7 @@ var DEFAULT_SETTINGS = {
   autoCheckUpdate: true, useRelativeTime: false, sidebarShowCat: true, sidebarShowSrc: true, sidebarShowTag: true,
   inputPlaceholder: '粘贴句子、段落（Ctrl+Enter保存）。用【文字】可高亮。可直接粘贴图片。',
   cardSpacing: 'standard', listStyle: 'card', zenFontSize: 'normal', uiStyle: 'modern',
+  zenAutoClosePanel: true, // ★ 新增：极简模式下滚动自动关闭筛选面板
   focusModeCat: '收件箱', saveShortcut: 'ctrl-enter', enableMarkdown: true,
   copyWithoutMarks: true, copyKeepBlankLines: true, focusImgAutoUpload: true, focusImgDefaultCat: '其他',
   imgNamingTemplate: '{cat}-{timestamp}-{rand}',
@@ -150,7 +153,7 @@ var isToasting = false;
 function toast(msg) {
   if (!msg) return;
   if (toastQueue.length >= 3) {
-    toastQueue.shift(); // 防止消息堆积过多
+    toastQueue.shift();
   }
   toastQueue.push(msg);
   if (!isToasting) {
@@ -178,7 +181,7 @@ function processToastQueue() {
 
   clearTimeout(toastTimer);
   toastTimer = setTimeout(function () {
-    processToastQueue(); // 2.4 秒后处理下一个
+    processToastQueue();
   }, 2400);
 }
 
@@ -237,6 +240,7 @@ function applySettingsToUI() {
   if ($('autoCheckUpdateToggle')) $('autoCheckUpdateToggle').checked = s.autoCheckUpdate !== false;
   if ($('useRelativeTimeToggle')) $('useRelativeTimeToggle').checked = s.useRelativeTime === true;
   if ($('themeDarkToggle')) $('themeDarkToggle').checked = themeMode === 'dark';
+  if ($('zenAutoClosePanel')) $('zenAutoClosePanel').checked = s.zenAutoClosePanel !== false; // ★ 回显开关
   if ($('focusModeCatInput')) $('focusModeCatInput').value = s.focusModeCat || '收件箱';
   if ($('sidebarShowCat')) $('sidebarShowCat').checked = s.sidebarShowCat !== false; if ($('sidebarShowSrc')) $('sidebarShowSrc').checked = s.sidebarShowSrc !== false; if ($('sidebarShowTag')) $('sidebarShowTag').checked = s.sidebarShowTag !== false;
   
@@ -247,7 +251,6 @@ function applySettingsToUI() {
   if ($('inputPlaceholder')) $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
   document.body.classList.remove('layout-strip'); if (s.listStyle === 'strip') document.body.classList.add('layout-strip');
   
-  // ★ 补全所有分段按钮的回显
   setSegmentedActive('saveShortcut', 'data-shortcut', s.saveShortcut || 'ctrl-enter');
   setSegmentedActive('listStyleMode', 'data-style', s.listStyle || 'card');
   setSegmentedActive('zenFontSize', 'data-zfs', s.zenFontSize || 'normal');
