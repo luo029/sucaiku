@@ -1,6 +1,5 @@
 // js/bind-core.js · 完整文件
-// ★ 本次改动：
-//   修复了：在极简模式的面板内部滚动（例如查看分类列表）时，面板被误关闭的问题。
+// ★ 本次改动：把 reviewImgs 加入了图片加载失败重试的监听列表。
 
 addBtn.addEventListener('click', addOrUpdate);
 cancelBtn.addEventListener('click', cancelEdit);
@@ -127,7 +126,6 @@ document.addEventListener('click', function (e) {
 
 $('hitokotoRefresh').addEventListener('click', fetchHitokoto);
 
-// ★ 极简模式下，向下滑动页面自动隐藏顶部筛选栏；向上滑动恢复
 var lastZenScroll = window.scrollY || 0;
 window.addEventListener('scroll', function() {
   if (!document.body.classList.contains('zen-mode')) return;
@@ -270,7 +268,6 @@ function openZenFilterPanel(type) {
     panel.style.left = left + 'px';
   }
 
-  // ★ 修复：如果是在面板内部滑动（比如搜索列表），不要关闭面板
   function closePanelOnScroll(e) {
     if (db.settings && db.settings.zenAutoClosePanel === false) return;
     if (e && e.target && panel.contains(e.target)) return;
@@ -331,6 +328,16 @@ function openZenFilterPanel(type) {
   };
   renderZenList();
   searchInput.addEventListener('input', function (e) { renderZenList(e.target.value); });
+  searchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      panel.remove();
+      window.removeEventListener('scroll', closePanelOnScroll);
+      window.removeEventListener('touchmove', closePanelOnScroll);
+      window.removeEventListener('wheel', closePanelOnScroll);
+    }
+  });
+
   panel.addEventListener('click', function (e) {
     var item = e.target.closest('.sp-item'); if (!item) return;
     e.stopPropagation();
@@ -347,7 +354,6 @@ function openZenFilterPanel(type) {
   });
 }
 
-// ★ 图片加载失败回退（新增：重试上限 3 次，防止死循环）
 function handleImgFallback(e) {
   var img = e.target;
   if (!img || img.tagName !== 'IMG') return;
@@ -364,6 +370,7 @@ function handleImgFallback(e) {
   fetchImageBlobUrl(path).then(function (url) {
     img.src = url;
     if (img.dataset.openImg) img.dataset.openImg = url;
+    if (img.dataset.reviewImg) img.dataset.reviewImg = url;
   }).catch(function (err) {
     console.warn('图片加载失败', path, err);
     if (retryCount + 1 >= 3) {
@@ -374,11 +381,11 @@ function handleImgFallback(e) {
   });
 }
 
-[listEl, document.getElementById('imgMasonry'), pendingImgsEl, document.getElementById('imgMgrGrid')].forEach(function (el) {
+// ★ 新增了 document.getElementById('reviewImgs')
+[listEl, document.getElementById('imgMasonry'), pendingImgsEl, document.getElementById('imgMgrGrid'), document.getElementById('reviewImgs')].forEach(function (el) {
   if (el) el.addEventListener('error', handleImgFallback, true);
 });
 
-// ★ 加载更多分片
 document.addEventListener('click', function (e) {
   var loadMoreBtn = e.target.closest('#loadMoreShardsBtn');
   if (!loadMoreBtn) return;
@@ -395,7 +402,6 @@ document.addEventListener('click', function (e) {
   });
 });
 
-// ★ 全局快捷键
 document.addEventListener('keydown', function (e) {
   if (!db.settings || !db.settings.enableShortcuts) return;
   var t = e.target;

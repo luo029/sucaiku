@@ -1,5 +1,5 @@
 // js/bind-views.js · 完整文件
-// 【改动】修改了 zenAutoClosePanel 开关绑定的提示语，状态更清晰
+// ★ 本次改动：修复了 ESC 键在多层弹窗/图床叠加时，关闭错乱的问题。
 
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
@@ -51,12 +51,11 @@ safeBind('imgCatTabs', 'click', function (e) { var t = e.target.closest('.ic-tab
 safeBind('imgMasonry', 'click', function (e) { var img = e.target.closest('[data-open-img]'); if (img) window.open(img.dataset.openImg, '_blank', 'noopener'); });
 safeBind('randomContent', 'click', function (e) { var img = e.target.closest('[data-open-img]'); if (img) window.open(img.dataset.openImg, '_blank', 'noopener'); });
 
+// ★ 修复：ESC 键多层级关闭冲突
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
-  if (focusMode) { setFocus(false); return; }
-  if (zenMode) { setZen(false); return; }
-  if (typeof closeImgView === 'function' && $('imgView') && !$('imgView').hidden) { closeImgView(); return; }
-  if ($('imgManagerView') && !$('imgManagerView').hidden) { if (imgMgrSelectMode) exitImgMgrSelectMode(); else { $('imgManagerView').hidden = true; document.body.style.overflow = ''; } return; }
+  
+  // 1. 优先处理最顶层的模态弹窗（防止在图床批量修改里按 ESC 直接退了批量模式）
   var openMasks = document.querySelectorAll('.modal-mask.show');
   if (openMasks.length > 0) {
     var lastMask = openMasks[openMasks.length - 1];
@@ -64,6 +63,16 @@ document.addEventListener('keydown', function (e) {
     lastMask.classList.remove('show');
     return;
   }
+
+  // 2. 其次处理图片全屏浏览
+  if (typeof closeImgView === 'function' && $('imgView') && !$('imgView').hidden) { closeImgView(); return; }
+  
+  // 3. 再次处理图床管理界面
+  if ($('imgManagerView') && !$('imgManagerView').hidden) { if (imgMgrSelectMode) exitImgMgrSelectMode(); else { $('imgManagerView').hidden = true; document.body.style.overflow = ''; } return; }
+
+  // 4. 最后处理各种模式
+  if (focusMode) { setFocus(false); return; }
+  if (zenMode) { setZen(false); return; }
 });
 
 safeBind('menuBtn', 'click', openSidebar);

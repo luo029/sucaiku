@@ -1,5 +1,5 @@
 // js/review.js · 完整文件
-// 【改动】修复纯图片素材无法“准奏”
+// ★ 本次改动：修复了批阅界面图片因为缺少 data-img-path 导致重试机制失效（显示破图）的问题。
 
 (function() {
   var reviewHTML = ''
@@ -52,6 +52,7 @@
   var autoApproveInterval = null, autoCloseTimer = null, undoTimer = null, undoCountdownInterval = null;
   var undoData = null;
   var battleStats = { approved: 0, skipped: 0, deleted: 0, chars: 0, tags: new Set() };
+  var isProcessingAction = false; // ★ 防抖锁
 
   var cnNums = ['零','一','二','三','四','五','六','七','八','九','十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','二十一','二十二','二十三','二十四','二十五','二十六','二十七','二十八','二十九','三十','三十一','三十二','三十三','三十四','三十五','三十六','三十七','三十八','三十九','四十','四十一','四十二','四十三','四十四','四十五','四十六','四十七','四十八','四十九','五十','五十一','五十二','五十三','五十四','五十五','五十六','五十七','五十八','五十九','六十','六十一','六十二','六十三','六十四','六十五','六十六','六十七','六十八','六十九','七十','七十一','七十二','七十三','七十四','七十五','七十六','七十七','七十八','七十九','八十','八十一','八十二','八十三','八十四','八十五','八十六','八十七','八十八','八十九','九十','九十一','九十二','九十三','九十四','九十五','九十六','九十七','九十八','九十九','一百'];
 
@@ -100,7 +101,7 @@
     if (autoApproveInterval) clearInterval(autoApproveInterval);
     var countdownEl = document.getElementById('rvCountdown');
     countdownEl.style.display = 'none';
-    if (rvStyle.autoApprove && reviewCurrentId) {
+    if (rvStyle.autoApprove && reviewCurrentId && !isProcessingAction) {
       var timeLeft = rvStyle.autoTime || 15;
       if (rvStyle.showCountdown && timeLeft <= rvStyle.cdStartShow) {
         countdownEl.style.display = 'block';
@@ -149,7 +150,7 @@
   });
 
   document.getElementById('reviewText').addEventListener('keydown', function (e) {
-    if (!rvStyle.enableShortcuts) return;
+    if (!rvStyle.enableShortcuts || isProcessingAction) return;
     var isApprove = rvStyle.shortcutApprove && (
       (rvStyle.shortcutApprove === 'ctrl-enter' && (e.ctrlKey || e.metaKey) && e.key === 'Enter') ||
       (rvStyle.shortcutApprove === 'alt-enter' && e.altKey && e.key === 'Enter') ||
@@ -352,10 +353,12 @@
   function loadReviewItem(isUndo) {
     var completedScreen = document.getElementById('rvCompleted');
     if (autoCloseTimer) clearTimeout(autoCloseTimer);
+    if (autoApproveInterval) clearInterval(autoApproveInterval);
+    isProcessingAction = false;
+
     if (!reviewCurrentId) {
       completedScreen.style.display = 'flex';
       document.getElementById('reviewProgress').textContent = '剩 0 条';
-      if (autoApproveInterval) clearInterval(autoApproveInterval);
       if (typeof updateReviewBtnState === 'function') updateReviewBtnState();
       if (typeof render === 'function') render();
       var stats = { durationSec: 0, todayCount: 0, yesterdayCount: 0, rangeCount: 0 };
@@ -420,7 +423,8 @@
     activeSearchType = null;
     var imgWrap = document.getElementById('reviewImgs');
     if (item.images && item.images.length) {
-      imgWrap.innerHTML = item.images.map(function (im) { var src = typeof imageSrc === 'function' ? imageSrc(im) : im.url; return '<img src="' + esc(src) + '" data-review-img="' + esc(src) + '" title="点击查看原图">'; }).join('');
+      // ★ 修复：补上 data-img-path
+      imgWrap.innerHTML = item.images.map(function (im) { var src = typeof imageSrc === 'function' ? imageSrc(im) : im.url; return '<img src="' + esc(src) + '" data-review-img="' + esc(src) + '" data-img-path="' + esc(im.path || '') + '" title="点击查看原图">'; }).join('');
     } else imgWrap.innerHTML = '';
     renderAllPanels();
     document.getElementById('reviewText').focus();
@@ -493,7 +497,6 @@
     loadReviewItem();
   }
 
-  // ★ 修复Bug 3：判断是否有文字或图片，只要有一样就算有内容
   function saveCurrent() {
     if (!reviewCurrentId) return false;
     var item = db.items.find(function (i) { return i.id === reviewCurrentId; });
@@ -522,6 +525,9 @@
   }
 
   document.getElementById('rvSkipBtn').addEventListener('click', function () {
+    if (isProcessingAction) return;
+    isProcessingAction = true;
+    if (autoApproveInterval) clearInterval(autoApproveInterval);
     playSound('page');
     battleStats.skipped++;
     triggerUndoToast('已留中', 'skip');
@@ -529,8 +535,11 @@
   });
 
   document.getElementById('rvDelBtn').addEventListener('click', function () {
+    if (isProcessingAction) return;
+    isProcessingAction = true;
+    if (autoApproveInterval) clearInterval(autoApproveInterval);
     playSound('tear');
-    if (!reviewCurrentId) return;
+    if (!reviewCurrentId) { isProcessingAction = false; return; }
     battleStats.deleted++;
     moveToTrash([reviewCurrentId]);
     if (typeof save === 'function') save();
@@ -539,9 +548,12 @@
   });
 
   document.getElementById('rvApproveBtn').addEventListener('click', function () {
-    if (!reviewCurrentId) return;
+    if (isProcessingAction) return;
+    isProcessingAction = true;
+    if (autoApproveInterval) clearInterval(autoApproveInterval);
+    if (!reviewCurrentId) { isProcessingAction = false; return; }
     var saved = saveCurrent();
-    if (saved === false) return;
+    if (saved === false) { isProcessingAction = false; return; }
     playSound('stamp');
     showCornerStamp();
     battleStats.approved++;
@@ -553,6 +565,7 @@
     document.getElementById('reviewMask').classList.remove('show');
     reviewQueue = [];
     reviewCurrentId = null;
+    isProcessingAction = false;
     if (autoApproveInterval) clearInterval(autoApproveInterval);
     if (autoCloseTimer) clearTimeout(autoCloseTimer);
     if (undoTimer) clearTimeout(undoTimer);
@@ -703,6 +716,7 @@
     battleStats = { approved: 0, skipped: 0, deleted: 0, chars: 0, tags: new Set() };
     reviewStartTime = Date.now();
     isStatsSaved = false;
+    isProcessingAction = false;
     document.getElementById('rvUndoBtn').style.display = 'none';
     if (!items.length) { reviewQueue = []; reviewCurrentId = null; document.getElementById('reviewMask').classList.add('show'); loadReviewItem(); return; }
     reviewQueue = items.map(function (i) { return i.id; });

@@ -1,7 +1,7 @@
-// js/render.js · 完整文件（修复标签颜色与模式不生效的问题）
+// js/render.js · 完整文件
 // ★ 本次改动：
 //   1) 完美解决超过 5000 字的文本中，尾部搜索词不亮的高亮盲区
-//   2) 引入“尾部预览”模式，只截取尾部匹配处的前后部分渲染，不卡顿且完整呈现
+//   2) 引入“尾部预览”模式，改用正则匹配，彻底杜绝超大文本导致的瞬间内存占用与卡顿
 
 var tagExpanded = false, catExpanded = false, srcExpanded = false;
 var catManagerPage = 1, tagManagerPage = 1;
@@ -182,17 +182,15 @@ function getCachedFormat(item, terms) {
     var head = text.slice(0, splitAt);
     var tail = text.slice(splitAt);
     
-    // ★ 修复尾部盲区：如果尾部包含搜索词，截取包含词的上下文进行高亮
-    var tailLower = tail.toLowerCase();
+    // ★ 优化：改用正则匹配，不生成新的大字符串，防止超长文本卡顿
     var firstMatchIdx = -1;
     var matchedTerm = '';
-    for (var i = 0; i < terms.length; i++) {
-       var idx = tailLower.indexOf(terms[i]);
-       if (idx >= 0) {
-          firstMatchIdx = idx;
-          matchedTerm = terms[i];
-          break;
-       }
+    var escTerms = terms.map(function(t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|');
+    var re = new RegExp('(' + escTerms + ')', 'i');
+    var match = re.exec(tail);
+    if (match) {
+      firstMatchIdx = match.index;
+      matchedTerm = match[0];
     }
     
     if (firstMatchIdx >= 0) {
