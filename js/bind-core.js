@@ -1,4 +1,4 @@
-// js/bind-core.js - 事件绑定：输入区 / 选择器 / 搜索 / 导航 / 图片兜底
+// js/bind-core.js - 事件绑定：输入区 / 选择器 / 搜索 / 导航 / 图片兜底 / 全局快捷键
 
 addBtn.addEventListener('click', addOrUpdate);
 cancelBtn.addEventListener('click', cancelEdit);
@@ -165,13 +165,14 @@ $('hitokotoRefresh').addEventListener('click', fetchHitokoto);
 var searchDebounceTimer = null;
 searchEl.addEventListener('input', function () {
   clearTimeout(searchDebounceTimer);
+  var delay = Math.max(80, Math.min(500, Number(db.settings.searchDebounceMs) || 180));
   searchDebounceTimer = setTimeout(function () {
     keyword = searchEl.value;
     currentPage = 1;
     clearFilterCache();
     renderList();
     renderHeader();
-  }, 180);
+  }, delay);
 });
 
 if ($('catFilterBtn')) {
@@ -245,7 +246,6 @@ $('sourceNav').addEventListener('click', function (e) {
   render(); closeSidebarIfMobile(); scrollTop();
 });
 
-// ★★★ 核心改动：侧边栏标签点击支持多选 ★★★
 $('tagNav').addEventListener('click', function (e) {
   var btn = e.target.closest('.nav-item[data-tag]'); if (!btn) return;
   var t = btn.dataset.tag;
@@ -257,9 +257,7 @@ $('tagNav').addEventListener('click', function (e) {
     else currentTags.add(t);
   }
 
-  // 兼容遗留的单标签变量
   currentTag = currentTags.size > 0 ? Array.from(currentTags)[0] : '';
-
   currentPage = 1;
   render();
   closeSidebarIfMobile();
@@ -432,4 +430,102 @@ function handleImgFallback(e) {
 
 [listEl, document.getElementById('imgMasonry'), pendingImgsEl, document.getElementById('imgMgrGrid')].forEach(function (el) {
   if (el) el.addEventListener('error', handleImgFallback, true);
+});
+
+// ============================================================
+// ★ 新增：分片加载更多（智能懒加载 UI 按钮）
+// ============================================================
+document.addEventListener('click', function (e) {
+  var loadMoreBtn = e.target.closest('#loadMoreShardsBtn');
+  if (!loadMoreBtn) return;
+  if (loadMoreBtn.disabled) return;
+  e.preventDefault();
+
+  loadMoreBtn.disabled = true;
+  var oldText = loadMoreBtn.textContent;
+  loadMoreBtn.textContent = '⏳ 正在加载更早的素材…';
+  loadMoreBtn.style.opacity = '0.7';
+
+  if (typeof ghPull !== 'function') {
+    loadMoreBtn.disabled = false;
+    loadMoreBtn.textContent = oldText;
+    loadMoreBtn.style.opacity = '';
+    return;
+  }
+
+  Promise.resolve(ghPull(false, true)).then(function () {
+    // 成功时 renderPagination 会重新生成按钮或消失
+  }).catch(function (err) {
+    loadMoreBtn.disabled = false;
+    loadMoreBtn.textContent = oldText;
+    loadMoreBtn.style.opacity = '';
+    toast('加载失败：' + (err && err.message || '未知错误'));
+  });
+});
+
+// ============================================================
+// ★ 新增：全局快捷键（/ 搜索、N 新建、Ctrl+S 推送、Alt+Enter 盲盒）
+//    全部受 db.settings.enableShortcuts 总开关控制
+// ============================================================
+document.addEventListener('keydown', function (e) {
+  if (!db.settings || !db.settings.enableShortcuts) return;
+
+  var t = e.target;
+  var isTyping = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+
+  // —— Ctrl+S / Cmd+S：强制立即推送（即使在输入框里也生效）——
+  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+    // 仅在输入框外或者有意触发时生效（我们保留输入框里也生效，方便）
+    e.preventDefault();
+    var cfg = loadGH();
+    if (!ghReady(cfg)) { toast('请先在设置中配置 GitHub'); return; }
+    if (typeof ghPush !== 'function') { toast('推送模块未就绪'); return; }
+    toast('正在强制推送云端…');
+    Promise.resolve(ghPush(false)).then(function (ok) {
+      if (ok) toast('✅ 已推送云端');
+    });
+    return;
+  }
+
+  // —— 其他快捷键：输入中 / 弹窗打开 / 特殊模式下一律忽略 ——
+  if (isTyping) return;
+  if (document.querySelector('.modal-mask.show')) return;
+  if (document.body.classList.contains('focus-mode')) return;
+  if (document.body.classList.contains('zen-mode')) return;
+  if (document.body.classList.contains('guest-mode')) return;
+
+  // —— Alt+Enter：盲盒 ——
+  if (e.altKey && e.key === 'Enter') {
+    e.preventDefault();
+    if ($('menuRandomBtn')) $('menuRandomBtn').click();
+    return;
+  }
+
+  // —— 单键快捷键：搜索 / 新建 ——
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  var searchKey = String(db.settings.shortcutSearch || '/').toLowerCase();
+  var newKey = String(db.settings.shortcutNew || 'n').toLowerCase();
+  var pressed = String(e.key || '').toLowerCase();
+
+  if (pressed === searchKey) {
+    if (searchKey === '/') e.preventDefault(); // Firefox 快捷查找
+    if (searchEl) {
+      scrollTop();
+      setTimeout(function () { searchEl.focus(); searchEl.select(); }, 60);
+    }
+    return;
+  }
+
+  if (pressed === newKey) {
+    e.preventDefault();
+    if (inputEl) {
+      scrollTop();
+      setTimeout(function () { inputEl.focus(); }, 80);
+      if (typeof toast === 'function' && !document.body.classList.contains('focus-mode')) {
+        // 轻柔提示，不打扰
+      }
+    }
+    return;
+  }
 });

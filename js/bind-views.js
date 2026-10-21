@@ -751,6 +751,59 @@ safeBind('compressMode', 'click', function (e) {
 safeBind('tinypngKey', 'change', function (e) { db.settings.tinypngKey = e.target.value.trim(); saveSettings(); });
 safeBind('tinypngProxy', 'change', function (e) { db.settings.tinypngProxy = e.target.value.trim(); saveSettings(); });
 
+// ============================================================
+// ★ 新增：极客 DIY 设置项绑定
+// ============================================================
+safeBind('enableShortcuts', 'change', function (e) {
+  db.settings.enableShortcuts = e.target.checked;
+  saveSettings();
+  toast(e.target.checked ? '已开启全局快捷键' : '已关闭全局快捷键');
+});
+safeBind('shortcutSearch', 'change', function (e) {
+  var v = (e.target.value || '').trim();
+  if (!v) v = '/';
+  v = v.charAt(0);
+  db.settings.shortcutSearch = v;
+  e.target.value = v;
+  saveSettings();
+  toast('搜索快捷键已设为 ' + v);
+});
+safeBind('shortcutSearch', 'input', function (e) {
+  // 保证始终单字符
+  if (e.target.value.length > 1) e.target.value = e.target.value.charAt(0);
+});
+safeBind('shortcutNew', 'change', function (e) {
+  var v = (e.target.value || '').trim().toLowerCase();
+  if (!v) v = 'n';
+  v = v.charAt(0);
+  db.settings.shortcutNew = v;
+  e.target.value = v;
+  saveSettings();
+  toast('新建快捷键已设为 ' + v.toUpperCase());
+});
+safeBind('shortcutNew', 'input', function (e) {
+  if (e.target.value.length > 1) e.target.value = e.target.value.charAt(0);
+});
+safeBind('enableContextMenu', 'change', function (e) {
+  db.settings.enableContextMenu = e.target.checked;
+  saveSettings();
+  toast(e.target.checked ? '已开启右键/长按菜单' : '已关闭右键/长按菜单');
+});
+safeBind('enableStatsCache', 'change', function (e) {
+  db.settings.enableStatsCache = e.target.checked;
+  saveSettings();
+  render();
+  toast(e.target.checked ? '已开启侧栏统计缓存' : '已关闭侧栏统计缓存');
+});
+safeBind('maxTagsInHeader', 'change', function (e) {
+  var v = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 3));
+  e.target.value = v;
+  db.settings.maxTagsInHeader = v;
+  saveSettings();
+  renderHeader();
+  toast('标签折叠阈值已设为 ' + v + ' 个');
+});
+
 // ============ 分片设置绑定 ============
 safeBind('loadMode', 'click', function (e) {
   var b = e.target.closest('button[data-mode]'); if (!b) return;
@@ -1164,9 +1217,6 @@ safeBind('tagBatchMergeBtn', 'click', function () {
     if (db.tagColors && db.tagColors[t] && !db.tagColors[target]) db.tagColors[target] = db.tagColors[t];
     if (db.tagColors) delete db.tagColors[t];
   });
-  if (db.cats.indexOf(target) < 0 && db.items.some(function (i) { return (i.tags || []).indexOf(target) >= 0; })) {
-    // 不作为分类，只是标签
-  }
   _tagBatchSelected.clear();
   save(); render(); renderTagManagerWithBatch();
   toast('已合并到「' + target + '」');
@@ -1214,7 +1264,6 @@ function renderTagManagerWithBatch() {
   $('tagBatchCount').textContent = _tagBatchSelected.size;
 }
 
-// 覆盖原有 renderTagManager
 window.renderTagManager = renderTagManagerWithBatch;
 
 // ============ GitHub 表单 ============

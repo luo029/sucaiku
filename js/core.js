@@ -1,138 +1,55 @@
-// js/core.js - 常量 / 状态 / DOM 缓存 / 工具函数 / 一言 / 布局主题设置
-
-var UNCAT = '未分类';
-var IMG_TYPE = '图片';
-var ALL_SOURCES = '__all__';
+// js/core.js
+var UNCAT = '未分类'; var IMG_TYPE = '图片'; var ALL_SOURCES = '__all__';
 var DEFAULT_CATS = ['句子', '段落', '梗', '情话', '吐槽', '点子'];
 var DEFAULT_IMG_CATS = ['梗图', '情节', '插画', '其他'];
-var STORE_KEY = 'material-library';
-var SKIP_KEY = 'material-library.skip-confirm';
-var LAYOUT_KEY = 'material-library.layout';
-var THEME_KEY = 'material-library.theme';
-var SETTINGS_KEY = 'material-library.settings';
-var ZEN_KEY = 'material-library.zen';
-var GH_KEY = 'material-library.github';
-var TINY_KEY = 'material-library.tinypng';
+var STORE_KEY = 'material-library'; var SKIP_KEY = 'material-library.skip-confirm';
+var LAYOUT_KEY = 'material-library.layout'; var THEME_KEY = 'material-library.theme';
+var SETTINGS_KEY = 'material-library.settings'; var ZEN_KEY = 'material-library.zen';
+var GH_KEY = 'material-library.github'; var TINY_KEY = 'material-library.tinypng';
 var DEVICE_KEY = 'material-library.device';
 
-var AVAILABLE_STYLES = [
-  { id: 'modern', name: '现代' },
-  { id: 'retro', name: '复古墨水' },
-  { id: 'bento', name: '便当盒' }
-];
+var AVAILABLE_STYLES = [{ id: 'modern', name: '现代' }, { id: 'retro', name: '复古墨水' }, { id: 'bento', name: '便当盒' }];
 
 var DEFAULT_SETTINGS = {
-  copyWithSource: false,
-  copySourceFormat: '—— {source}',
-  trashTtlDays: 30,
-  statsDims: { cat: true, source: true, tag: true },
-  statsLimit: 8,
-  compressMode: 'local',
-  tinypngKey: '',
-  tinypngProxy: '',
-  catLimit: 3,
-  srcLimit: 3,
-  tagLimit: 3,
-  defaultType: '',
-  collapseLimit: 150,
-  defaultPageSize: 12,
-  showHitokoto: true,
-  enableAnim: true,
-  fontSizeMode: 'normal',
-  syncCheckInterval: 60,
-  autoCheckUpdate: true,
-  useRelativeTime: false,
-  sidebarShowCat: true,
-  sidebarShowSrc: true,
-  sidebarShowTag: true,
+  copyWithSource: false, copySourceFormat: '—— {source}', trashTtlDays: 30,
+  statsDims: { cat: true, source: true, tag: true }, statsLimit: 8,
+  compressMode: 'local', tinypngKey: '', tinypngProxy: '',
+  catLimit: 3, srcLimit: 3, tagLimit: 3, defaultType: '', collapseLimit: 150, defaultPageSize: 12,
+  showHitokoto: true, enableAnim: true, fontSizeMode: 'normal', syncCheckInterval: 60,
+  autoCheckUpdate: true, useRelativeTime: false, sidebarShowCat: true, sidebarShowSrc: true, sidebarShowTag: true,
   inputPlaceholder: '粘贴句子、段落（Ctrl+Enter保存）。用【文字】可高亮。可直接粘贴图片。',
-  cardSpacing: 'standard',
-  listStyle: 'card',
-  zenFontSize: 'normal',
-  uiStyle: 'modern',
-  focusModeCat: '收件箱',
-  saveShortcut: 'ctrl-enter',
-  enableMarkdown: true,
-  copyWithoutMarks: true,
-  copyKeepBlankLines: true,
-  focusImgAutoUpload: true,
-  focusImgDefaultCat: '其他',
+  cardSpacing: 'standard', listStyle: 'card', zenFontSize: 'normal', uiStyle: 'modern',
+  focusModeCat: '收件箱', saveShortcut: 'ctrl-enter', enableMarkdown: true,
+  copyWithoutMarks: true, copyKeepBlankLines: true, focusImgAutoUpload: true, focusImgDefaultCat: '其他',
   imgNamingTemplate: '{cat}-{timestamp}-{rand}',
 
-  dataDir: 'material-library',
-  shardSubdir: 'data',
-  shardMode: 'daily',
-  enableYearIndex: true,
-  loadMode: 'smart',
-  smartThresholdMB: 5,
-  manualRangeDays: 90,
-  customRangeDays: 90,
-  historyLoadMode: 'auto',
-  lazyLoadBatchSize: 30,
-  startupAutoPull: true,
-  cloudCheckEnabled: true,
-  checkIntervalSeconds: 60,
-  pullConcurrency: 8,
-  searchScope: 'local',
-  unloadedSearch: 'ask',
-  enableFullTextIndex: false,
-  searchHistoryEnabled: true,
-  searchDebounceMs: 180,
-  autoPush: true,
-  pushDelayMs: 2000,
-  pushConcurrency: 3,
-  pushBatchDelay: 500,
-  conflictAction: 'prompt',
-  maxShardSizeKB: 800,
-  forceConfirm: true,
-  snapshotBeforePush: true,
-  enableLog: true,
-  logCleanupMode: 'count',
-  logMaxCount: 500,
-  logMaxSizeKB: 100,
-  logMaxDays: 30,
-  logHardLimitEnabled: true,
-  logHardLimitCount: 1000,
-  logRecordPush: true,
-  logRecordPull: true,
-  logRecordConflict: true,
-  logRecordAutoPull: false,
-  logRecordSettings: false,
-  logRecordShardSha: true,
-  logDisplayCount: 50,
-  logSyncCloud: true,
-  deviceName: '',
-  deviceIcon: '',
-  deviceStatus: 'active',
-  autoCleanDevices: true,
-  deviceCleanupDays: 30,
-  strictReadonly: false,
-  syncCats: true,
-  syncSettings: true,
-  syncTrash: true,
-  syncLog: true,
-  syncDevices: true,
-  shardSyncMode: 'all',
-  shardSyncYears: [],
-  autoSnapshot: true,
-  snapshotCount: 3,
-  exportReminderDays: 30,
-  storageWarningPct: 85,
-  autoCleanup: false,
-  enableMigrationResume: true,
-  rollbackLimit: 50,
-  rollbackEnabled: true,
-  tagColorMode: 'dot',
-  tagAutoColor: false,
-  tagFilterLogic: 'and',
-  autoCompleteChars: 1,
-  autoCompleteMax: 10,
-  importDefaultAction: 'ask',
-  timezoneMode: 'local',
-  showProgressBar: true,
-  integrityCheckMode: 'weekly',
-  maxSplitParts: 10,
-  autoDeleteEmptyShard: true
+  dataDir: 'material-library', shardSubdir: 'data', shardMode: 'daily', enableYearIndex: true,
+  loadMode: 'smart', smartThresholdMB: 5, manualRangeDays: 90, customRangeDays: 90,
+  historyLoadMode: 'auto', lazyLoadBatchSize: 30, startupAutoPull: true, cloudCheckEnabled: true,
+  checkIntervalSeconds: 60, pullConcurrency: 8, searchScope: 'local', unloadedSearch: 'ask',
+  enableFullTextIndex: false, searchHistoryEnabled: true, searchDebounceMs: 180,
+  autoPush: true, pushDelayMs: 2000, pushConcurrency: 3, pushBatchDelay: 500,
+  conflictAction: 'prompt', maxShardSizeKB: 800, forceConfirm: true, snapshotBeforePush: true,
+  enableLog: true, logCleanupMode: 'count', logMaxCount: 500, logMaxSizeKB: 100, logMaxDays: 30,
+  logHardLimitEnabled: true, logHardLimitCount: 1000, logRecordPush: true, logRecordPull: true,
+  logRecordConflict: true, logRecordAutoPull: false, logRecordSettings: false, logRecordShardSha: true,
+  logDisplayCount: 50, logSyncCloud: true, deviceName: '', deviceIcon: '', deviceStatus: 'active',
+  autoCleanDevices: true, deviceCleanupDays: 30, strictReadonly: false, syncCats: true, syncSettings: true,
+  syncTrash: true, syncLog: true, syncDevices: true, shardSyncMode: 'all', shardSyncYears: [],
+  autoSnapshot: true, snapshotCount: 3, exportReminderDays: 30, storageWarningPct: 85, autoCleanup: false,
+  enableMigrationResume: true, rollbackLimit: 50, rollbackEnabled: true, tagColorMode: 'dot',
+  tagAutoColor: false, tagFilterLogic: 'and', autoCompleteChars: 1, autoCompleteMax: 10,
+  importDefaultAction: 'ask', timezoneMode: 'local', showProgressBar: true,
+  integrityCheckMode: 'weekly', maxSplitParts: 10, autoDeleteEmptyShard: true,
+
+  // ★ 本次新增的 DIY 体验设置
+  enableStatsCache: true,      // 开启侧边栏统计缓存（提速）
+  enableShortcuts: true,       // 开启全局快捷键
+  shortcutSearch: '/',         // 搜索快捷键
+  shortcutNew: 'n',            // 新建快捷键
+  shortcutPush: 'ctrl+s',      // 强制推送快捷键
+  maxTagsInHeader: 3,          // 标题栏标签折叠阈值
+  enableContextMenu: true      // 开启右键菜单
 };
 
 var PALETTE = [
@@ -145,647 +62,155 @@ var PALETTE = [
   { bg: '#ccfbf1', fg: '#0f766e' }, { bg: '#fee2e2', fg: '#b91c1c' }
 ];
 
-// db 对象包含所有分片相关字段的默认值，避免初始化顺序问题
 var db = {
-  items: [],
-  cats: DEFAULT_CATS.slice(),
-  colors: {},
-  sources: [],
-  fixedSource: '',
-  fixedTags: [],
-  imageCategories: DEFAULT_IMG_CATS.slice(),
-  settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
-  trash: [],
-  tagColors: {},
-  _rev: 0,
-  _shardSnapshots: {},
-  _trashSnapshot: '',
-  _metaSnapshot: '',
-  _deviceId: '',
-  _loadedShardKeys: [],
-  _allShardKeys: []
+  items: [], cats: DEFAULT_CATS.slice(), colors: {}, sources: [], fixedSource: '', fixedTags: [],
+  imageCategories: DEFAULT_IMG_CATS.slice(), settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
+  trash: [], tagColors: {}, _rev: 0, _shardSnapshots: {}, _trashSnapshot: '', _metaSnapshot: '',
+  _deviceId: '', _loadedShardKeys: [], _allShardKeys: []
 };
 
-var currentType = '全部';
-var currentSource = ALL_SOURCES;
-var currentTag = '';
-var currentTags = new Set();
-var keyword = '';
-var editingId = null;
-var selectMode = false;
-var selectedIds = new Set();
-var pendingConfirm = null;
-var exportFormat = 'json';
-var currentPage = 1;
-var pageSize = 12;
+var currentType = '全部'; var currentSource = ALL_SOURCES; var currentTag = '';
+var currentTags = new Set(); var keyword = ''; var editingId = null; var selectMode = false;
+var selectedIds = new Set(); var pendingConfirm = null; var exportFormat = 'json';
+var currentPage = 1; var pageSize = 12; var layoutMode = 'sidebar'; var themeMode = 'light';
+var zenMode = false; var focusMode = false; var pendingImages = []; var pendingUploadFiles = [];
+var pendingUploadCat = ''; var expandedIds = new Set(); var draggedItemId = null;
+var currentImgViewCat = '全部'; var repoImagesCache = []; var imgMgrCurrentFilter = 'all';
+var imgMgrSelectMode = false; var imgMgrSelectedIds = new Set();
 
-var layoutMode = 'sidebar';
-var themeMode = 'light';
-var zenMode = false;
-var focusMode = false;
-
-var pendingImages = [];
-var pendingUploadFiles = [];
-var pendingUploadCat = '';
-
-var expandedIds = new Set();
-var draggedItemId = null;
-
-var currentImgViewCat = '全部';
-var repoImagesCache = [];
-var imgMgrCurrentFilter = 'all';
-var imgMgrSelectMode = false;
-var imgMgrSelectedIds = new Set();
-
-function trashTtlMs() {
-  var d = Number(db.settings.trashTtlDays) || 30;
-  return Math.max(1, Math.min(365, d)) * 86400000;
-}
-
-function fmtSize(n) {
-  if (!n || n < 0) return '0 B';
-  if (n < 1024) return n + ' B';
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
-  return (n / 1024 / 1024).toFixed(2) + ' MB';
-}
-
+function trashTtlMs() { return Math.max(1, Math.min(365, Number(db.settings.trashTtlDays) || 30)) * 86400000; }
+function fmtSize(n) { if (!n || n < 0) return '0 B'; if (n < 1024) return n + ' B'; if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'; return (n / 1024 / 1024).toFixed(2) + ' MB'; }
 function $(id) { return document.getElementById(id); }
 
-var inputEl = $('input');
-var typeEl = $('type');
-var sourceEl = $('source');
-var tagsEl = $('tags');
-var addBtn = $('addBtn');
-var cancelBtn = $('cancelBtn');
-var listEl = $('list');
-var searchEl = $('search');
-var catManager = $('catManager');
-var catListEl = $('catList');
-var newCatInput = $('newCatInput');
-var batchBar = $('batchBar');
-var sourcePicker = $('sourcePicker');
-var sourcePanel = $('sourcePanel');
-var spList = $('spList');
-var spSearch = $('spSearch');
-var tagPicker = $('tagPicker');
-var tagPanel = $('tagPanel');
-var tpList = $('tpList');
-var tpSearch = $('tpSearch');
-var tabsEl = $('tabs');
-var pendingImgsEl = $('pendingImgs');
-var zenBarEl = $('zenBar');
+var inputEl = $('input'), typeEl = $('type'), sourceEl = $('source'), tagsEl = $('tags');
+var addBtn = $('addBtn'), cancelBtn = $('cancelBtn'), listEl = $('list'), searchEl = $('search');
+var catManager = $('catManager'), catListEl = $('catList'), newCatInput = $('newCatInput');
+var batchBar = $('batchBar'), sourcePicker = $('sourcePicker'), sourcePanel = $('sourcePanel');
+var spList = $('spList'), spSearch = $('spSearch'), tagPicker = $('tagPicker');
+var tagPanel = $('tagPanel'), tpList = $('tpList'), tpSearch = $('tpSearch');
+var tabsEl = $('tabs'), pendingImgsEl = $('pendingImgs'), zenBarEl = $('zenBar');
 
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
-
-function esc(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
-  });
-}
-
-function getSearchTerms() {
-  return keyword.trim().toLowerCase().split(/\s+/).filter(Boolean);
-}
-
-function formatCount(num) {
-  return num > 99 ? '99+' : num;
-}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]; }); }
+function getSearchTerms() { return keyword.trim().toLowerCase().split(/\s+/).filter(Boolean); }
+function formatCount(num) { return num > 99 ? '99+' : num; }
 
 function highlightEscaped(escaped, kws) {
-  var list = (kws || []).filter(Boolean);
-  if (!list.length) return escaped;
-  var pat = list.map(function (k) {
-    return esc(k).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }).join('|');
+  var list = (kws || []).filter(Boolean); if (!list.length) return escaped;
+  var pat = list.map(function (k) { return esc(k).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|');
   if (!pat) return escaped;
-  try {
-    return escaped.replace(new RegExp('(' + pat + ')', 'gi'), '<mark class="kw">$1</mark>');
-  } catch (e) {
-    return escaped;
-  }
+  try { return escaped.replace(new RegExp('(' + pat + ')', 'gi'), '<mark class="kw">$1</mark>'); } catch (e) { return escaped; }
 }
 
 function formatText(text, kws) {
-  var raw = String(text == null ? '' : text);
-  var enableMD = db.settings.enableMarkdown !== false;
+  var raw = String(text == null ? '' : text); var enableMD = db.settings.enableMarkdown !== false;
   var re = new RegExp('\u3010([\\s\\S]*?)\u3011|==([\\s\\S]*?)==|\\*\\*([\\s\\S]*?)\\*\\*', 'g');
-  var out = '';
-  var last = 0;
-  var m;
-
+  var out = '', last = 0, m;
   while ((m = re.exec(raw))) {
     out += highlightEscaped(esc(raw.slice(last, m.index)), kws);
-
-    if (typeof m[1] == 'string') {
-      out += '<mark class="hl">' + esc(m[1]) + '</mark>';
-    } else if (typeof m[2] == 'string') {
-      out += '<mark class="hl">' + esc(m[2]) + '</mark>';
-    } else if (typeof m[3] == 'string') {
-      if (enableMD) {
-        out += '<strong>' + esc(m[3]) + '</strong>';
-      } else {
-        out += esc(m[0]);
-      }
-    }
-
+    if (typeof m[1] == 'string') out += '<mark class="hl">' + esc(m[1]) + '</mark>';
+    else if (typeof m[2] == 'string') out += '<mark class="hl">' + esc(m[2]) + '</mark>';
+    else if (typeof m[3] == 'string') out += enableMD ? '<strong>' + esc(m[3]) + '</strong>' : esc(m[0]);
     last = m.index + m[0].length;
   }
-
-  out += highlightEscaped(esc(raw.slice(last)), kws);
-  return out;
+  out += highlightEscaped(esc(raw.slice(last)), kws); return out;
 }
 
 function pad2(n) { return String(n).padStart(2, '0'); }
+function fmtDate(ts) { if (!ts) return ''; if (db.settings.useRelativeTime) { var diff = Date.now() - ts; if (diff < 60000) return '刚刚'; if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前'; if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前'; if (diff < 86400000 * 30) return Math.floor(diff / 86400000) + ' 天前'; } var d = new Date(ts || Date.now()); var now = new Date(); var hm = pad2(d.getHours()) + ':' + pad2(d.getMinutes()); if (d.getFullYear() === now.getFullYear()) return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + hm; return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + hm; }
+function fmtDateOnly(ts) { var d = new Date(ts || Date.now()); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function fmtFull(ts) { var d = new Date(ts || Date.now()); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
 
-function fmtDate(ts) {
-  if (!ts) return '';
-  if (db.settings.useRelativeTime) {
-    var diff = Date.now() - ts;
-    if (diff < 60000) return '刚刚';
-    if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
-    if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
-    if (diff < 86400000 * 30) return Math.floor(diff / 86400000) + ' 天前';
-  }
-  var d = new Date(ts || Date.now());
-  var now = new Date();
-  var hm = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
-  if (d.getFullYear() === now.getFullYear()) {
-    return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + hm;
-  }
-  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + hm;
-}
-
-function fmtDateOnly(ts) {
-  var d = new Date(ts || Date.now());
-  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
-}
-
-function fmtFull(ts) {
-  var d = new Date(ts || Date.now());
-  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' +
-    pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
-}
-
-var toastTimer;
-function toast(msg) {
-  var el = $('toast');
-  if (!el) return;
-  el.textContent = msg;
-  var imgMgrBar = $('imgMgrBatchBar');
-  el.classList.toggle('raised', (batchBar && batchBar.classList.contains('show')) || (imgMgrBar && imgMgrBar.classList.contains('show')));
-  el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2400);
-}
+var toastTimer; function toast(msg) { var el = $('toast'); if (!el) return; el.textContent = msg; var imgMgrBar = $('imgMgrBatchBar'); el.classList.toggle('raised', (batchBar && batchBar.classList.contains('show')) || (imgMgrBar && imgMgrBar.classList.contains('show'))); el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2400); }
 
 function copyText(text, source) {
-  var finalText = String(text || '');
-
-  if (db.settings.copyWithoutMarks !== false) {
-    finalText = finalText
-      .replace(/【([\s\S]*?)】/g, '$1')
-      .replace(/==([\s\S]*?)==/g, '$1')
-      .replace(/\*\*([\s\S]*?)\*\*/g, '$1');
-  }
-
-  if (db.settings.copyKeepBlankLines === false) {
-    finalText = finalText.replace(/\n{3,}/g, '\n\n').trim();
-  }
-
-  if (db.settings.copyWithSource) {
-    var fmt = db.settings.copySourceFormat;
-    if (fmt) {
-      var suffix = '';
-      if (fmt.indexOf('{source}') >= 0) {
-        suffix = fmt.replace(/\{source\}/g, source || '');
-      } else {
-        suffix = fmt;
-      }
-      if (suffix.trim()) finalText += '\n' + suffix;
-    }
-  }
-
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(finalText).then(function () {
-      toast('已复制');
-    }).catch(function () {
-      fallbackCopy(finalText);
-    });
-  } else {
-    fallbackCopy(finalText);
-  }
+  var finalText = String(text || ''); if (db.settings.copyWithoutMarks !== false) finalText = finalText.replace(/【([\s\S]*?)】/g, '$1').replace(/==([\s\S]*?)==/g, '$1').replace(/\*\*([\s\S]*?)\*\*/g, '$1');
+  if (db.settings.copyKeepBlankLines === false) finalText = finalText.replace(/\n{3,}/g, '\n\n').trim();
+  if (db.settings.copyWithSource) { var fmt = db.settings.copySourceFormat; if (fmt) { var suffix = fmt.indexOf('{source}') >= 0 ? fmt.replace(/\{source\}/g, source || '') : fmt; if (suffix.trim()) finalText += '\n' + suffix; } }
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(finalText).then(function () { toast('已复制'); }).catch(function () { fallbackCopy(finalText); }); else fallbackCopy(finalText);
 }
+function fallbackCopy(t) { var ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('已复制'); } catch (e) { toast('复制失败，请手动选择'); } ta.remove(); }
+function download(blob, filename) { var url = URL.createObjectURL(blob); var a = document.createElement('a'); a.href = url; a.download = filename; a.click(); setTimeout(function () { URL.revokeObjectURL(url); }, 1000); }
+function scrollTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function utf8ToBase64(str) { return btoa(unescape(encodeURIComponent(str))); }
+function base64ToUtf8(b64) { return decodeURIComponent(escape(atob(b64))); }
+function blobToBase64(blob) { return new Promise(function (resolve, reject) { var r = new FileReader(); r.onload = function () { var s = String(r.result); resolve(s.split(',')[1] || ''); }; r.onerror = reject; r.readAsDataURL(blob); }); }
 
-function fallbackCopy(t) {
-  var ta = document.createElement('textarea');
-  ta.value = t;
-  ta.style.position = 'fixed';
-  ta.style.opacity = '0';
-  document.body.appendChild(ta);
-  ta.select();
-  try {
-    document.execCommand('copy');
-    toast('已复制');
-  } catch (e) {
-    toast('复制失败，请手动选择');
-  }
-  ta.remove();
-}
+function fetchHitokoto() { var txtEl = $('hitokotoText'), fromEl = $('hitokotoFrom'); if (!txtEl) return; txtEl.textContent = '正在获取...'; if (fromEl) fromEl.textContent = ''; fetch('https://v1.hitokoto.cn/').then(function (r) { return r.json(); }).then(function (data) { if (data.hitokoto) { txtEl.textContent = data.hitokoto; var fromStr = data.from ? '—— ' + data.from : ''; if (data.from_who) fromStr += ' · ' + data.from_who; if (fromEl) fromEl.textContent = fromStr; } }).catch(function () { txtEl.textContent = '获取失败'; }); }
 
-function download(blob, filename) {
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-}
+function applyLayout() { document.body.classList.toggle('layout-sidebar', layoutMode === 'sidebar'); document.body.classList.toggle('layout-compact', layoutMode === 'compact'); updateLayoutBtn(); }
+function updateLayoutBtn() { var btn = $('layoutBtn'); if (!btn) return; if (layoutMode === 'sidebar') { btn.title = '收起侧栏'; btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m10 9 3 3-3 3"/></svg>'; } else { btn.title = '展开侧栏'; btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m13 9-3 3 3 3"/></svg>'; } }
+function setLayout(mode) { layoutMode = mode; localStorage.setItem(LAYOUT_KEY, mode); applyLayout(); closeSidebar(); if (catManager) catManager.hidden = true; renderSourceFilter(); }
+function setTheme(mode, persist) { if (typeof persist === 'undefined') persist = true; themeMode = mode; document.documentElement.setAttribute('data-theme', mode); if (persist) localStorage.setItem(THEME_KEY, mode); var sun = $('themeIconSun'), moon = $('themeIconMoon'); if (sun) sun.style.display = mode === 'dark' ? 'none' : 'block'; if (moon) moon.style.display = mode === 'dark' ? 'block' : 'none'; }
+function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(db.settings)); if (typeof save === 'function') save(); if (typeof scheduleAutoPush === 'function' && !window.suppressPush) scheduleAutoPush(); }
 
-function scrollTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function utf8ToBase64(str) {
-  return btoa(unescape(encodeURIComponent(str)));
-}
-
-function base64ToUtf8(b64) {
-  return decodeURIComponent(escape(atob(b64)));
-}
-
-function blobToBase64(blob) {
-  return new Promise(function (resolve, reject) {
-    var r = new FileReader();
-    r.onload = function () {
-      var s = String(r.result);
-      resolve(s.split(',')[1] || '');
-    };
-    r.onerror = reject;
-    r.readAsDataURL(blob);
-  });
-}
-
-function fetchHitokoto() {
-  var txtEl = $('hitokotoText');
-  var fromEl = $('hitokotoFrom');
-  if (!txtEl) return;
-  txtEl.textContent = '正在获取...';
-  if (fromEl) fromEl.textContent = '';
-  fetch('https://v1.hitokoto.cn/')
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      if (data.hitokoto) {
-        txtEl.textContent = data.hitokoto;
-        var fromStr = data.from ? '—— ' + data.from : '';
-        if (data.from_who) fromStr += ' · ' + data.from_who;
-        if (fromEl) fromEl.textContent = fromStr;
-      }
-    })
-    .catch(function () {
-      txtEl.textContent = '获取失败';
-    });
-}
-
-function applyLayout() {
-  document.body.classList.toggle('layout-sidebar', layoutMode === 'sidebar');
-  document.body.classList.toggle('layout-compact', layoutMode === 'compact');
-  updateLayoutBtn();
-}
-
-function updateLayoutBtn() {
-  var btn = $('layoutBtn');
-  if (!btn) return;
-  if (layoutMode === 'sidebar') {
-    btn.title = '收起侧栏';
-    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m10 9 3 3-3 3"/></svg>';
-  } else {
-    btn.title = '展开侧栏';
-    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m13 9-3 3 3 3"/></svg>';
-  }
-}
-
-function setLayout(mode) {
-  layoutMode = mode;
-  localStorage.setItem(LAYOUT_KEY, mode);
-  applyLayout();
-  closeSidebar();
-  if (catManager) catManager.hidden = true;
-  renderSourceFilter();
-}
-
-function setTheme(mode, persist) {
-  if (typeof persist === 'undefined') persist = true;
-  themeMode = mode;
-  document.documentElement.setAttribute('data-theme', mode);
-  if (persist) localStorage.setItem(THEME_KEY, mode);
-  var sun = $('themeIconSun');
-  var moon = $('themeIconMoon');
-  if (sun) sun.style.display = mode === 'dark' ? 'none' : 'block';
-  if (moon) moon.style.display = mode === 'dark' ? 'block' : 'none';
-}
-
-function saveSettings() {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(db.settings));
-  if (typeof save === 'function') save();
-  if (typeof scheduleAutoPush === 'function' && !window.suppressPush) scheduleAutoPush();
-}
-
-function getOrCreateDevice() {
-  var stored = null;
-  try {
-    stored = JSON.parse(localStorage.getItem(DEVICE_KEY) || 'null');
-  } catch (e) { stored = null; }
-
-  if (stored && stored.id) {
-    return stored;
-  }
-
-  var id = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-  var auto = detectDevice();
-  var device = {
-    id: id,
-    name: auto.name,
-    icon: auto.icon,
-    type: auto.type,
-    createdAt: Date.now()
-  };
-  try {
-    localStorage.setItem(DEVICE_KEY, JSON.stringify(device));
-  } catch (e) {}
-  return device;
-}
-
-function detectDevice() {
-  var ua = navigator.userAgent || '';
-  var screenW = (window.screen && window.screen.width) ? window.screen.width : 1024;
-  var isMobileUA = /Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-  var isTabletUA = /iPad|Android(?!.*Mobile)/i.test(ua);
-  var isMac = /Macintosh|Mac OS X/i.test(ua);
-  var isWindows = /Windows/i.test(ua);
-  var isLinux = /Linux/i.test(ua) && !/Android/i.test(ua);
-
-  if (isTabletUA || (!isMobileUA && screenW >= 768 && screenW < 1024)) {
-    return { name: isMac ? 'iPad' : '平板', icon: '📱', type: 'tablet' };
-  }
-  if (isMobileUA || screenW < 768) {
-    if (/iPhone/i.test(ua)) return { name: 'iPhone', icon: '📱', type: 'mobile' };
-    if (/Android/i.test(ua)) return { name: 'Android 手机', icon: '📱', type: 'mobile' };
-    return { name: '手机', icon: '📱', type: 'mobile' };
-  }
-  if (isMac) return { name: 'MacBook', icon: '💻', type: 'desktop' };
-  if (isWindows) return { name: 'Windows PC', icon: '💻', type: 'desktop' };
-  if (isLinux) return { name: 'Linux PC', icon: '💻', type: 'desktop' };
-  return { name: '电脑', icon: '💻', type: 'desktop' };
-}
-
-function getDeviceDisplay() {
-  var dev = getOrCreateDevice();
-  return {
-    id: dev.id,
-    name: db.settings.deviceName || dev.name,
-    icon: db.settings.deviceIcon || dev.icon,
-    type: dev.type
-  };
-}
+function getOrCreateDevice() { var stored = null; try { stored = JSON.parse(localStorage.getItem(DEVICE_KEY) || 'null'); } catch (e) { stored = null; } if (stored && stored.id) return stored; var id = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); var auto = detectDevice(); var device = { id: id, name: auto.name, icon: auto.icon, type: auto.type, createdAt: Date.now() }; try { localStorage.setItem(DEVICE_KEY, JSON.stringify(device)); } catch (e) {} return device; }
+function detectDevice() { var ua = navigator.userAgent || ''; var screenW = (window.screen && window.screen.width) ? window.screen.width : 1024; var isMobileUA = /Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua); var isTabletUA = /iPad|Android(?!.*Mobile)/i.test(ua); var isMac = /Macintosh|Mac OS X/i.test(ua); var isWindows = /Windows/i.test(ua); var isLinux = /Linux/i.test(ua) && !/Android/i.test(ua); if (isTabletUA || (!isMobileUA && screenW >= 768 && screenW < 1024)) return { name: isMac ? 'iPad' : '平板', icon: '📱', type: 'tablet' }; if (isMobileUA || screenW < 768) { if (/iPhone/i.test(ua)) return { name: 'iPhone', icon: '📱', type: 'mobile' }; if (/Android/i.test(ua)) return { name: 'Android 手机', icon: '📱', type: 'mobile' }; return { name: '手机', icon: '📱', type: 'mobile' }; } if (isMac) return { name: 'MacBook', icon: '💻', type: 'desktop' }; if (isWindows) return { name: 'Windows PC', icon: '💻', type: 'desktop' }; if (isLinux) return { name: 'Linux PC', icon: '💻', type: 'desktop' }; return { name: '电脑', icon: '💻', type: 'desktop' }; }
+function getDeviceDisplay() { var dev = getOrCreateDevice(); return { id: dev.id, name: db.settings.deviceName || dev.name, icon: db.settings.deviceIcon || dev.icon, type: dev.type }; }
 
 function applySettingsToUI() {
   var s = db.settings;
-
-  document.documentElement.setAttribute('data-style', s.uiStyle || 'modern');
-  document.body.setAttribute('data-style', s.uiStyle || 'modern');
-
+  document.documentElement.setAttribute('data-style', s.uiStyle || 'modern'); document.body.setAttribute('data-style', s.uiStyle || 'modern');
   if ($('copyWithSource')) $('copyWithSource').checked = !!s.copyWithSource;
-  if ($('copySourceFormat')) {
-    $('copySourceFormat').value = s.copySourceFormat !== undefined ? s.copySourceFormat : '—— {source}';
-    if ($('copySourceFormatWrap')) {
-      $('copySourceFormatWrap').style.display = s.copyWithSource ? 'block' : 'none';
-    }
-  }
-
+  if ($('copySourceFormat')) { $('copySourceFormat').value = s.copySourceFormat !== undefined ? s.copySourceFormat : '—— {source}'; if ($('copySourceFormatWrap')) $('copySourceFormatWrap').style.display = s.copyWithSource ? 'block' : 'none'; }
   if ($('enableMarkdown')) $('enableMarkdown').checked = s.enableMarkdown !== false;
   if ($('copyWithoutMarks')) $('copyWithoutMarks').checked = s.copyWithoutMarks !== false;
   if ($('copyKeepBlankLines')) $('copyKeepBlankLines').checked = s.copyKeepBlankLines !== false;
-
   if ($('trashTtlInput')) $('trashTtlInput').value = Number(s.trashTtlDays) || 30;
   if ($('statDimCat')) $('statDimCat').checked = !s.statsDims || s.statsDims.cat !== false;
   if ($('statDimSource')) $('statDimSource').checked = !s.statsDims || s.statsDims.source !== false;
   if ($('statDimTag')) $('statDimTag').checked = !s.statsDims || s.statsDims.tag !== false;
   if ($('statLimitInput')) $('statLimitInput').value = Number(s.statsLimit) || 8;
-  if ($('tinypngKey')) $('tinypngKey').value = s.tinypngKey || '';
-  if ($('tinypngProxy')) $('tinypngProxy').value = s.tinypngProxy || '';
-
+  if ($('tinypngKey')) $('tinypngKey').value = s.tinypngKey || ''; if ($('tinypngProxy')) $('tinypngProxy').value = s.tinypngProxy || '';
   if ($('syncCheckIntervalInput')) $('syncCheckIntervalInput').value = Number(s.syncCheckInterval) || 60;
   if ($('autoCheckUpdateToggle')) $('autoCheckUpdateToggle').checked = s.autoCheckUpdate !== false;
   if ($('useRelativeTimeToggle')) $('useRelativeTimeToggle').checked = s.useRelativeTime === true;
   if ($('themeDarkToggle')) $('themeDarkToggle').checked = themeMode === 'dark';
   if ($('focusModeCatInput')) $('focusModeCatInput').value = s.focusModeCat || '收件箱';
-
-  if ($('sidebarShowCat')) $('sidebarShowCat').checked = s.sidebarShowCat !== false;
-  if ($('sidebarShowSrc')) $('sidebarShowSrc').checked = s.sidebarShowSrc !== false;
-  if ($('sidebarShowTag')) $('sidebarShowTag').checked = s.sidebarShowTag !== false;
-
-  var catGroup = $('catNav') && $('catNav').closest ? $('catNav').closest('.nav-group') : null;
-  var srcGroup = $('sourceNav') && $('sourceNav').closest ? $('sourceNav').closest('.nav-group') : null;
-  var tagGroup = $('tagNav') && $('tagNav').closest ? $('tagNav').closest('.nav-group') : null;
-  if (catGroup) catGroup.style.display = s.sidebarShowCat !== false ? '' : 'none';
-  if (srcGroup) srcGroup.style.display = s.sidebarShowSrc !== false ? '' : 'none';
-  if (tagGroup) tagGroup.style.display = s.sidebarShowTag !== false ? '' : 'none';
-
-  if (inputEl) {
-    var hint = s.saveShortcut === 'enter' ? '（Enter 保存，Shift+Enter 换行）' : '（Ctrl+Enter 保存）';
-    var isCustom = s.inputPlaceholder && s.inputPlaceholder !== DEFAULT_SETTINGS.inputPlaceholder;
-    if (isCustom) {
-      inputEl.placeholder = s.inputPlaceholder;
-    } else {
-      inputEl.placeholder = '粘贴句子、段落' + hint + '。用【文字】可高亮。可直接粘贴图片。';
-    }
-  }
-
-  if ($('inputPlaceholder')) {
-    $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
-  }
-
-  document.body.classList.remove('layout-strip');
-  if (s.listStyle === 'strip') document.body.classList.add('layout-strip');
-  document.querySelectorAll('#listStyleMode button').forEach(function (b) {
-    b.classList.toggle('active', b.dataset.style === (s.listStyle || 'card'));
-  });
-
-  document.querySelectorAll('#saveShortcut button').forEach(function (b) {
-    b.classList.toggle('active', b.dataset.shortcut === (s.saveShortcut || 'ctrl-enter'));
-  });
-
-  document.body.classList.remove('zen-font-large', 'zen-font-xlarge');
-  if (s.zenFontSize === 'large') document.body.classList.add('zen-font-large');
-  if (s.zenFontSize === 'xlarge') document.body.classList.add('zen-font-xlarge');
-  document.querySelectorAll('#zenFontSize button').forEach(function (b) {
-    b.classList.toggle('active', b.dataset.zfs === (s.zenFontSize || 'normal'));
-  });
-
-  if ($('catLimitInput')) $('catLimitInput').value = Number(s.catLimit) || 3;
-  if ($('srcLimitInput')) $('srcLimitInput').value = Number(s.srcLimit) || 3;
-  if ($('tagLimitInput')) $('tagLimitInput').value = Number(s.tagLimit) || 3;
-  if ($('collapseLimitInput')) $('collapseLimitInput').value = Number(s.collapseLimit) || 150;
-  if ($('showHitokoto')) $('showHitokoto').checked = s.showHitokoto !== false;
-  if ($('enableAnim')) $('enableAnim').checked = s.enableAnim !== false;
-  if ($('defaultPageSizeSelect')) $('defaultPageSizeSelect').value = String(s.defaultPageSize) || '12';
-
-  if ($('defaultTypeSelect')) {
-    var sel = $('defaultTypeSelect');
-    sel.innerHTML = '<option value="">跟随系统（无）</option>' +
-      db.cats.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
-    sel.value = s.defaultType || '';
-  }
-
-  var mode = s.compressMode || 'local';
-  document.querySelectorAll('#compressMode button').forEach(function (b) {
-    b.classList.toggle('active', b.dataset.mode === mode);
-  });
-  if ($('tinypngFields')) {
-    $('tinypngFields').style.display = mode === 'tinypng' ? 'block' : 'none';
-  }
-
-  document.querySelectorAll('#fontSizeMode button').forEach(function (b) {
-    b.classList.toggle('active', b.dataset.size === (s.fontSizeMode || 'normal'));
-  });
-  applyFontSize(s.fontSizeMode);
-
+  if ($('sidebarShowCat')) $('sidebarShowCat').checked = s.sidebarShowCat !== false; if ($('sidebarShowSrc')) $('sidebarShowSrc').checked = s.sidebarShowSrc !== false; if ($('sidebarShowTag')) $('sidebarShowTag').checked = s.sidebarShowTag !== false;
+  var catGroup = $('catNav') && $('catNav').closest ? $('catNav').closest('.nav-group') : null; var srcGroup = $('sourceNav') && $('sourceNav').closest ? $('sourceNav').closest('.nav-group') : null; var tagGroup = $('tagNav') && $('tagNav').closest ? $('tagNav').closest('.nav-group') : null;
+  if (catGroup) catGroup.style.display = s.sidebarShowCat !== false ? '' : 'none'; if (srcGroup) srcGroup.style.display = s.sidebarShowSrc !== false ? '' : 'none'; if (tagGroup) tagGroup.style.display = s.sidebarShowTag !== false ? '' : 'none';
+  if (inputEl) { var hint = s.saveShortcut === 'enter' ? '（Enter 保存，Shift+Enter 换行）' : '（Ctrl+Enter 保存）'; var isCustom = s.inputPlaceholder && s.inputPlaceholder !== DEFAULT_SETTINGS.inputPlaceholder; if (isCustom) inputEl.placeholder = s.inputPlaceholder; else inputEl.placeholder = '粘贴句子、段落' + hint + '。用【文字】可高亮。可直接粘贴图片。'; }
+  if ($('inputPlaceholder')) $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
+  document.body.classList.remove('layout-strip'); if (s.listStyle === 'strip') document.body.classList.add('layout-strip');
+  document.querySelectorAll('#listStyleMode button').forEach(function (b) { b.classList.toggle('active', b.dataset.style === (s.listStyle || 'card')); });
+  document.querySelectorAll('#saveShortcut button').forEach(function (b) { b.classList.toggle('active', b.dataset.shortcut === (s.saveShortcut || 'ctrl-enter')); });
+  document.body.classList.remove('zen-font-large', 'zen-font-xlarge'); if (s.zenFontSize === 'large') document.body.classList.add('zen-font-large'); if (s.zenFontSize === 'xlarge') document.body.classList.add('zen-font-xlarge');
+  document.querySelectorAll('#zenFontSize button').forEach(function (b) { b.classList.toggle('active', b.dataset.zfs === (s.zenFontSize || 'normal')); });
+  if ($('catLimitInput')) $('catLimitInput').value = Number(s.catLimit) || 3; if ($('srcLimitInput')) $('srcLimitInput').value = Number(s.srcLimit) || 3; if ($('tagLimitInput')) $('tagLimitInput').value = Number(s.tagLimit) || 3; if ($('collapseLimitInput')) $('collapseLimitInput').value = Number(s.collapseLimit) || 150;
+  if ($('showHitokoto')) $('showHitokoto').checked = s.showHitokoto !== false; if ($('enableAnim')) $('enableAnim').checked = s.enableAnim !== false; if ($('defaultPageSizeSelect')) $('defaultPageSizeSelect').value = String(s.defaultPageSize) || '12';
+  if ($('defaultTypeSelect')) { var sel = $('defaultTypeSelect'); sel.innerHTML = '<option value="">跟随系统（无）</option>' + db.cats.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join(''); sel.value = s.defaultType || ''; }
+  var mode = s.compressMode || 'local'; document.querySelectorAll('#compressMode button').forEach(function (b) { b.classList.toggle('active', b.dataset.mode === mode); }); if ($('tinypngFields')) $('tinypngFields').style.display = mode === 'tinypng' ? 'block' : 'none';
+  document.querySelectorAll('#fontSizeMode button').forEach(function (b) { b.classList.toggle('active', b.dataset.size === (s.fontSizeMode || 'normal')); }); applyFontSize(s.fontSizeMode);
   document.body.classList.toggle('no-anim', s.enableAnim === false);
+  var hitokotoBox = document.querySelector('.hitokoto-box'); if (hitokotoBox) hitokotoBox.style.display = (s.showHitokoto !== false) ? 'flex' : 'none';
+  if ($('focusImgAutoUpload')) $('focusImgAutoUpload').checked = s.focusImgAutoUpload !== false; if ($('focusImgCatWrap')) $('focusImgCatWrap').style.display = (s.focusImgAutoUpload !== false) ? 'block' : 'none';
+  if ($('focusImgDefaultCat')) { var selCat = $('focusImgDefaultCat'); selCat.innerHTML = db.imageCategories.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join(''); selCat.value = s.focusImgDefaultCat || '其他'; }
+  if ($('imgNamingTemplate')) $('imgNamingTemplate').value = s.imgNamingTemplate || '{cat}-{timestamp}-{rand}'; if (typeof window.updateImgNamingPreview === 'function') window.updateImgNamingPreview();
+  
+  // 新增体验设置回显
+  if ($('enableStatsCache')) $('enableStatsCache').checked = s.enableStatsCache !== false;
+  if ($('enableShortcuts')) $('enableShortcuts').checked = s.enableShortcuts !== false;
+  if ($('shortcutSearch')) $('shortcutSearch').value = s.shortcutSearch || '/';
+  if ($('shortcutNew')) $('shortcutNew').value = s.shortcutNew || 'n';
+  if ($('maxTagsInHeader')) $('maxTagsInHeader').value = Number(s.maxTagsInHeader) || 3;
+  if ($('enableContextMenu')) $('enableContextMenu').checked = s.enableContextMenu !== false;
 
-  var hitokotoBox = document.querySelector('.hitokoto-box');
-  if (hitokotoBox) {
-    hitokotoBox.style.display = (s.showHitokoto !== false) ? 'flex' : 'none';
-  }
-
-  if ($('focusImgAutoUpload')) {
-    $('focusImgAutoUpload').checked = s.focusImgAutoUpload !== false;
-  }
-  if ($('focusImgCatWrap')) {
-    $('focusImgCatWrap').style.display = (s.focusImgAutoUpload !== false) ? 'block' : 'none';
-  }
-  if ($('focusImgDefaultCat')) {
-    var selCat = $('focusImgDefaultCat');
-    selCat.innerHTML = db.imageCategories.map(function (c) {
-      return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
-    }).join('');
-    selCat.value = s.focusImgDefaultCat || '其他';
-  }
-
-  if ($('imgNamingTemplate')) {
-    $('imgNamingTemplate').value = s.imgNamingTemplate || '{cat}-{timestamp}-{rand}';
-  }
-  if (typeof window.updateImgNamingPreview === 'function') {
-    window.updateImgNamingPreview();
-  }
-
-  updateTinyUsageUI();
-  if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor();
-  if (typeof renderStyleOptions === 'function') renderStyleOptions();
+  updateTinyUsageUI(); if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor(); if (typeof renderStyleOptions === 'function') renderStyleOptions();
 }
 
-function applyFontSize(mode) {
-  document.documentElement.classList.remove('font-large', 'font-xlarge');
-  if (mode === 'large') document.documentElement.classList.add('font-large');
-  if (mode === 'xlarge') document.documentElement.classList.add('font-xlarge');
+function applyFontSize(mode) { document.documentElement.classList.remove('font-large', 'font-xlarge'); if (mode === 'large') document.documentElement.classList.add('font-large'); if (mode === 'xlarge') document.documentElement.classList.add('font-xlarge'); }
+function loadSettings() { try { var s = JSON.parse(localStorage.getItem(SETTINGS_KEY)); if (s && typeof s === 'object') { var merged = {}; var k; for (k in DEFAULT_SETTINGS) if (DEFAULT_SETTINGS.hasOwnProperty(k)) merged[k] = DEFAULT_SETTINGS[k]; for (k in s) if (s.hasOwnProperty(k)) merged[k] = s[k]; merged.statsDims = {}; for (k in DEFAULT_SETTINGS.statsDims) merged.statsDims[k] = DEFAULT_SETTINGS.statsDims[k]; if (s.statsDims) for (k in s.statsDims) merged.statsDims[k] = s.statsDims[k]; db.settings = merged; } } catch (e) {}
+  db.settings.trashTtlDays = Math.max(1, Math.min(365, Number(db.settings.trashTtlDays) || 30)); db.settings.statsLimit = Math.max(3, Math.min(30, Number(db.settings.statsLimit) || 8)); db.settings.catLimit = Math.max(1, Math.min(30, Number(db.settings.catLimit) || 3)); db.settings.srcLimit = Math.max(1, Math.min(30, Number(db.settings.srcLimit) || 3)); db.settings.tagLimit = Math.max(1, Math.min(30, Number(db.settings.tagLimit) || 3)); db.settings.collapseLimit = Math.max(50, Math.min(9999, Number(db.settings.collapseLimit) || 150)); db.settings.defaultPageSize = Number(db.settings.defaultPageSize) || 12; db.settings.syncCheckInterval = Math.max(10, Math.min(3600, Number(db.settings.syncCheckInterval) || 60));
+  if (['none', 'local', 'tinypng'].indexOf(db.settings.compressMode) < 0) db.settings.compressMode = 'local'; if (['normal', 'large', 'xlarge'].indexOf(db.settings.fontSizeMode) < 0) db.settings.fontSizeMode = 'normal';
+  if (typeof db.settings.imgNamingTemplate !== 'string' || !db.settings.imgNamingTemplate.trim()) db.settings.imgNamingTemplate = DEFAULT_SETTINGS.imgNamingTemplate;
+  if (typeof db.settings.dataDir !== 'string') db.settings.dataDir = DEFAULT_SETTINGS.dataDir; if (typeof db.settings.shardSubdir !== 'string') db.settings.shardSubdir = DEFAULT_SETTINGS.shardSubdir;
+  pageSize = db.settings.defaultPageSize; applySettingsToUI();
 }
 
-function loadSettings() {
-  try {
-    var s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
-    if (s && typeof s === 'object') {
-      var merged = {};
-      var k;
-      for (k in DEFAULT_SETTINGS) {
-        if (DEFAULT_SETTINGS.hasOwnProperty(k)) merged[k] = DEFAULT_SETTINGS[k];
-      }
-      for (k in s) {
-        if (s.hasOwnProperty(k)) merged[k] = s[k];
-      }
-      merged.statsDims = {};
-      for (k in DEFAULT_SETTINGS.statsDims) merged.statsDims[k] = DEFAULT_SETTINGS.statsDims[k];
-      if (s.statsDims) {
-        for (k in s.statsDims) merged.statsDims[k] = s.statsDims[k];
-      }
-      db.settings = merged;
-    }
-  } catch (e) {}
+function currentMonth() { var n = new Date(); return n.getFullYear() + '-' + pad2(n.getMonth() + 1); }
+function loadTinyCount() { try { var d = JSON.parse(localStorage.getItem(TINY_KEY)) || {}; if (d.month !== currentMonth()) return { month: currentMonth(), count: 0 }; return { month: d.month, count: Number(d.count) || 0 }; } catch (e) { return { month: currentMonth(), count: 0 }; } }
+function bumpTinyCount() { var d = loadTinyCount(); d.count += 1; localStorage.setItem(TINY_KEY, JSON.stringify(d)); updateTinyUsageUI(); return d; }
+function updateTinyUsageUI() { var d = loadTinyCount(); var el = $('tinyUsage'); if (el) el.innerHTML = '本月（' + d.month + '）已用 <b>' + d.count + '</b> / 500 次'; }
 
-  db.settings.trashTtlDays = Math.max(1, Math.min(365, Number(db.settings.trashTtlDays) || 30));
-  db.settings.statsLimit = Math.max(3, Math.min(30, Number(db.settings.statsLimit) || 8));
-  db.settings.catLimit = Math.max(1, Math.min(30, Number(db.settings.catLimit) || 3));
-  db.settings.srcLimit = Math.max(1, Math.min(30, Number(db.settings.srcLimit) || 3));
-  db.settings.tagLimit = Math.max(1, Math.min(30, Number(db.settings.tagLimit) || 3));
-  db.settings.collapseLimit = Math.max(50, Math.min(9999, Number(db.settings.collapseLimit) || 150));
-  db.settings.defaultPageSize = Number(db.settings.defaultPageSize) || 12;
-  db.settings.syncCheckInterval = Math.max(10, Math.min(3600, Number(db.settings.syncCheckInterval) || 60));
-
-  if (['none', 'local', 'tinypng'].indexOf(db.settings.compressMode) < 0) {
-    db.settings.compressMode = 'local';
-  }
-  if (['normal', 'large', 'xlarge'].indexOf(db.settings.fontSizeMode) < 0) {
-    db.settings.fontSizeMode = 'normal';
-  }
-  if (typeof db.settings.imgNamingTemplate !== 'string' || !db.settings.imgNamingTemplate.trim()) {
-    db.settings.imgNamingTemplate = DEFAULT_SETTINGS.imgNamingTemplate;
-  }
-  if (typeof db.settings.dataDir !== 'string') {
-    db.settings.dataDir = DEFAULT_SETTINGS.dataDir;
-  }
-  if (typeof db.settings.shardSubdir !== 'string') {
-    db.settings.shardSubdir = DEFAULT_SETTINGS.shardSubdir;
-  }
-
-  pageSize = db.settings.defaultPageSize;
-  applySettingsToUI();
-}
-
-function currentMonth() {
-  var n = new Date();
-  return n.getFullYear() + '-' + pad2(n.getMonth() + 1);
-}
-
-function loadTinyCount() {
-  try {
-    var d = JSON.parse(localStorage.getItem(TINY_KEY)) || {};
-    if (d.month !== currentMonth()) return { month: currentMonth(), count: 0 };
-    return { month: d.month, count: Number(d.count) || 0 };
-  } catch (e) {
-    return { month: currentMonth(), count: 0 };
-  }
-}
-
-function bumpTinyCount() {
-  var d = loadTinyCount();
-  d.count += 1;
-  localStorage.setItem(TINY_KEY, JSON.stringify(d));
-  updateTinyUsageUI();
-  return d;
-}
-
-function updateTinyUsageUI() {
-  var d = loadTinyCount();
-  var el = $('tinyUsage');
-  if (el) {
-    el.innerHTML = '本月（' + d.month + '）已用 <b>' + d.count + '</b> / 500 次';
-  }
-}
-
-// 全局暴露
-window.db = db;
-window.$ = $;
-window.toast = toast;
-window.esc = esc;
-window.formatText = formatText;
-window.uid = uid;
-window.fmtDate = fmtDate;
-window.fmtFull = fmtFull;
-window.fmtDateOnly = fmtDateOnly;
-window.utf8ToBase64 = utf8ToBase64;
-window.base64ToUtf8 = base64ToUtf8;
-window.blobToBase64 = blobToBase64;
-window.download = download;
-window.copyText = copyText;
-window.scrollTop = scrollTop;
-window.formatCount = formatCount;
+window.db = db; window.$ = $; window.toast = toast; window.esc = esc; window.formatText = formatText; window.uid = uid; window.fmtDate = fmtDate; window.fmtFull = fmtFull; window.fmtDateOnly = fmtDateOnly; window.utf8ToBase64 = utf8ToBase64; window.base64ToUtf8 = base64ToUtf8; window.blobToBase64 = blobToBase64; window.download = download; window.copyText = copyText; window.scrollTop = scrollTop; window.formatCount = formatCount;

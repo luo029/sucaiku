@@ -81,7 +81,7 @@ var modalsHtml = ''
   + '<div class="modal-actions" style="justify-content:flex-end;"><button class="btn" id="dupCloseBtn">关闭</button></div>'
   + '</div></div>'
 
-  // ============ 设置弹窗（核心大改）============
+  // ============ 设置弹窗 ============
   + '<div class="modal-mask" id="settingMask"><div class="modal wide" style="max-width:620px;">'
   + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">'
   + '<div class="modal-icon export-icon" style="margin-bottom:0;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>'
@@ -124,6 +124,15 @@ var modalsHtml = ''
   + '<div class="st-card" data-group="general"><div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg><div><div class="st-card-title">侧栏设置</div></div></div><div class="st-card-body">'
   + '<div style="display:flex; gap:10px; margin-bottom:16px;"><label class="sidebar-toggle-item"><input type="checkbox" id="sidebarShowCat" checked style="display:none;"><span>分类</span></label><label class="sidebar-toggle-item"><input type="checkbox" id="sidebarShowSrc" checked style="display:none;"><span>来源</span></label><label class="sidebar-toggle-item"><input type="checkbox" id="sidebarShowTag" checked style="display:none;"><span>标签</span></label></div>'
   + '<div style="display:flex; gap:10px;"><div style="flex:1;"><div style="font-size:12px; text-align:center; margin-bottom:6px;">分类</div><input type="number" id="catLimitInput" min="1" max="30" value="3" style="width:100%; text-align:center; padding:8px; border:none; background:var(--bg);"></div><div style="flex:1;"><div style="font-size:12px; text-align:center; margin-bottom:6px;">来源</div><input type="number" id="srcLimitInput" min="1" max="30" value="3" style="width:100%; text-align:center; padding:8px; border:none; background:var(--bg);"></div><div style="flex:1;"><div style="font-size:12px; text-align:center; margin-bottom:6px;">标签</div><input type="number" id="tagLimitInput" min="1" max="30" value="3" style="width:100%; text-align:center; padding:8px; border:none; background:var(--bg);"></div></div>'
+  + '</div></div>'
+
+  // ============ ★ 新增：极客 DIY · 快捷键与交互 ============
+  + '<div class="st-card" data-group="general"><div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div class="st-card-title">极客 DIY · 快捷键与交互</div><div class="st-card-desc">全部可自由开关，小白也能一键还原</div></div></div><div class="st-card-body">'
+  + '<label class="st-toggle"><div><div class="st-toggle-title">开启全局快捷键</div><div class="st-toggle-desc">/ 搜索 · N 新建 · Ctrl+S 推送 · Alt+Enter 盲盒</div></div><input type="checkbox" id="enableShortcuts" checked></label>'
+  + '<div class="st-grid-2" style="margin-bottom:16px;"><div class="st-field"><label>搜索快捷键</label><input type="text" id="shortcutSearch" maxlength="1" value="/" placeholder="/"><div class="st-hint">单个字符，默认 /</div></div><div class="st-field"><label>新建快捷键</label><input type="text" id="shortcutNew" maxlength="1" value="n" placeholder="n"><div class="st-hint">单个字符，默认 N</div></div></div>'
+  + '<label class="st-toggle"><div><div class="st-toggle-title">开启右键 / 长按菜单</div><div class="st-toggle-desc">桌面端右键、移动端长按卡片弹出快捷操作</div></div><input type="checkbox" id="enableContextMenu" checked></label>'
+  + '<label class="st-toggle"><div><div class="st-toggle-title">开启侧栏统计缓存</div><div class="st-toggle-desc">万条级数据下点击分类、标签依旧顺滑</div></div><input type="checkbox" id="enableStatsCache" checked></label>'
+  + '<div class="st-field"><label>标签折叠阈值</label><div class="st-inline"><input type="number" class="setting-num" id="maxTagsInHeader" min="1" max="10" value="3"><span class="st-suffix">个</span></div><div class="st-hint">页头显示的标签超过此数量时折叠为「等 X 个」</div></div>'
   + '</div></div>'
 
   // ----- 同步 tab -----
@@ -318,7 +327,7 @@ var modalsHtml = ''
 
   + '<div class="img-view" id="imgManagerView" hidden><div class="img-view-head" style="padding:16px 24px;"><div style="display:flex;align-items:center;gap:12px;"><span class="ivh-title" style="font-size:18px;">图床仓库管理</span><span class="ivh-count" id="imgMgrRepoName">-</span></div><span class="ivh-spacer"></span><div style="display:flex;gap:8px;"><button class="btn" id="imgMgrSelectBtn">批量管理</button><button class="btn" id="imgMgrRefreshBtn">刷新</button><button class="btn primary" id="imgMgrCloseBtn">返回</button></div></div><div style="flex:1; overflow-y:auto; padding:24px; background:var(--bg);"><div id="imgMgrStatsPanel"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><div class="segmented" id="imgMgrFilterTabs" style="width:auto;"><button class="active" data-filter="all">全部</button><button data-filter="unused">未引用</button></div></div><div id="imgMgrStatus" style="text-align:center; padding:40px;"></div><div id="imgMgrGrid" class="img-mgr-grid"></div></div></div>'
 
-  // ============ 标签管理弹窗（改造：加批量选择+颜色圆点）============
+  // ============ 标签管理弹窗 ============
   + '<div class="modal-mask" id="tagManageMask"><div class="modal wide">'
   + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">'
   + '<h3 class="modal-title" style="margin:0;">标签管理</h3>'

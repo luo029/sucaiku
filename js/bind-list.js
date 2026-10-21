@@ -1,4 +1,4 @@
-// js/bind-list.js - 事件绑定：列表 / 分页 / 分类管理 / 批量操作
+// js/bind-list.js - 事件绑定：列表 / 分页 / 分类管理 / 批量操作 / 右键菜单
 
 listEl.addEventListener('click', function (e) {
   var img = e.target.closest('[data-open-img]');
@@ -16,14 +16,12 @@ listEl.addEventListener('click', function (e) {
   var tagEl = e.target.closest('.tag-chip');
   if (tagEl && !selectMode) {
     var t = tagEl.dataset.tag;
-    // ★ 卡片上的标签也支持多选切换
     if (currentTags.has(t)) {
       currentTags.delete(t);
     } else {
       currentTags.add(t);
     }
     currentTag = currentTags.size > 0 ? Array.from(currentTags)[0] : '';
-
     currentPage = 1; render(); scrollTop(); return;
   }
 
@@ -70,6 +68,10 @@ listEl.addEventListener('click', function (e) {
 });
 
 $('pagination').addEventListener('click', function (e) {
+  // ★ 优先处理「加载更早历史素材」（由 bind-core.js 中的全局委托处理）
+  var loadMoreBtn = e.target.closest('#loadMoreShardsBtn');
+  if (loadMoreBtn) return; // 交给 bind-core.js 的 document 委托处理
+
   var btn = e.target.closest('.page-btn[data-page]');
   if (!btn || btn.disabled) return;
   var p = btn.dataset.page;
@@ -225,3 +227,164 @@ if (batchSourceConfirmEl) {
     toast('已为 ' + n + ' 条素材设置来源');
   });
 }
+
+// ============================================================
+// ★ 新增：卡片右键 / 长按快捷菜单
+//    受 db.settings.enableContextMenu 控制
+// ============================================================
+(function () {
+  // 注入样式
+  if (!document.getElementById('ctxMenuStyle')) {
+    var st = document.createElement('style');
+    st.id = 'ctxMenuStyle';
+    st.textContent = ''
+      + '.card-ctx-menu{position:fixed;z-index:300;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;box-shadow:var(--sh-3);min-width:180px;animation:dropdownIn .15s;}'
+      + '.card-ctx-menu button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:9px 14px;border-radius:6px;font-size:14px;color:var(--text-2);background:transparent;border:none;cursor:pointer;transition:background .12s;font-family:inherit;}'
+      + '.card-ctx-menu button:hover{background:var(--line);color:var(--text);}'
+      + '.card-ctx-menu button.danger{color:var(--danger);}'
+      + '.card-ctx-menu button.danger:hover{background:var(--danger-soft);}'
+      + '.card-ctx-menu .ctx-divider{height:1px;background:var(--line);margin:4px 6px;}';
+    document.head.appendChild(st);
+  }
+
+  var ctxMenu = null;
+  function closeCtxMenu() {
+    if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; }
+  }
+
+  function showCtxMenu(x, y, itemId) {
+    closeCtxMenu();
+    var item = db.items.find(function (i) { return i.id === itemId; });
+    if (!item) return;
+
+    ctxMenu = document.createElement('div');
+    ctxMenu.className = 'card-ctx-menu';
+    ctxMenu.innerHTML = ''
+      + '<button data-ctx="copy">📋 复制内容</button>'
+      + '<button data-ctx="edit">✏️ 编辑</button>'
+      + '<div class="ctx-divider"></div>'
+      + '<button data-ctx="move">📁 移动到分类</button>'
+      + '<button data-ctx="tag">🏷 添加标签</button>'
+      + '<button data-ctx="source">📚 设置来源</button>'
+      + '<div class="ctx-divider"></div>'
+      + '<button data-ctx="del" class="danger">🗑 删除（可恢复）</button>';
+    document.body.appendChild(ctxMenu);
+
+    // 边界修正
+    var rect = ctxMenu.getBoundingClientRect();
+    var px = x, py = y;
+    if (px + rect.width > window.innerWidth - 8) px = window.innerWidth - rect.width - 8;
+    if (py + rect.height > window.innerHeight - 8) py = window.innerHeight - rect.height - 8;
+    if (px < 8) px = 8;
+    if (py < 8) py = 8;
+    ctxMenu.style.left = px + 'px';
+    ctxMenu.style.top = py + 'px';
+
+    ctxMenu.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-ctx]');
+      if (!btn) return;
+      var act = btn.dataset.ctx;
+      closeCtxMenu();
+
+      if (act === 'copy') {
+        copyText(item.text || '', item.source);
+      } else if (act === 'edit') {
+        startEdit(item.id);
+      } else if (act === 'del') {
+        requestDeleteConfirm(1, function () {
+          moveToTrash([item.id]);
+          if (editingId === item.id) cancelEdit();
+          cleanupSources(); save();
+          var totalPages = Math.max(1, Math.ceil(getFilteredItems().length / pageSize));
+          if (currentPage > totalPages) currentPage = totalPages;
+          render(); toast('已移入回收站');
+        });
+      } else if (act === 'move') {
+        var cats = db.cats.slice();
+        if (!cats.length) { toast('还没有分类'); return; }
+        var target = prompt('移动到分类（输入其中一个）：\n' + cats.join(' / '), item.type);
+        if (target && target.trim() && cats.indexOf(target.trim()) >= 0 && target.trim() !== item.type) {
+          item.type = target.trim();
+          item.updatedAt = Date.now();
+          save(); render();
+          toast('已移动到「' + target.trim() + '」');
+        } else if (target && target.trim() && cats.indexOf(target.trim()) < 0) {
+          toast('分类不存在：' + target.trim());
+        }
+      } else if (act === 'tag') {
+        var t = prompt('添加/修改标签（逗号分隔，留空则清空）:', (item.tags || []).join(', '));
+        if (t !== null) {
+          var cur = t.split(/[,，\s]+/).filter(Boolean);
+          item.tags = Array.from(new Set(cur));
+          item.updatedAt = Date.now();
+          save(); render();
+          toast('标签已更新');
+        }
+      } else if (act === 'source') {
+        var s = prompt('设置来源（留空则清空）:', item.source || '');
+        if (s !== null) {
+          item.source = s.trim();
+          if (item.source && db.sources.indexOf(item.source) < 0) db.sources.push(item.source);
+          item.updatedAt = Date.now();
+          save(); render();
+          toast('来源已更新');
+        }
+      }
+    });
+  }
+
+  // 桌面端：右键
+  document.addEventListener('contextmenu', function (e) {
+    if (!db.settings || db.settings.enableContextMenu === false) return;
+    var card = e.target.closest('#list .card');
+    if (!card) return;
+    if (selectMode || zenMode) return;
+    if (document.body.classList.contains('focus-mode')) return;
+    if (document.body.classList.contains('guest-mode')) return;
+    e.preventDefault();
+    showCtxMenu(e.clientX, e.clientY, card.dataset.id);
+  });
+
+  // 移动端：长按 600ms
+  var lpTimer = null;
+  var lpCard = null;
+  var lpX = 0, lpY = 0;
+  document.addEventListener('touchstart', function (e) {
+    if (!db.settings || db.settings.enableContextMenu === false) return;
+    var card = e.target.closest('#list .card');
+    if (!card) return;
+    if (selectMode || zenMode) return;
+    if (document.body.classList.contains('focus-mode')) return;
+    if (document.body.classList.contains('guest-mode')) return;
+    var touch = e.touches[0];
+    lpCard = card;
+    lpX = touch.clientX;
+    lpY = touch.clientY;
+    clearTimeout(lpTimer);
+    lpTimer = setTimeout(function () {
+      if (lpCard === card) {
+        showCtxMenu(lpX, lpY, card.dataset.id);
+        lpCard = null;
+      }
+    }, 600);
+  }, { passive: true });
+  document.addEventListener('touchend', function () {
+    clearTimeout(lpTimer);
+    lpCard = null;
+  });
+  document.addEventListener('touchmove', function (e) {
+    if (!lpCard) return;
+    var touch = e.touches[0];
+    if (Math.abs(touch.clientX - lpX) > 10 || Math.abs(touch.clientY - lpY) > 10) {
+      clearTimeout(lpTimer);
+      lpCard = null;
+    }
+  }, { passive: true });
+
+  // 点击外部 / 滚动关闭
+  document.addEventListener('click', function (e) {
+    if (ctxMenu && !ctxMenu.contains(e.target)) closeCtxMenu();
+  });
+  document.addEventListener('scroll', closeCtxMenu, { passive: true });
+  window.addEventListener('resize', closeCtxMenu);
+})();
