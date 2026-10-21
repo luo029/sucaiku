@@ -19,6 +19,31 @@
   /* 触摸反馈 */
   .card:active { background: var(--line); }
   .icon-btn:active, .btn:active, .tab:active { background: var(--line); }
+
+  /* ★ 新增：补齐之前漏掉的元素，避免触摸后保持 hover 状态 */
+  .tag-chip:hover {
+    transform: none;
+    background: var(--bg);
+    border-color: var(--line);
+    color: var(--text-2);
+  }
+  .sp-item:hover {
+    background: transparent;
+    color: var(--text-2);
+  }
+  .nav-item:hover {
+    background: transparent;
+    color: var(--text-2);
+  }
+  .nav-item.active:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .hitokoto-refresh:hover { transform: none; }
+  .sp-pin:hover { background: transparent; }
+  .nav-del-btn:hover { background: transparent; color: var(--text-3); }
+  .st-tab:hover { background: transparent; color: var(--text-2); }
+  .st-tab.active:hover { background: var(--accent-soft); color: var(--accent); }
 }
 
 /* =========================================================

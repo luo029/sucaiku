@@ -1,13 +1,11 @@
 /* js / modals.js · 所有的弹窗与隐藏元素，动态插入到页面底部 */
 const modalsHtml = `
-<!-- 批量操作栏（美化重构版） -->
+<!-- 批量操作栏 -->
 <div class="batch-bar" id="batchBar">
   <div class="batch-info">
     已选 <b id="batchNum">0</b> 条
   </div>
   <div class="batch-actions">
-    
-    <!-- 第一组：选择 -->
     <div class="batch-group">
       <button class="batch-btn" id="selectAllBtn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -17,7 +15,6 @@ const modalsHtml = `
 
     <div class="batch-divider"></div>
 
-    <!-- 第二组：内容编辑 -->
     <div class="batch-group">
       <button class="batch-btn" id="batchMoveBtn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
@@ -39,7 +36,6 @@ const modalsHtml = `
 
     <div class="batch-divider"></div>
 
-    <!-- 第三组：危险与退出 -->
     <div class="batch-group">
       <button class="batch-btn danger" id="batchDel">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
@@ -47,7 +43,6 @@ const modalsHtml = `
       </button>
       <button class="batch-btn cancel" id="batchExit">退出</button>
     </div>
-
   </div>
 </div>
 
@@ -203,9 +198,9 @@ const modalsHtml = `
     </div>
     <div class="st-scroll">
       <div id="settingTabs" style="display:flex; gap:8px; margin-bottom:16px; border-bottom:1px solid var(--line); padding-bottom:12px; overflow-x:auto; scrollbar-width:none;">
-        <button class="st-tab active" data-target="general" style="padding:8px 16px; border-radius:10px; font-weight:600; font-size:13.5px; color:var(--accent); background:var(--accent-soft); cursor:pointer; border:none; transition:all 0.15s; white-space:nowrap;">基础与编辑</button>
-        <button class="st-tab" data-target="sync" style="padding:8px 16px; border-radius:10px; font-weight:500; font-size:13.5px; color:var(--text-2); background:transparent; cursor:pointer; border:none; transition:all 0.15s; white-space:nowrap;">云端同步</button>
-        <button class="st-tab" data-target="images" style="padding:8px 16px; border-radius:10px; font-weight:500; font-size:13.5px; color:var(--text-2); background:transparent; cursor:pointer; border:none; transition:all 0.15s; white-space:nowrap;">图片处理</button>
+        <button class="st-tab active" data-target="general">基础与编辑</button>
+        <button class="st-tab" data-target="sync">云端同步</button>
+        <button class="st-tab" data-target="images">图片处理</button>
       </div>
       
       <div class="st-card" data-group="general">
@@ -215,22 +210,10 @@ const modalsHtml = `
         </div>
         <div class="st-card-body">
           <div id="settingsOverview" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap:10px;">
-            <div class="ov-item">
-              <div class="ov-num" style="color:var(--accent);" id="ovTotal">0</div>
-              <div class="ov-label">总素材</div>
-            </div>
-            <div class="ov-item">
-              <div class="ov-num" style="color:var(--text);" id="ovChars">0</div>
-              <div class="ov-label">总字数</div>
-            </div>
-            <div class="ov-item">
-              <div class="ov-num" style="color:var(--img-accent);" id="ovImgs">0</div>
-              <div class="ov-label">图片数</div>
-            </div>
-            <div class="ov-item">
-              <div class="ov-num" style="color:#059669;" id="ovTags">0</div>
-              <div class="ov-label">标签数</div>
-            </div>
+            <div class="ov-item"><div class="ov-num" style="color:var(--accent);" id="ovTotal">0</div><div class="ov-label">总素材</div></div>
+            <div class="ov-item"><div class="ov-num" style="color:var(--text);" id="ovChars">0</div><div class="ov-label">总字数</div></div>
+            <div class="ov-item"><div class="ov-num" style="color:var(--img-accent);" id="ovImgs">0</div><div class="ov-label">图片数</div></div>
+            <div class="ov-item"><div class="ov-num" style="color:#059669;" id="ovTags">0</div><div class="ov-label">标签数</div></div>
           </div>
         </div>
       </div>
@@ -249,48 +232,30 @@ const modalsHtml = `
             <div class="st-field" style="margin-bottom:0;">
               <label>默认每页显示条数</label>
               <select id="defaultPageSizeSelect" class="page-size" style="width:100%; text-align:left; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); font-size:13.5px; outline:none;">
-                <option value="12">12 条</option>
-                <option value="24">24 条</option>
-                <option value="48">48 条</option>
-                <option value="100">100 条</option>
+                <option value="12">12 条</option><option value="24">24 条</option><option value="48">48 条</option><option value="100">100 条</option>
               </select>
             </div>
             <div class="st-field" style="margin-bottom:0;">
               <label>长文本折叠阈值</label>
-              <div class="st-inline">
-                <input type="number" class="setting-num" id="collapseLimitInput" min="50" max="9999" step="10" value="150" style="width:100%;">
-                <span class="st-suffix">字</span>
-              </div>
+              <div class="st-inline"><input type="number" class="setting-num" id="collapseLimitInput" min="50" max="9999" step="10" value="150" style="width:100%;"><span class="st-suffix">字</span></div>
             </div>
             <div class="st-field" style="margin-bottom:0;">
               <label>回收站保留天数</label>
-              <div class="st-inline">
-                <input type="number" class="setting-num" id="trashTtlInput" min="1" max="365" step="1" value="30" style="width:100%;">
-                <span class="st-suffix">天</span>
-              </div>
+              <div class="st-inline"><input type="number" class="setting-num" id="trashTtlInput" min="1" max="365" step="1" value="30" style="width:100%;"><span class="st-suffix">天</span></div>
             </div>
           </div>
           <div style="height: 1px; background: var(--line); margin: 16px 0;"></div>
           <div style="display:flex; flex-direction:column; gap:10px;">
             <label class="st-toggle">
-              <div>
-                <div class="st-toggle-title">复制时自动去除标记符号</div>
-                <div class="st-toggle-desc">将【】 ** == 等符号去掉，只留纯文本</div>
-              </div>
+              <div><div class="st-toggle-title">复制时自动去除标记符号</div><div class="st-toggle-desc">将【】 ** == 等符号去掉，只留纯文本</div></div>
               <input type="checkbox" id="copyWithoutMarks">
             </label>
             <label class="st-toggle">
-              <div>
-                <div class="st-toggle-title">复制时保留空行（原汁原味）</div>
-                <div class="st-toggle-desc">如果关闭，则会压缩多余空行和首尾空行</div>
-              </div>
+              <div><div class="st-toggle-title">复制时保留空行（原汁原味）</div><div class="st-toggle-desc">如果关闭，则会压缩多余空行和首尾空行</div></div>
               <input type="checkbox" id="copyKeepBlankLines">
             </label>
             <label class="st-toggle">
-              <div>
-                <div class="st-toggle-title">复制时附带自定义后缀</div>
-                <div class="st-toggle-desc">复制素材内容时自动在末尾追加文字</div>
-              </div>
+              <div><div class="st-toggle-title">复制时附带自定义后缀</div><div class="st-toggle-desc">复制素材内容时自动在末尾追加文字</div></div>
               <input type="checkbox" id="copyWithSource">
             </label>
             <div id="copySourceFormatWrap" style="display: none; padding: 4px 0 0;">
@@ -300,10 +265,7 @@ const modalsHtml = `
             </div>
             <div style="height: 1px; background: var(--line); margin: 6px 0;"></div>
             <label class="st-toggle">
-              <div>
-                <div class="st-toggle-title">启用 Markdown 语法</div>
-                <div class="st-toggle-desc">输入 **文字** 显示为加粗，【文字】显示为高亮</div>
-              </div>
+              <div><div class="st-toggle-title">启用 Markdown 语法</div><div class="st-toggle-desc">输入 **文字** 显示为加粗，【文字】显示为高亮</div></div>
               <input type="checkbox" id="enableMarkdown">
             </label>
           </div>
@@ -314,22 +276,10 @@ const modalsHtml = `
         <div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><div><div class="st-card-title">外观与显示</div><div class="st-card-desc">主题、字号、时间显示格式</div></div></div>
         <div class="st-card-body">
           <div class="st-grid-2" style="margin-bottom:16px;">
-            <label class="st-toggle" style="margin-bottom:0;">
-              <div><div class="st-toggle-title">夜间模式</div></div>
-              <input type="checkbox" id="themeDarkToggle">
-            </label>
-            <label class="st-toggle" style="margin-bottom:0;">
-              <div><div class="st-toggle-title">相对时间</div></div>
-              <input type="checkbox" id="useRelativeTimeToggle">
-            </label>
-            <label class="st-toggle" style="margin-bottom:0;">
-              <div><div class="st-toggle-title">显示一言</div></div>
-              <input type="checkbox" id="showHitokoto">
-            </label>
-            <label class="st-toggle" style="margin-bottom:0;">
-              <div><div class="st-toggle-title">卡片动画</div></div>
-              <input type="checkbox" id="enableAnim">
-            </label>
+            <label class="st-toggle" style="margin-bottom:0;"><div><div class="st-toggle-title">夜间模式</div></div><input type="checkbox" id="themeDarkToggle"></label>
+            <label class="st-toggle" style="margin-bottom:0;"><div><div class="st-toggle-title">相对时间</div></div><input type="checkbox" id="useRelativeTimeToggle"></label>
+            <label class="st-toggle" style="margin-bottom:0;"><div><div class="st-toggle-title">显示一言</div></div><input type="checkbox" id="showHitokoto"></label>
+            <label class="st-toggle" style="margin-bottom:0;"><div><div class="st-toggle-title">卡片动画</div></div><input type="checkbox" id="enableAnim"></label>
           </div>
           <div class="st-field" style="margin-bottom:16px;">
             <label>保存快捷键</label>
@@ -383,18 +333,9 @@ const modalsHtml = `
         <div class="st-card-body">
           <label style="display:block; margin-bottom:10px; font-size:13px; font-weight:600; color:var(--text-2);">侧边栏内容显示</label>
           <div style="display:flex; gap:10px; margin-bottom:20px;">
-            <label class="sidebar-toggle-item">
-              <input type="checkbox" id="sidebarShowCat" checked style="display:none;">
-              <span>分类</span>
-            </label>
-            <label class="sidebar-toggle-item">
-              <input type="checkbox" id="sidebarShowSrc" checked style="display:none;">
-              <span>来源</span>
-            </label>
-            <label class="sidebar-toggle-item">
-              <input type="checkbox" id="sidebarShowTag" checked style="display:none;">
-              <span>标签</span>
-            </label>
+            <label class="sidebar-toggle-item"><input type="checkbox" id="sidebarShowCat" checked style="display:none;"><span>分类</span></label>
+            <label class="sidebar-toggle-item"><input type="checkbox" id="sidebarShowSrc" checked style="display:none;"><span>来源</span></label>
+            <label class="sidebar-toggle-item"><input type="checkbox" id="sidebarShowTag" checked style="display:none;"><span>标签</span></label>
           </div>
           <label style="display:block; margin-bottom:10px; font-size:13px; font-weight:600; color:var(--text-2);">折叠数量限制</label>
           <div style="display:flex; gap:10px;">
@@ -430,45 +371,15 @@ const modalsHtml = `
           <div class="st-grid-2"><div class="st-field"><label>分支</label><input type="text" id="ghBranch" placeholder="main" autocomplete="off"></div><div class="st-field"><label>数据文件路径</label><input type="text" id="ghDataPath" placeholder="material-library.json" autocomplete="off"></div></div>
           <div class="st-field"><label>站点基础 URL（可选）</label><input type="text" id="ghSiteBase" placeholder="https://your-username.github.io/material-library" autocomplete="off"><div class="st-hint">仅用于显示；留空自动推断</div></div>
           <div style="display:flex; flex-direction:column; gap:10px; margin-top:16px;">
-            <label class="st-toggle">
-              <div>
-                <div class="st-toggle-title">保存后自动推送</div>
-                <div class="st-toggle-desc">任何增删改都会触发一次同步</div>
-              </div>
-              <input type="checkbox" id="ghAuto">
-            </label>
-            <label class="st-toggle">
-              <div>
-                <div class="st-toggle-title">启动时自动拉取</div>
-                <div class="st-toggle-desc">刷新页面时，从云端获取最新数据</div>
-              </div>
-              <input type="checkbox" id="ghAutoPull" checked>
-            </label>
+            <label class="st-toggle"><div><div class="st-toggle-title">保存后自动推送</div><div class="st-toggle-desc">任何增删改都会触发一次同步</div></div><input type="checkbox" id="ghAuto"></label>
+            <label class="st-toggle"><div><div class="st-toggle-title">启动时自动拉取</div><div class="st-toggle-desc">刷新页面时，从云端获取最新数据</div></div><input type="checkbox" id="ghAutoPull" checked></label>
           </div>
           <div class="st-grid-2" style="margin-top:16px;">
-            <div class="st-field" style="margin-bottom:0;">
-              <label>自动推送间隔</label>
-              <div class="st-inline">
-                <input type="number" class="setting-num" id="autoPushDelay" min="1" max="60" step="1" value="2">
-                <span class="st-suffix">秒</span>
-              </div>
-            </div>
-            <div class="st-field" style="margin-bottom:0;">
-              <label>云端检查间隔</label>
-              <div class="st-inline">
-                <input type="number" class="setting-num" id="syncCheckIntervalInput" min="10" max="3600" step="10" value="60">
-                <span class="st-suffix">秒</span>
-              </div>
-            </div>
+            <div class="st-field" style="margin-bottom:0;"><label>自动推送间隔</label><div class="st-inline"><input type="number" class="setting-num" id="autoPushDelay" min="1" max="60" step="1" value="2"><span class="st-suffix">秒</span></div></div>
+            <div class="st-field" style="margin-bottom:0;"><label>云端检查间隔</label><div class="st-inline"><input type="number" class="setting-num" id="syncCheckIntervalInput" min="10" max="3600" step="10" value="60"><span class="st-suffix">秒</span></div></div>
           </div>
           <div class="st-hint" style="margin-bottom:12px;">停止操作指定时间后推送；闲置指定时间后检查云端更新（不低于10秒）</div>
-          <label class="st-toggle">
-            <div>
-              <div class="st-toggle-title">开启云端更新巡检</div>
-              <div class="st-toggle-desc">开启后，当其他设备更新时，会弹窗提醒你刷新</div>
-            </div>
-            <input type="checkbox" id="autoCheckUpdateToggle" checked>
-          </label>
+          <label class="st-toggle"><div><div class="st-toggle-title">开启云端更新巡检</div><div class="st-toggle-desc">开启后，当其他设备更新时，会弹窗提醒你刷新</div></div><input type="checkbox" id="autoCheckUpdateToggle" checked></label>
           <div class="st-actions" style="display:flex; gap:8px; margin-top:16px;">
             <button class="btn" id="ghTestBtn">测试</button>
             <button class="btn" id="ghPullBtn">拉取</button>
@@ -509,15 +420,12 @@ const modalsHtml = `
         <div class="st-card-body">
           <div style="display:flex; flex-direction:column; gap:10px;">
             <label class="st-toggle">
-              <div>
-                <div class="st-toggle-title">专注模式下传图跳过分类选择</div>
-                <div class="st-toggle-desc">开启后，在专注模式下传图将直接静默上传</div>
-              </div>
+              <div><div class="st-toggle-title">专注模式下传图跳过分类选择</div><div class="st-toggle-desc">开启后，在专注模式下传图将直接静默上传</div></div>
               <input type="checkbox" id="focusImgAutoUpload" checked>
             </label>
             <div id="focusImgCatWrap" class="st-field" style="margin-bottom:0; margin-top:8px;">
               <label>默认图片分类</label>
-              <select id="focusImgDefaultCat" style="width:100%; text-align:left; padding:10px 36px 10px 12px; border-radius:10px; border:1px solid var(--line); background-color:var(--bg); background-image:url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%238c8f9e\' stroke-width=\'2.5\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'m6 9 6 6 6-6\'/%3E%3C/svg%3E'); background-repeat:no-repeat; background-position:right 12px center; color:var(--text); font-size:13.5px; outline:none; appearance:none; -webkit-appearance:none; cursor:pointer; transition:all .15s;"></select>
+              <select id="focusImgDefaultCat" style="width:100%; text-align:left; padding:10px 36px 10px 12px; border-radius:10px; border:1px solid var(--line); background-color:var(--bg); background-image:url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'12\\' height=\\'12\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'%238c8f9e\\' stroke-width=\\'2.5\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'%3E%3Cpath d=\\'m6 9 6 6 6-6\\'/%3E%3C/svg%3E'); background-repeat:no-repeat; background-position:right 12px center; color:var(--text); font-size:13.5px; outline:none; appearance:none; -webkit-appearance:none; cursor:pointer; transition:all .15s;"></select>
               <div class="st-hint">静默上传时，图片将归入此分类。</div>
             </div>
           </div>

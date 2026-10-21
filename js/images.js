@@ -175,6 +175,7 @@ function sanitizeFilename(s){
   return String(s||'').replace(/[\\/:*?"<>|#%\s]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40) || 'img';
 }
 
+/* ★ 优化：改为 3 并发 worker 上传，速度快 2-3 倍 */
 async function startUploadPending(){
   if(!pendingUploadFiles.length||uploadInProgress)return;
   const cfg=loadGH();
@@ -189,62 +190,74 @@ async function startUploadPending(){
   const rc=ghRepoConfig('img');
   const files=pendingUploadFiles.slice();
   let success=0,fail=0;
+  let done=0;
 
   $('imgProgressWrap').style.display = 'block';
+  $('imgProgressText').textContent = `共 ${files.length} 张，并发上传中...`;
 
-  try{
-    for(let i=0;i<files.length;i++){
-      const file=files[i];
-      try{
-        const baseProgress = (i / files.length) * 100;
-        $('imgProgressBar').style.width = baseProgress + '%';
-        $('imgProgressPercent').textContent = Math.floor(baseProgress) + '%';
-        $('imgProgressText').textContent = `[${i+1}/${files.length}] 压缩中...`;
-        $('imgProgressBar').style.background = 'var(--accent)';
+  // 生成唯一文件名（并发时防止时间戳冲突，精确到毫秒）
+  function makeFilename(file, comp) {
+    const now=new Date();
+    const year=now.getFullYear();
+    const month=String(now.getMonth()+1).padStart(2,'0');
+    const ts=`${year}${month}${String(now.getDate()).padStart(2,'0')}${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}${String(now.getMilliseconds()).padStart(3,'0')}`;
+    const rand=Math.random().toString(36).slice(2,8);
+    const safeCat=sanitizeFilename(cat);
+    let ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    if(comp.blob && comp.blob.type){
+      if(comp.blob.type==='image/webp') ext='webp';
+      else if(comp.blob.type==='image/jpeg') ext='jpg';
+      else if(comp.blob.type==='image/png') ext='png';
+    }
+    return { year, month, filename: `${safeCat}-${ts}-${rand}.${ext}` };
+  }
 
-        statusEl.textContent=`[${i+1}/${files.length}] 压缩中…`;
-        const comp=await compressImage(file,msg=>{statusEl.textContent=`[${i+1}/${files.length}] ${msg}`;});
-        const ratio=comp.origSize>0?(1-comp.newSize/comp.origSize)*100:0;
-        
-        $('imgProgressBar').style.background = '#3b82f6';
-        statusEl.textContent=`[${i+1}/${files.length}] 压缩 ${fmtSize(comp.origSize)} → ${fmtSize(comp.newSize)}（${ratio>0?'-'+ratio.toFixed(0)+'%':'无变化'}），上传中…`;
-        $('imgProgressText').textContent = `[${i+1}/${files.length}] 上传中...`;
+  async function uploadOne(file, idx) {
+    try {
+      statusEl.textContent = `[${idx + 1}/${files.length}] 压缩中…`;
+      const comp = await compressImage(file, msg => { statusEl.textContent = `[${idx + 1}/${files.length}] ${msg}`; });
+      const ratio = comp.origSize > 0 ? (1 - comp.newSize / comp.origSize) * 100 : 0;
+      
+      statusEl.textContent = `[${idx + 1}/${files.length}] 压缩 ${fmtSize(comp.origSize)} → ${fmtSize(comp.newSize)}（${ratio > 0 ? '-' + ratio.toFixed(0) + '%' : '无变化'}），上传中…`;
 
-        const now=new Date();
-        const year=now.getFullYear();
-        const month=String(now.getMonth()+1).padStart(2,'0');
-        const ts=`${year}${month}${String(now.getDate()).padStart(2,'0')}${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
-        const rand=Math.random().toString(36).slice(2,8);
-        const safeCat=sanitizeFilename(cat);
-        let ext=(file.name.split('.').pop()||'jpg').toLowerCase();
-        if(comp.blob && comp.blob.type){
-          if(comp.blob.type==='image/webp') ext='webp';
-          else if(comp.blob.type==='image/jpeg') ext='jpg';
-          else if(comp.blob.type==='image/png') ext='png';
-        }
-        const filename=`${safeCat}-${ts}-${rand}.${ext}`;
-        const relPath=`${year}/${month}/${filename}`;
-        const fullPath=`${rc.path}/${relPath}`;
+      const { year, month, filename } = makeFilename(file, comp);
+      const relPath = `${year}/${month}/${filename}`;
+      const fullPath = `${rc.path}/${relPath}`;
 
-        const b64=await blobToBase64(comp.blob);
-        await ghPutRaw(rc,fullPath,b64,null,`upload ${relPath}`);
+      const b64 = await blobToBase64(comp.blob);
+      await ghPutRaw(rc, fullPath, b64, null, `upload ${relPath}`);
 
-        pendingImages.push({path:relPath,url:'',cat,tags:imgTags.slice(),size:comp.newSize,origSize:comp.origSize});
-        renderPendingImgs();
-        success++;
-        statusEl.textContent=`[${i+1}/${files.length}] 完成：${fmtSize(comp.origSize)} → ${fmtSize(comp.newSize)}（${comp.via||''}）`;
+      pendingImages.push({ path: relPath, url: '', cat, tags: imgTags.slice(), size: comp.newSize, origSize: comp.origSize });
+      renderPendingImgs();
+      success++;
+      statusEl.textContent = `[${idx + 1}/${files.length}] 完成`;
+    } catch (err) {
+      console.error(err);
+      fail++;
+      statusEl.textContent = `[${idx + 1}/${files.length}] 失败：${err.message}`;
+    } finally {
+      done++;
+      const pct = (done / files.length) * 100;
+      $('imgProgressBar').style.width = pct + '%';
+      $('imgProgressPercent').textContent = Math.floor(pct) + '%';
+      if (fail > 0 && done < files.length) $('imgProgressBar').style.background = 'var(--danger)';
+      else if (done < files.length) $('imgProgressBar').style.background = 'var(--accent)';
+    }
+  }
 
-        const doneProgress = ((i + 1) / files.length) * 100;
-        $('imgProgressBar').style.width = doneProgress + '%';
-        $('imgProgressPercent').textContent = Math.floor(doneProgress) + '%';
-      }catch(err){
-        console.error(err);
-        fail++;
-        statusEl.textContent=`[${i+1}/${files.length}] 失败：${err.message}`;
-        $('imgProgressText').textContent = `[${i+1}/${files.length}] 失败`;
-        $('imgProgressBar').style.background = 'var(--danger)';
+  try {
+    // 3 并发同时上传；文件少时并发数降级
+    const CONCURRENCY = Math.min(3, files.length);
+    let cursor = 0;
+    async function worker() {
+      while (cursor < files.length) {
+        const i = cursor++;
+        await uploadOne(files[i], i);
+        // 轻微节流，避免 GitHub API 限流
+        await new Promise(r => setTimeout(r, 150));
       }
     }
+    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 
     $('imgProgressBar').style.background = fail > 0 ? 'var(--danger)' : '#10b981';
     $('imgProgressText').textContent = fail > 0 ? '部分失败' : '全部完成';

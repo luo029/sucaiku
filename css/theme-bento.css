@@ -182,3 +182,14 @@ body[data-style="bento"] .hitokoto-box {
 body[data-style="bento"] .hitokoto-box::before {
   display: none;
 }
+
+/* ★ 修复：便当盒主题下当前页码高亮失效的问题 */
+/* 原因：body[data-style="bento"] .page-btn 选择器优先级高于 .page-btn.active */
+/* 解决：用同样的优先级 + !important 强制覆盖 */
+body[data-style="bento"] .page-btn.active {
+  background: var(--accent) !important;
+  color: var(--line) !important;
+  border-color: var(--line) !important;
+  box-shadow: 2px 2px 0 var(--line) !important;
+  font-weight: 800 !important;
+}

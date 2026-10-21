@@ -15,17 +15,16 @@ const PUBLIC_PATH = 'material-library.json';
       if (savedTheme === 'dark' || savedTheme === 'light') {
         themeMode = savedTheme;
       } else {
-        // ★ 如果没有手动保存过，跟随系统
         themeMode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
       }
     }catch(e){}
     applyLayout();
-    setTheme(themeMode);
+    setTheme(themeMode, false);  // ★ 首次不写 localStorage，保留"跟随系统"状态
 
-    // ★ 监听系统主题变化
+    // ★ 系统主题变化监听（用 persist=false，不会覆盖用户手动设置）
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
       if (!localStorage.getItem(THEME_KEY)) {
-        setTheme(e.matches ? 'dark' : 'light');
+        setTheme(e.matches ? 'dark' : 'light', false);
       }
     });
 
@@ -73,6 +72,11 @@ const PUBLIC_PATH = 'material-library.json';
         body.guest-mode .nav-del-btn { display: none !important; }
         body.guest-mode .layout-btn, 
         body.guest-mode #themeToggleBtn { display: none !important; }
+        /* ★ 修复：访客模式彻底禁用写入入口 */
+        body.guest-mode #reviewBtn,
+        body.guest-mode #pipBtn,
+        body.guest-mode #focusBtn { display: none !important; }
+        body.guest-mode.focus-mode .composer { display: none !important; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
         
         .owner-unlock-tip {

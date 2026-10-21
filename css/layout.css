@@ -17,14 +17,13 @@ body.layout-sidebar .sidebar{transform:translateX(0)}
 .sidebar-body::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px;border:none;background-clip:border-box}
 .nav-group{margin-bottom:20px}
 
-/* 🌟 侧边栏分组标题美化 */
 .nav-label{
-  font-size:15px; /* 调大了字号 */
+  font-size:15px;
   font-weight:700;
-  color:var(--text); /* 颜色更深，更醒目 */
-  letter-spacing:1.5px; /* 加大字间距，更有质感 */
+  color:var(--text);
+  letter-spacing:1.5px;
   padding:0 10px;
-  margin-top:24px; /* 和上方拉开距离 */
+  margin-top:24px;
   margin-bottom:12px;
   display:flex;
   align-items:center;
@@ -34,7 +33,7 @@ body.layout-sidebar .sidebar{transform:translateX(0)}
   content:'';
   display:inline-block;
   width:4px;
-  height:16px; /* 装饰线也稍微加长 */
+  height:16px;
   background:linear-gradient(135deg,#6366f1,#8b5cf6);
   border-radius:2px;
 }
@@ -89,7 +88,7 @@ body.layout-sidebar .main{margin-right:260px}
 /* 输入区 */
 .composer{background:var(--card);border-radius:var(--r-lg);padding:20px 22px 18px;border:1px solid var(--line);box-shadow:var(--sh-2);margin-bottom:24px;transition:all .25s;position:relative;z-index:30}
 .composer:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px rgba(99,102,241,.1),var(--sh-2);transform:translateY(-1px)}
-.composer textarea{width:100%;border:none;outline:none;resize:vertical;min-height:96px;font-size:16px;line-height:1.8;color:var(--text);background:transparent;padding:0;caret-color:var(--accent)}
+.composer textarea{width:100%;border:none;outline:none;resize:vertical;min-height:96px;font-size:calc(16px * var(--font-scale));line-height:1.8;color:var(--text);background:transparent;padding:0;caret-color:var(--accent)}
 .composer textarea::placeholder{color:var(--text-3)}
 .composer-foot{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:16px;padding-top:16px;border-top:1px dashed var(--line-2)}
 .field-group{display:flex;gap:10px;flex:1;min-width:220px;flex-wrap:wrap}

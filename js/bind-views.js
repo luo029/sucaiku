@@ -14,7 +14,7 @@ safeBind('layoutBtn', 'click', () => {
 });
 safeBind('sidebarCollapseBtn', 'click', () => setLayout('compact'));
 safeBind('themeToggleBtn', 'click', () => {
-  setTheme(themeMode==='light'?'dark':'light');
+  setTheme(themeMode==='light'?'dark':'light');  // ★ 用户手动切换，persist=true 默认
 });
 safeBind('zenBtn', 'click', () => setZen(true));
 safeBind('zenExitBtn', 'click', () => setZen(false));
@@ -34,7 +34,6 @@ safeBind('imgMasonry', 'click', e => {
   if(img)window.open(img.dataset.openImg,'_blank','noopener');
 });
 
-// ★ 盲盒内的图片点击放大
 safeBind('randomContent', 'click', e => {
   const img = e.target.closest('[data-open-img]');
   if(img) window.open(img.dataset.openImg,'_blank','noopener');
@@ -46,17 +45,16 @@ document.addEventListener('keydown',e=>{
   if(zenMode){setZen(false);return;}
   if(!$('imgView').hidden){closeImgView();return;}
   if(!$('imgManagerView').hidden){
-    if (imgMgrSelectMode) {
-      exitImgMgrSelectMode();
-    } else {
-      $('imgManagerView').hidden=true;document.body.style.overflow='';
-    }
+    if (imgMgrSelectMode) exitImgMgrSelectMode();
+    else { $('imgManagerView').hidden=true;document.body.style.overflow=''; }
     return;
   }
-  const openMask=document.querySelector('.modal-mask.show');
-  if(openMask){
-    if(openMask.id==='modalMask'){closeModal();return;}
-    openMask.classList.remove('show');
+  // ★ 修复：多模态叠加时，关闭最后打开的那个（DOM 顺序靠后的优先）
+  const openMasks = document.querySelectorAll('.modal-mask.show');
+  if (openMasks.length > 0) {
+    const lastMask = openMasks[openMasks.length - 1];
+    if (lastMask.id === 'modalMask') { closeModal(); return; }
+    lastMask.classList.remove('show');
     return;
   }
 });
@@ -71,27 +69,21 @@ safeBind('modalConfirm', 'click', () => {
 });
 safeBind('modalMask', 'click', e => {if(e.target===$('modalMask'))closeModal();});
 
-// ★ 随机盲盒核心逻辑升级
+// ★ 随机盲盒核心逻辑
 let randomAnimating = false;
 let randomFilterValue = 'all';
 let autoFlipTimer = null; 
 let randomFontSize = localStorage.getItem('random-font-size') || '20px';
 
 function applyRandomFontSize() {
-  if ($('randomContent')) {
-    $('randomContent').style.fontSize = randomFontSize;
-  }
+  if ($('randomContent')) $('randomContent').style.fontSize = randomFontSize;
 }
 
 safeBind('randomFontSizeBtn', 'click', e => {
   e.stopPropagation();
-  if (randomFontSize === '20px') {
-    randomFontSize = '24px';
-  } else if (randomFontSize === '24px') {
-    randomFontSize = '28px';
-  } else {
-    randomFontSize = '20px';
-  }
+  if (randomFontSize === '20px') randomFontSize = '24px';
+  else if (randomFontSize === '24px') randomFontSize = '28px';
+  else randomFontSize = '20px';
   localStorage.setItem('random-font-size', randomFontSize);
   applyRandomFontSize();
   $('randomFontSizeBtn').textContent = randomFontSize === '20px' ? 'Aa' : (randomFontSize === '24px' ? 'Aa+' : 'Aa++');
@@ -159,16 +151,13 @@ function renderRandomFilterList() {
     });
   }
 
-  if (!html) {
-    html = `<div class="sp-empty">没有匹配的选项</div>`;
-  }
-  
+  if (!html) html = `<div class="sp-empty">没有匹配的选项</div>`;
   listEl.innerHTML = html;
 }
 
 safeBind('randomFilterBtn', 'click', e => {
   e.stopPropagation();
-  $('randomAutoFlipPanel').hidden = true; // 关闭另一个面板
+  $('randomAutoFlipPanel').hidden = true;
   const panel = $('randomFilterPanel');
   if (panel.hidden) {
     $('randomFilterSearch').value = '';
@@ -215,20 +204,18 @@ safeBind('randomFilterList', 'click', e => {
   drawRandomBox();
 });
 
-// 自动翻动面板控制
 safeBind('randomAutoFlipToggleBtn', 'click', e => {
   e.stopPropagation();
-  $('randomFilterPanel').hidden = true; // 关闭另一个面板
+  $('randomFilterPanel').hidden = true;
   const panel = $('randomAutoFlipPanel');
   if (panel.hidden) {
-    $('randomAutoFlipCheck').checked = !!autoFlipTimer; // 同步状态
+    $('randomAutoFlipCheck').checked = !!autoFlipTimer;
     panel.hidden = false;
   } else {
     panel.hidden = true;
   }
 });
 
-// 点击外部关闭面板
 document.addEventListener('click', e => {
   const filterPanel = $('randomFilterPanel');
   if (filterPanel && !filterPanel.hidden && !$('randomFilterBtn').contains(e.target) && !filterPanel.contains(e.target)) {
@@ -342,6 +329,7 @@ function drawRandomBox() {
 }
 
 safeBind('menuRandomBtn', 'click', () => {
+  stopAutoFlip();  // ★ 修复：确保自动翻动停止
   randomFilterValue = 'all';
   $('randomFilterText').textContent = '全随机';
   const btn = $('randomFilterBtn');
@@ -351,7 +339,6 @@ safeBind('menuRandomBtn', 'click', () => {
   
   const savedTime = localStorage.getItem('random-auto-flip-time') || '30';
   $('randomAutoFlipTime').value = savedTime;
-  $('randomAutoFlipCheck').checked = false;
   $('randomAutoFlipPanel').hidden = true;
   $('randomFilterPanel').hidden = true;
   
@@ -359,11 +346,8 @@ safeBind('menuRandomBtn', 'click', () => {
 });
 
 safeBind('randomAutoFlipCheck', 'change', e => {
-  if (e.target.checked) {
-    startAutoFlip();
-  } else {
-    stopAutoFlip();
-  }
+  if (e.target.checked) startAutoFlip();
+  else stopAutoFlip();
 });
 
 safeBind('randomAutoFlipTime', 'change', e => {
@@ -372,10 +356,7 @@ safeBind('randomAutoFlipTime', 'change', e => {
   if (sec > 300) sec = 300;
   e.target.value = sec;
   localStorage.setItem('random-auto-flip-time', sec);
-  
-  if (autoFlipTimer) {
-    startAutoFlip(); 
-  }
+  if (autoFlipTimer) startAutoFlip(); 
 });
 
 safeBind('randomCloseBtn', 'click', () => {
@@ -384,9 +365,7 @@ safeBind('randomCloseBtn', 'click', () => {
 });
 safeBind('randomAgainBtn', 'click', () => {
   drawRandomBox();
-  if (autoFlipTimer) {
-    startAutoFlip(); 
-  }
+  if (autoFlipTimer) startAutoFlip(); 
 });
 safeBind('randomMask', 'click', e => {
   if(e.target===$('randomMask')){
@@ -451,9 +430,8 @@ safeBind('imgMgrCloseBtn', 'click', () => {
   document.body.style.overflow = '';
 });
 safeBind('imgMgrRefreshBtn', 'click', loadRepoImages);
-safeBind('imgMgrCleanUnusedBtn', 'click', cleanAllUnusedImages);
+// safeBind('imgMgrCleanUnusedBtn', 'click', cleanAllUnusedImages);  // ★ 移除冗余绑定
 
-// ★ 图床批量操作交互
 safeBind('imgMgrSelectBtn', 'click', () => {
   imgMgrSelectMode = !imgMgrSelectMode;
   imgMgrSelectedIds.clear(); 
@@ -468,11 +446,8 @@ safeBind('imgMgrBatchExit', 'click', () => {
 safeBind('imgMgrSelectAllBtn', 'click', () => {
   const pageItems = imgMgrFilteredFiles.slice(0, imgMgrRenderedCount); 
   const allSel = pageItems.every(f => imgMgrSelectedIds.has(f.relPath));
-  if (allSel) {
-    pageItems.forEach(f => imgMgrSelectedIds.delete(f.relPath));
-  } else {
-    pageItems.forEach(f => imgMgrSelectedIds.add(f.relPath));
-  }
+  if (allSel) pageItems.forEach(f => imgMgrSelectedIds.delete(f.relPath));
+  else pageItems.forEach(f => imgMgrSelectedIds.add(f.relPath));
   renderImgMgrUI();
 });
 
@@ -784,9 +759,7 @@ safeBind('imgMgrGrid', 'click', e => {
     const tag = rmTagBtn.dataset.rmTag;
     
     const imgItem = repoImagesCache.find(x => x.relPath === relPath);
-    if (imgItem) {
-      imgItem.tags = (imgItem.tags || []).filter(t => t !== tag);
-    }
+    if (imgItem) imgItem.tags = (imgItem.tags || []).filter(t => t !== tag);
     
     db.items.forEach(item => {
       if (item.images) {
@@ -809,9 +782,7 @@ safeBind('imgMgrGrid', 'click', e => {
 
   if (imgMgrSelectMode) {
     const card = e.target.closest('.mgr-card');
-    if (card && card.dataset.relPath) {
-      toggleSelectImgMgr(card.dataset.relPath);
-    }
+    if (card && card.dataset.relPath) toggleSelectImgMgr(card.dataset.relPath);
     return;
   }
   
@@ -823,9 +794,7 @@ safeBind('imgMgrGrid', 'click', e => {
   }
   
   const img = e.target.closest('[data-open-img]');
-  if (img) {
-    window.open(img.dataset.openImg, '_blank', 'noopener');
-  }
+  if (img) window.open(img.dataset.openImg, '_blank', 'noopener');
 });
 
 safeBind('menuExportBtn', 'click', () => openExportModal());
@@ -863,14 +832,11 @@ safeBind('settingMask', 'click', e => {
   if(e.target===$('settingMask')) $('settingMask').classList.remove('show');
 });
 
+/* ★ 改用 class 控制 st-tab 状态（不再写内联样式） */
 safeBind('settingTabs', 'click', e => {
   const btn = e.target.closest('.st-tab');
   if (!btn) return;
-  $('settingTabs').querySelectorAll('.st-tab').forEach(b => {
-    b.style.color = 'var(--text-2)'; b.style.background = 'transparent'; b.style.fontWeight = '500';
-    b.classList.remove('active');
-  });
-  btn.style.color = 'var(--accent)'; btn.style.background = 'var(--accent-soft)'; btn.style.fontWeight = '600';
+  $('settingTabs').querySelectorAll('.st-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const target = btn.dataset.target;
   document.querySelectorAll('.st-scroll .st-card').forEach(card => {
@@ -880,13 +846,7 @@ safeBind('settingTabs', 'click', e => {
 
 function resetSettingsTabs() {
   const tabs = document.querySelectorAll('#settingTabs .st-tab');
-  tabs.forEach(b => {
-    const isGen = b.dataset.target === 'general';
-    b.classList.toggle('active', isGen);
-    b.style.color = isGen ? 'var(--accent)' : 'var(--text-2)';
-    b.style.background = isGen ? 'var(--accent-soft)' : 'transparent';
-    b.style.fontWeight = isGen ? '600' : '500';
-  });
+  tabs.forEach(b => b.classList.toggle('active', b.dataset.target === 'general'));
   document.querySelectorAll('.st-scroll .st-card').forEach(card => {
     card.style.display = (card.dataset.group === 'general') ? 'block' : 'none';
   });
@@ -919,9 +879,7 @@ safeBind('openFocusModeBtn', 'click', () => {
   setFocus(true);
 });
 
-safeBind('focusExitBtn', 'click', () => {
-  setFocus(false);
-});
+safeBind('focusExitBtn', 'click', () => setFocus(false));
 
 safeBind('themeDarkToggle', 'change', e => {
   setTheme(e.target.checked ? 'dark' : 'light');
@@ -1069,7 +1027,6 @@ safeBind('fontSizeMode', 'click', e => {
   toast('字号已调整');
 });
 
-// ★ 设置面板：专注模式传图配置事件
 safeBind('focusImgAutoUpload', 'change', e => {
   db.settings.focusImgAutoUpload = e.target.checked;
   saveSettings();
@@ -1169,9 +1126,7 @@ if (oldImgCatsInput) {
     const btn = e.target.closest('[data-del-img-cat]');
     if (!btn) return;
     const cat = btn.dataset.delImgCat;
-    if (db.imageCategories.length <= 1) {
-      toast('至少需要保留一个图片分类');return;
-    }
+    if (db.imageCategories.length <= 1) { toast('至少需要保留一个图片分类'); return; }
     db.imageCategories = db.imageCategories.filter(c => c !== cat);
     save(); window.renderImgCatsEditor(); toast('分类已删除');
   });

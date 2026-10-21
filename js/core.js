@@ -47,7 +47,6 @@ const DEFAULT_SETTINGS={
   enableMarkdown:true,
   copyWithoutMarks:true,
   copyKeepBlankLines:true,
-  // ★ 新增：专注模式传图配置
   focusImgAutoUpload:true,
   focusImgDefaultCat:'其他'
 };
@@ -139,7 +138,6 @@ function highlightEscaped(escaped,kws){
   catch(e){return escaped;}
 }
 
-// ★ 支持 Markdown 判定与高亮跨行
 function formatText(text,kws){
   const raw=String(text==null?'':text);
   const enableMD = db.settings.enableMarkdown !== false;
@@ -153,24 +151,16 @@ function formatText(text,kws){
     let isValid = false;
     let isBold = false;
     
-    if (startSym === '【' && endSym === '】') {
-      isValid = true;
-    } else if (startSym === '==' && endSym === '==') {
-      isValid = true;
-    } else if (startSym === '**' && endSym === '**') {
-      isValid = true;
-      if (enableMD) isBold = true;
-    }
+    if (startSym === '【' && endSym === '】') isValid = true;
+    else if (startSym === '==' && endSym === '==') isValid = true;
+    else if (startSym === '**' && endSym === '**') { isValid = true; if (enableMD) isBold = true; }
     
     if(!isValid) continue;
     
     out+=highlightEscaped(esc(raw.slice(last,m.index)),kws);
     
-    if (isBold) {
-      out += `<strong>${esc(content)}</strong>`;
-    } else {
-      out += `<mark class="hl">${esc(content)}</mark>`;
-    }
+    if (isBold) out += `<strong>${esc(content)}</strong>`;
+    else out += `<mark class="hl">${esc(content)}</mark>`;
     
     last=m.index+m[0].length;
   }
@@ -200,12 +190,11 @@ function fmtFull(ts){const d=new Date(ts||Date.now());return `${d.getFullYear()}
 let toastTimer;
 function toast(msg){
   const el=$('toast');el.textContent=msg;
-  el.classList.toggle('raised',batchBar.classList.contains('show') || $('imgMgrBatchBar').classList.contains('show'));
+  el.classList.toggle('raised',batchBar.classList.contains('show') || ($('imgMgrBatchBar') && $('imgMgrBatchBar').classList.contains('show')));
   el.classList.add('show');clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>el.classList.remove('show'),2400);
 }
 
-// ★ 支持处理空行和跨行高亮的复制文本
 function copyText(text,source){
   let finalText=String(text||'');
   
@@ -224,11 +213,8 @@ function copyText(text,source){
     const fmt = db.settings.copySourceFormat; 
     if (fmt) {
       let suffix = '';
-      if (fmt.includes('{source}')) {
-        suffix = fmt.replace(/\{source\}/g, source || '');
-      } else {
-        suffix = fmt;
-      }
+      if (fmt.includes('{source}')) suffix = fmt.replace(/\{source\}/g, source || '');
+      else suffix = fmt;
       if(suffix.trim()) finalText += '\n' + suffix;
     }
   }
@@ -293,9 +279,12 @@ function setLayout(mode){
   applyLayout();closeSidebar();catManager.hidden=true;
   renderSourceFilter();
 }
-function setTheme(mode){
-  themeMode=mode;document.documentElement.setAttribute('data-theme',mode);
-  localStorage.setItem(THEME_KEY,mode);
+
+/* ★ 修复：新增 persist 参数，系统跟随切换时不写入 localStorage */
+function setTheme(mode, persist = true){
+  themeMode=mode;
+  document.documentElement.setAttribute('data-theme',mode);
+  if (persist) localStorage.setItem(THEME_KEY,mode);
   $('themeIconSun').style.display=mode==='dark'?'none':'block';
   $('themeIconMoon').style.display=mode==='dark'?'block':'none';
 }
@@ -348,11 +337,8 @@ function applySettingsToUI(){
   if(inputEl) {
     const hint = s.saveShortcut === 'enter' ? '（Enter 保存，Shift+Enter 换行）' : '（Ctrl+Enter 保存）';
     const isCustom = s.inputPlaceholder && s.inputPlaceholder !== DEFAULT_SETTINGS.inputPlaceholder;
-    if (isCustom) {
-      inputEl.placeholder = s.inputPlaceholder;
-    } else {
-      inputEl.placeholder = '粘贴句子、段落' + hint + '。用【文字】可高亮。可直接粘贴图片。';
-    }
+    if (isCustom) inputEl.placeholder = s.inputPlaceholder;
+    else inputEl.placeholder = '粘贴句子、段落' + hint + '。用【文字】可高亮。可直接粘贴图片。';
   }
   
   if($('inputPlaceholder')) $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
@@ -405,13 +391,8 @@ function applySettingsToUI(){
   const hitokotoBox = document.querySelector('.hitokoto-box');
   if (hitokotoBox) hitokotoBox.style.display = (s.showHitokoto !== false) ? 'flex' : 'none';
 
-  // ★ 设置面板：专注模式传图配置
-  if ($('focusImgAutoUpload')) {
-    $('focusImgAutoUpload').checked = s.focusImgAutoUpload !== false;
-  }
-  if ($('focusImgCatWrap')) {
-    $('focusImgCatWrap').style.display = (s.focusImgAutoUpload !== false) ? 'block' : 'none';
-  }
+  if ($('focusImgAutoUpload')) $('focusImgAutoUpload').checked = s.focusImgAutoUpload !== false;
+  if ($('focusImgCatWrap')) $('focusImgCatWrap').style.display = (s.focusImgAutoUpload !== false) ? 'block' : 'none';
   if ($('focusImgDefaultCat')) {
     const sel = $('focusImgDefaultCat');
     sel.innerHTML = db.imageCategories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
