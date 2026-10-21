@@ -1,9 +1,6 @@
 // js/snapshots.js · 完整文件
-// ★ 本次改动：_shouldCreateSnapshot 里的 lastDate 改用本地时区格式化（原来用 toISOString 是 UTC，
-//   会导致"距上次快照天数"判断在非 UTC 时区出错，例如北京时间比 UTC 早 8 小时）
-//   其余逻辑保留
+// ★ 优化 H：_recordSnapshotChange 加 5 秒节流，批量操作（移动分类、加标签）不再卡
 
-// ★ 本地日期格式化（优先用 store.js 暴露的 window._localDateStr，兼容旧版本）
 function _fmtLocalDate(ts) {
   if (typeof window._localDateStr === 'function') return window._localDateStr(ts);
   var d = new Date(ts || Date.now());
@@ -16,11 +13,9 @@ function _shouldCreateSnapshot() {
   var lastAt = Number(db.settings.lastSnapshotAt) || 0;
   var daysSinceLast = (Date.now() - lastAt) / 86400000;
 
-  // 1. 距上次超过强制天数
   var forceDays = Math.max(1, Number(db.settings.snapshotForceDays) || 7);
   if (lastAt === 0 || daysSinceLast >= forceDays) return 'force';
 
-  // 2. 今天变更超过阈值
   var today = _fmtLocalDate(Date.now());
   var lastDate = lastAt ? _fmtLocalDate(lastAt) : '';
   var changesToday = 0;
@@ -31,20 +26,22 @@ function _shouldCreateSnapshot() {
   var threshold = Math.max(10, Number(db.settings.snapshotChangeThreshold) || 100);
   if (changesToday >= threshold && lastDate !== today) return 'threshold';
 
-  // 3. 周日 / 周一 / 1 号
   if (now.getDay() === 0 && lastDate !== today) return 'weekly';
   if (now.getDate() === 1 && lastDate !== today) return 'monthly';
 
   return false;
 }
 
-// 记录当天变更数（在 save() 时调用）
+// ★ 优化 H：节流 —— 5 秒内只写一次 localStorage
+var _lastChangeRecordAt = 0;
 function _recordSnapshotChange() {
+  var now = Date.now();
+  if (now - _lastChangeRecordAt < 5000) return;
+  _lastChangeRecordAt = now;
   try {
-    var dayStr = _fmtLocalDate(Date.now());
+    var dayStr = _fmtLocalDate(now);
     var changeLog = JSON.parse(localStorage.getItem('material-library.snapshot-changes') || '{}');
     changeLog[dayStr] = (changeLog[dayStr] || 0) + 1;
-    // 只保留最近 30 天
     var keys = Object.keys(changeLog).sort();
     if (keys.length > 30) {
       keys.slice(0, keys.length - 30).forEach(function (k) { delete changeLog[k]; });
@@ -53,16 +50,12 @@ function _recordSnapshotChange() {
   } catch (e) {}
 }
 
-// 主入口：判断是否需要打快照
 async function maybeCreateSnapshot() {
   var reason = _shouldCreateSnapshot();
   if (!reason) return null;
   return createSnapshot(reason);
 }
 
-// ============================================================
-// 创建快照
-// ============================================================
 async function createSnapshot(kind) {
   kind = kind || 'manual';
   if (!db.items.length) { toast('没有素材，跳过快照'); return null; }
@@ -86,7 +79,6 @@ async function createSnapshot(kind) {
   var fullPath = path + ext;
 
   try {
-    // 检查已存在
     var existing = await ghGetRaw(rc, fullPath);
     var b64;
     if (typeof content === 'string') b64 = utf8ToBase64(content);
@@ -97,7 +89,6 @@ async function createSnapshot(kind) {
     saveSettings();
     appendLog({ action: 'snapshot', status: 'success', summary: '创建快照（' + _fmtSnapshotKind(kind) + '）：' + fullPath, itemCount: db.items.length });
     toast('✅ 快照已创建：' + fullPath);
-    // 清理过期快照
     if (db.settings.snapshotAutoCleanup) cleanupOldSnapshots().catch(function (e) { console.warn('快照清理失败', e); });
     return fullPath;
   } catch (e) {
@@ -144,9 +135,6 @@ function _fmtSnapshotKind(kind) {
   return { daily: '日快照', weekly: '周快照', monthly: '月快照', manual: '手动', force: '强制' }[kind] || kind;
 }
 
-// ============================================================
-// gzip 压缩（用 CompressionStream，不支持则回退不压缩）
-// ============================================================
 function _gzipString(str) {
   if (typeof CompressionStream === 'undefined') return Promise.resolve(null);
   try {
@@ -183,9 +171,6 @@ function _base64ToArrayBuffer(b64) {
   return bytes.buffer;
 }
 
-// ============================================================
-// 列出所有快照
-// ============================================================
 async function listSnapshots() {
   var cfg = loadGH();
   if (!ghReady(cfg)) return [];
@@ -211,9 +196,6 @@ async function listSnapshots() {
   }
 }
 
-// ============================================================
-// 清理过期快照
-// ============================================================
 async function cleanupOldSnapshots() {
   if (!db.settings.snapshotAutoCleanup) return 0;
   var all = await listSnapshots();
@@ -249,7 +231,6 @@ async function cleanupOldSnapshots() {
     });
   });
 
-  // 每次最多删 20 个
   toDelete = toDelete.slice(0, 20);
   var deleted = 0;
   for (var i = 0; i < toDelete.length; i++) {
@@ -266,9 +247,6 @@ async function cleanupOldSnapshots() {
   return deleted;
 }
 
-// ============================================================
-// 恢复快照
-// ============================================================
 async function restoreSnapshot(path) {
   var cfg = loadGH();
   var rc = ghRepoConfig('data');
@@ -311,9 +289,6 @@ async function restoreSnapshot(path) {
   toast('✅ 已恢复到快照（' + new Date(payload.createdAt).toLocaleString() + '）');
 }
 
-// ============================================================
-// UI：快照列表视图
-// ============================================================
 async function openSnapshotListView() {
   var mask = document.getElementById('snapshotListMask');
   if (!mask) return;
@@ -373,9 +348,6 @@ async function renderSnapshotsList() {
   });
 }
 
-// ============================================================
-// 事件绑定
-// ============================================================
 document.addEventListener('DOMContentLoaded', function () {
   var closeBtn = document.getElementById('snapshotListClose');
   if (closeBtn) closeBtn.addEventListener('click', function () { document.getElementById('snapshotListMask').classList.remove('show'); });

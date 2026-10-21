@@ -1,5 +1,5 @@
 // js/bind-views.js · 完整文件
-// ★ 本次改动：修复了 ESC 键在多层弹窗/图床叠加时，关闭错乱的问题。
+// ★ Bug A 修复：imgMgrSelectAllBtn 原来访问 IIFE 私有变量会崩，改用 window.getImgMgrFilteredFiles()
 
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
@@ -51,11 +51,9 @@ safeBind('imgCatTabs', 'click', function (e) { var t = e.target.closest('.ic-tab
 safeBind('imgMasonry', 'click', function (e) { var img = e.target.closest('[data-open-img]'); if (img) window.open(img.dataset.openImg, '_blank', 'noopener'); });
 safeBind('randomContent', 'click', function (e) { var img = e.target.closest('[data-open-img]'); if (img) window.open(img.dataset.openImg, '_blank', 'noopener'); });
 
-// ★ 修复：ESC 键多层级关闭冲突
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
   
-  // 1. 优先处理最顶层的模态弹窗（防止在图床批量修改里按 ESC 直接退了批量模式）
   var openMasks = document.querySelectorAll('.modal-mask.show');
   if (openMasks.length > 0) {
     var lastMask = openMasks[openMasks.length - 1];
@@ -64,13 +62,10 @@ document.addEventListener('keydown', function (e) {
     return;
   }
 
-  // 2. 其次处理图片全屏浏览
   if (typeof closeImgView === 'function' && $('imgView') && !$('imgView').hidden) { closeImgView(); return; }
   
-  // 3. 再次处理图床管理界面
   if ($('imgManagerView') && !$('imgManagerView').hidden) { if (imgMgrSelectMode) exitImgMgrSelectMode(); else { $('imgManagerView').hidden = true; document.body.style.overflow = ''; } return; }
 
-  // 4. 最后处理各种模式
   if (focusMode) { setFocus(false); return; }
   if (zenMode) { setZen(false); return; }
 });
@@ -161,7 +156,25 @@ safeBind('imgMgrCloseBtn', 'click', function () { if (imgMgrSelectMode) exitImgM
 safeBind('imgMgrRefreshBtn', 'click', loadRepoImages);
 safeBind('imgMgrSelectBtn', 'click', function () { imgMgrSelectMode = !imgMgrSelectMode; imgMgrSelectedIds.clear(); renderImgMgrUI(); }); 
 safeBind('imgMgrBatchExit', 'click', function () { exitImgMgrSelectMode(); });
-safeBind('imgMgrSelectAllBtn', 'click', function () { var pageItems = imgMgrFilteredFiles.slice(0, imgMgrRenderedCount); var allSel = pageItems.every(function (f) { return imgMgrSelectedIds.has(f.relPath); }); if (allSel) pageItems.forEach(function (f) { imgMgrSelectedIds.delete(f.relPath); }); else pageItems.forEach(function (f) { imgMgrSelectedIds.add(f.relPath); }); renderImgMgrUI(); });
+
+// ★ Bug A + Bug L 修复：改用 window.getImgMgrFilteredFiles()，
+//   选中的是"全部筛选结果"（含尚未渲染的），不再是"仅已渲染的"。
+safeBind('imgMgrSelectAllBtn', 'click', function () {
+  if (typeof window.getImgMgrFilteredFiles !== 'function') {
+    toast('图床模块未就绪，请刷新页面');
+    return;
+  }
+  var files = window.getImgMgrFilteredFiles() || [];
+  if (!files.length) return;
+  var allSel = files.every(function (f) { return imgMgrSelectedIds.has(f.relPath); });
+  if (allSel) {
+    files.forEach(function (f) { imgMgrSelectedIds.delete(f.relPath); });
+  } else {
+    files.forEach(function (f) { imgMgrSelectedIds.add(f.relPath); });
+  }
+  renderImgMgrUI();
+});
+
 safeBind('imgMgrBatchCatBtn', 'click', function () { if (!imgMgrSelectedIds.size) return toast('请先选择图片'); $('imgMgrBatchEditTitle').textContent = '批量修改分类'; $('imgMgrBatchEditCount').textContent = imgMgrSelectedIds.size; $('imgMgrBatchCatWrap').style.display = 'block'; $('imgMgrBatchTagWrap').style.display = 'none'; var cats = (db.imageCategories.length ? db.imageCategories : DEFAULT_IMG_CATS); var grid = $('imgMgrBatchCatGrid'); grid.innerHTML = cats.map(function (c) { return '<div class="batch-cat-item" data-cat="' + esc(c) + '">' + esc(c) + '</div>'; }).join(''); var first = grid.querySelector('.batch-cat-item'); if (first) { first.classList.add('active'); grid.dataset.selected = first.dataset.cat; } $('imgMgrBatchEditMask').classList.add('show'); });
 $('imgMgrBatchCatGrid') && $('imgMgrBatchCatGrid').addEventListener('click', function (e) { var item = e.target.closest('.batch-cat-item'); if (!item) return; var grid = $('imgMgrBatchCatGrid'); grid.querySelectorAll('.batch-cat-item').forEach(function (el) { el.classList.remove('active'); }); item.classList.add('active'); grid.dataset.selected = item.dataset.cat; });
 var selectedBatchTags = new Set();
@@ -233,7 +246,6 @@ safeBind('exportFormat', 'click', function (e) { var b = e.target.closest('butto
 safeBind('sidebarImportBtn', 'click', function () { $('fileInput').click(); });
 safeBind('fileInput', 'change', function (e) { var f = e.target.files[0]; if (!f) return; handleImportFile(f); e.target.value = ''; });
 
-// 设置弹窗
 safeBind('settingCloseBtn', 'click', function () { if ($('settingMask')) $('settingMask').classList.remove('show'); });
 safeBind('settingMask', 'click', function (e) { if (e.target === $('settingMask')) $('settingMask').classList.remove('show'); });
 safeBind('settingTabs', 'click', function (e) {
@@ -247,7 +259,6 @@ function resetSettingsTabs() { var tabs = document.querySelectorAll('#settingTab
 function openSettings() { renderStyleOptions(); applySettingsToUI(); fillGHForm(); updateTinyUsageUI(); renderSettingsOverview(); resetSettingsTabs(); var sc = document.querySelector('.st-scroll'); if (sc) sc.scrollTop = 0; $('settingMask').classList.add('show'); if (typeof window.updateImgNamingPreview === 'function') setTimeout(function () { window.updateImgNamingPreview(); }, 50); }
 safeBind('menuSettingBtn', 'click', openSettings); safeBind('gearBtn', 'click', openSettings);
 
-// ★ 新增自检按钮绑定
 safeBind('runSelfTestBtn', 'click', function () {
   if (typeof window.runSelfTest === 'function') {
     $('settingMask').classList.remove('show');
@@ -267,7 +278,6 @@ safeBind('uiStyleMode', 'click', function (e) { var b = e.target.closest('button
 safeBind('listStyleMode', 'click', function (e) { var b = e.target.closest('button[data-style]'); if (!b) return; db.settings.listStyle = b.dataset.style; saveSettings(); applySettingsToUI(); toast('列表排版已调整'); });
 safeBind('zenFontSize', 'click', function (e) { var b = e.target.closest('button[data-zfs]'); if (!b) return; db.settings.zenFontSize = b.dataset.zfs; saveSettings(); applySettingsToUI(); toast('极简模式字号已调整'); });
 
-// ★ 新增：极简模式滚动关闭筛选面板开关
 safeBind('zenAutoClosePanel', 'change', function (e) {
   db.settings.zenAutoClosePanel = e.target.checked;
   saveSettings();

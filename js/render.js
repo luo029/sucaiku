@@ -1,7 +1,6 @@
 // js/render.js · 完整文件
-// ★ 本次改动：
-//   1) 完美解决超过 5000 字的文本中，尾部搜索词不亮的高亮盲区
-//   2) 引入“尾部预览”模式，改用正则匹配，彻底杜绝超大文本导致的瞬间内存占用与卡顿
+// ★ 缓存 key 修复：把 enableMarkdown 状态纳入 cache key，
+//   否则切换"启用 Markdown"后已缓存的 HTML 不会失效，卡片内容不刷新。
 
 var tagExpanded = false, catExpanded = false, srcExpanded = false;
 var catManagerPage = 1, tagManagerPage = 1;
@@ -132,7 +131,6 @@ function renderStyleOptions() {
   }).join('');
 }
 
-// ============ 渲染标签小芯片（修复颜色模式不生效的问题） ============
 function renderTagChip(t) {
   var color = db.tagColors && db.tagColors[t] ? db.tagColors[t] : '';
   var mode = db.settings.tagColorMode || 'dot';
@@ -145,19 +143,16 @@ function renderTagChip(t) {
     } else if (mode === 'border') {
       style = 'border-color:' + color + '; color:' + color + ';';
     } else {
-      // dot 模式
       inner = '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + color + ';margin-right:4px;vertical-align:middle;"></span>' + inner;
     }
   }
   return '<span class="tag-chip" data-tag="' + esc(t) + '" style="' + style + '">' + inner + '</span>';
 }
 
-// ============ 缓存（修复 key 冲突 + 扩大容量 + FIFO 淘汰 + 超长文本高亮截断） ============
 var _formatCache = new Map();
 var _FORMAT_CACHE_MAX = 1000;
 var _FORMAT_HIGHLIGHT_LIMIT = 5000;
 
-// ★ 找安全切分点，保证 【】/==/** 标签不被腰斩
 function _findSafeSplitPoint(text, limit) {
   var re = /\u3010[\s\S]*?\u3011|==[\s\S]*?==|\*\*[\s\S]*?\*\*/g;
   var m;
@@ -172,7 +167,8 @@ function _findSafeSplitPoint(text, limit) {
 }
 
 function getCachedFormat(item, terms) {
-  var key = item.id + ':' + (item.updatedAt || item.createdAt || 0) + ':' + (terms || []).join(',');
+  // ★ 缓存 key 修复：加入 enableMarkdown 状态，切换后缓存自动失效
+  var key = item.id + ':' + (item.updatedAt || item.createdAt || 0) + ':' + (terms || []).join(',') + ':' + (db.settings.enableMarkdown !== false ? '1' : '0');
   if (_formatCache.has(key)) return _formatCache.get(key);
   var text = item.text || '';
   var html;
@@ -182,7 +178,6 @@ function getCachedFormat(item, terms) {
     var head = text.slice(0, splitAt);
     var tail = text.slice(splitAt);
     
-    // ★ 优化：改用正则匹配，不生成新的大字符串，防止超长文本卡顿
     var firstMatchIdx = -1;
     var matchedTerm = '';
     var escTerms = terms.map(function(t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|');
@@ -194,7 +189,6 @@ function getCachedFormat(item, terms) {
     }
     
     if (firstMatchIdx >= 0) {
-      // 找到尾部匹配，截取前后各 100 字符
       var start = Math.max(0, firstMatchIdx - 100);
       var end = Math.min(tail.length, firstMatchIdx + matchedTerm.length + 100);
       var snippet = tail.slice(start, end);
@@ -206,7 +200,6 @@ function getCachedFormat(item, terms) {
              '<div>' + prefix + formatText(snippet, terms) + suffix + '</div>' +
              '</div>';
     } else {
-      // 尾部没有匹配，正常渲染
       html = formatText(head, terms) + formatText(tail, []);
     }
   } else {
@@ -255,7 +248,6 @@ function renderList() {
     var itemTagSet = new Set(i.tags || []);
     (i.images || []).forEach(function (im) { (im.tags || []).forEach(function (t) { itemTagSet.add(t); }); });
     
-    // ★ 应用带颜色和模式的标签渲染
     var tagsHtml = Array.from(itemTagSet).map(function (t) { return renderTagChip(t); }).join('');
     
     var imgsHtml = (i.images && i.images.length) ? '<div class="card-imgs">' + i.images.map(function (im) {
@@ -421,7 +413,6 @@ function requestDeleteConfirm(count, onConfirm) {
 }
 function closeModal() { $('modalMask').classList.remove('show'); pendingConfirm = null; }
 
-// ============ 工具栏分类 / 来源筛选器 ============
 function renderCatFilter() {
   var text = $('catFilterText'), btn = $('catFilterBtn');
   if (!text) return;

@@ -1,30 +1,48 @@
 // js/init.js · 完整文件
-// ★ 本次改动：
-//   1) 启动时检查"未保存的孤儿图片"，弹窗询问是否清理（走图床删除接口）
-//   2) 新增每小时定时清理回收站（兜底，store.js 里也有 save 节流清理）
-//   3) 保留原有初始化逻辑
+// ★ Bug F 修复：checkOrphanImages 在云端分片未拉完时推迟执行（最多重试 20 次），
+//   防止"本地 db.items 还没拉取完 → 云端实际被引用的图片被误判成孤儿"。
 
 var PUBLIC_OWNER = 'luo029';
 var PUBLIC_REPO = 'sucaiuk_data';
 var PUBLIC_IMG_REPO = 'sucaiuk_pictures';
 var PUBLIC_PATH = 'material-library.json';
 
-// ============================================================
-// ★ 孤儿图片检查（上传后未保存的图片）
-// ============================================================
 var ORPHAN_KEY = 'material-library.orphan-imgs';
 var ORPHAN_SNOOZE_KEY = 'material-library.orphan-snooze';
+var ORPHAN_RETRY_KEY = 'material-library.orphan-retry-count';
 
 function checkOrphanImages() {
   try {
-    // 24 小时静默期：用户取消过一次，避免每次启动都弹
+    var retryCount = Number(sessionStorage.getItem(ORPHAN_RETRY_KEY) || 0);
+
+    // ★ Bug F：云端分片还没拉完就先延后，避免误判
+    var cloudPending = false;
+    try {
+      if (typeof db !== 'undefined' && db._allShardKeys && db._allShardKeys.length > 0
+          && db._loadedShardKeys && db._loadedShardKeys.length < db._allShardKeys.length) {
+        cloudPending = true;
+      }
+    } catch (e) {}
+
+    if (cloudPending) {
+      if (retryCount >= 20) {
+        sessionStorage.removeItem(ORPHAN_RETRY_KEY);
+        console.log('[init] 孤儿检查重试次数过多，放弃本次检查');
+        return;
+      }
+      sessionStorage.setItem(ORPHAN_RETRY_KEY, String(retryCount + 1));
+      console.log('[init] 云端分片未加载完，5 秒后重试孤儿检查 (' + (retryCount + 1) + '/20)');
+      setTimeout(checkOrphanImages, 5000);
+      return;
+    }
+    sessionStorage.removeItem(ORPHAN_RETRY_KEY);
+
     var snooze = Number(localStorage.getItem(ORPHAN_SNOOZE_KEY) || 0) || 0;
     if (Date.now() < snooze) return;
 
     var raw = JSON.parse(localStorage.getItem(ORPHAN_KEY) || '[]');
     if (!Array.isArray(raw) || !raw.length) return;
 
-    // 过期记录（>7 天）直接丢弃，避免误删旧文件
     var now = Date.now();
     var valid = raw.filter(function (x) { return x && x.path && (now - (x.time || 0)) < 7 * 86400000; });
     if (valid.length !== raw.length) {
@@ -32,7 +50,6 @@ function checkOrphanImages() {
     }
     if (!valid.length) return;
 
-    // 构建引用集合（所有素材里出现过的 images.path）
     var used = new Set();
     db.items.forEach(function (item) {
       (item.images || []).forEach(function (im) {
@@ -40,15 +57,12 @@ function checkOrphanImages() {
       });
     });
 
-    // 真孤儿 = 队列里有、但素材里没引用的
     var orphans = valid.filter(function (x) { return !used.has(String(x.path).trim()); });
     if (!orphans.length) {
-      // 全部被引用了，清空队列
       try { localStorage.setItem(ORPHAN_KEY, '[]'); } catch (e) {}
       return;
     }
 
-    // 检查图床配置
     var rc = ghRepoConfig('img');
     if (!rc || !rc.token || !rc.owner || !rc.repo) {
       console.warn('[init] 孤儿图片存在但未配置图床，跳过清理');
@@ -68,7 +82,6 @@ function checkOrphanImages() {
       }
     });
 
-    // 监听取消：如果没有触发 onConfirm，设置 24 小时静默
     var checkTimer = setInterval(function () {
       var mask = document.getElementById('customConfirmMask');
       if (!mask || !mask.classList.contains('show')) {
@@ -78,7 +91,6 @@ function checkOrphanImages() {
         }
       }
     }, 500);
-    // 兜底：5 分钟后自动清理定时器
     setTimeout(function () { clearInterval(checkTimer); }, 5 * 60 * 1000);
   } catch (e) {
     console.warn('[init] 检查孤儿图片失败', e);
@@ -96,7 +108,7 @@ function cleanupOrphanImages(orphans) {
     chain = chain.then(function () {
       var fullPath = rc.path + '/' + o.path;
       return ghGetRaw(rc, fullPath).then(function (file) {
-        if (!file) { successPaths.add(o.path); return; } // 云端不存在，视为已清
+        if (!file) { successPaths.add(o.path); return; }
         return ghDeleteRaw(rc, fullPath, file.sha, 'cleanup orphan ' + o.path).then(function () {
           successPaths.add(o.path);
         });
@@ -109,7 +121,6 @@ function cleanupOrphanImages(orphans) {
     });
   });
   chain.then(function () {
-    // 从队列移除成功的
     try {
       var list = JSON.parse(localStorage.getItem(ORPHAN_KEY) || '[]');
       list = list.filter(function (x) { return !successPaths.has(x.path); });
@@ -120,9 +131,6 @@ function cleanupOrphanImages(orphans) {
   });
 }
 
-// ============================================================
-// 应用初始化
-// ============================================================
 (function initApp() {
   try {
     try {
@@ -166,13 +174,11 @@ function cleanupOrphanImages(orphans) {
       renderPendingImgs();
       fetchHitokoto();
 
-      // ★ 启动时检查导出提醒（延迟 3 秒）
       setTimeout(function () { try { checkExportReminder(); } catch (e) {} }, 3000);
 
-      // ★ 启动时检查孤儿图片（延迟 5 秒，等首屏渲染完成 + 云端数据可能已拉取）
+      // ★ Bug F 修复：孤儿检查会先判断云端是否加载完，未完成自动延迟
       setTimeout(function () { try { checkOrphanImages(); } catch (e) { console.warn(e); } }, 5000);
 
-      // ★ 启动时检查是否需要创建快照（延迟 8 秒，避免和云端拉取冲突）
       setTimeout(function () {
         if (typeof maybeCreateSnapshot === 'function') {
           maybeCreateSnapshot().catch(function (e) { console.warn('启动快照失败', e); });
@@ -195,7 +201,6 @@ function cleanupOrphanImages(orphans) {
       } catch (e) { console.error('[init] 渲染失败', e); }
     });
 
-    // ★ 新增：每小时定时清理回收站（兜底，store.js 里 save 已做 1 小时节流）
     setInterval(function () {
       try { if (typeof cleanTrash === 'function') cleanTrash(); } catch (e) {}
     }, 3600000);
@@ -204,7 +209,6 @@ function cleanupOrphanImages(orphans) {
   }
 })();
 
-// 房主同步
 function handleOwnerSync(cfg) {
   if (!cfg.autoPull) { console.log('[init] 未开启自动拉取，跳过'); return; }
   var rc = ghRepoConfig('data');
@@ -228,7 +232,6 @@ function handleOwnerSync(cfg) {
         ghPull(true).then(function (ok) {
           if (ok) {
             console.log('[init] ✅ 自动拉取成功，共 ' + db.items.length + ' 条素材');
-            // ★ 拉取成功后重新检查一次孤儿图片（此时引用关系已更新）
             setTimeout(function () { try { checkOrphanImages(); } catch (e) {} }, 1000);
           } else { console.warn('[init] ❌ 自动拉取失败'); }
         });
@@ -241,7 +244,6 @@ function handleOwnerSync(cfg) {
   });
 }
 
-// 访客模式
 function initGuestMode() {
   var style = document.createElement('style');
   style.innerHTML = 'body.guest-mode .composer { display: none !important; }'

@@ -94,7 +94,7 @@
    ========================================================= */
 @media (max-width: 768px) {
   /* ---- 核心：防止 iOS 点击输入框自动放大页面 ---- */
-  input, select, textarea { font-size: 16px !important; }
+    input, select, textarea { font-size: calc(16px * var(--font-scale)) !important; }
 
   body { font-size: 15px; }
 

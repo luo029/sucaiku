@@ -1,5 +1,5 @@
 // js/core.js · 完整文件
-// ★ 本次改动：DEFAULT_SETTINGS 新增 zenAutoClosePanel 开关，并在 applySettingsToUI 中回显
+// ★ Bug C 修复：applySettingsToUI 末尾补上 applyFontSize 调用，让"全局字号"真正生效
 
 var UNCAT = '未分类'; var IMG_TYPE = '图片'; var ALL_SOURCES = '__all__';
 var DEFAULT_CATS = ['句子', '段落', '梗', '情话', '吐槽', '点子'];
@@ -21,7 +21,7 @@ var DEFAULT_SETTINGS = {
   autoCheckUpdate: true, useRelativeTime: false, sidebarShowCat: true, sidebarShowSrc: true, sidebarShowTag: true,
   inputPlaceholder: '粘贴句子、段落（Ctrl+Enter保存）。用【文字】可高亮。可直接粘贴图片。',
   cardSpacing: 'standard', listStyle: 'card', zenFontSize: 'normal', uiStyle: 'modern',
-  zenAutoClosePanel: true, // ★ 新增：极简模式下滚动自动关闭筛选面板
+  zenAutoClosePanel: true,
   focusModeCat: '收件箱', saveShortcut: 'ctrl-enter', enableMarkdown: true,
   copyWithoutMarks: true, copyKeepBlankLines: true, focusImgAutoUpload: true, focusImgDefaultCat: '其他',
   imgNamingTemplate: '{cat}-{timestamp}-{rand}',
@@ -145,7 +145,6 @@ function fmtDate(ts) {
 function fmtDateOnly(ts) { var d = new Date(ts || Date.now()); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
 function fmtFull(ts) { var d = new Date(ts || Date.now()); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
 
-// ★ Toast 队列升级版
 var toastTimer;
 var toastQueue = [];
 var isToasting = false;
@@ -240,7 +239,7 @@ function applySettingsToUI() {
   if ($('autoCheckUpdateToggle')) $('autoCheckUpdateToggle').checked = s.autoCheckUpdate !== false;
   if ($('useRelativeTimeToggle')) $('useRelativeTimeToggle').checked = s.useRelativeTime === true;
   if ($('themeDarkToggle')) $('themeDarkToggle').checked = themeMode === 'dark';
-  if ($('zenAutoClosePanel')) $('zenAutoClosePanel').checked = s.zenAutoClosePanel !== false; // ★ 回显开关
+  if ($('zenAutoClosePanel')) $('zenAutoClosePanel').checked = s.zenAutoClosePanel !== false;
   if ($('focusModeCatInput')) $('focusModeCatInput').value = s.focusModeCat || '收件箱';
   if ($('sidebarShowCat')) $('sidebarShowCat').checked = s.sidebarShowCat !== false; if ($('sidebarShowSrc')) $('sidebarShowSrc').checked = s.sidebarShowSrc !== false; if ($('sidebarShowTag')) $('sidebarShowTag').checked = s.sidebarShowTag !== false;
   
@@ -312,6 +311,9 @@ function applySettingsToUI() {
   if ($('trashAutoCleanupThreshold')) $('trashAutoCleanupThreshold').value = Number(s.trashAutoCleanupThreshold) || 1000;
 
   updateTinyUsageUI(); if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor(); if (typeof renderStyleOptions === 'function') renderStyleOptions();
+
+  // ★ Bug C 修复：让"全局字号"设置真正生效
+  applyFontSize(s.fontSizeMode || 'normal');
 }
 
 function applyFontSize(mode) { document.documentElement.classList.remove('font-large', 'font-xlarge'); if (mode === 'large') document.documentElement.classList.add('font-large'); if (mode === 'xlarge') document.documentElement.classList.add('font-xlarge'); }

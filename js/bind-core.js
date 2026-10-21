@@ -1,5 +1,5 @@
 // js/bind-core.js · 完整文件
-// ★ 本次改动：把 reviewImgs 加入了图片加载失败重试的监听列表。
+// ★ Bug B 修复：改用 document.body 捕获式委托，覆盖 review.js 动态插入的 #reviewImgs
 
 addBtn.addEventListener('click', addOrUpdate);
 cancelBtn.addEventListener('click', cancelEdit);
@@ -381,10 +381,14 @@ function handleImgFallback(e) {
   });
 }
 
-// ★ 新增了 document.getElementById('reviewImgs')
-[listEl, document.getElementById('imgMasonry'), pendingImgsEl, document.getElementById('imgMgrGrid'), document.getElementById('reviewImgs')].forEach(function (el) {
-  if (el) el.addEventListener('error', handleImgFallback, true);
-});
+// ★ Bug B 修复：改用 document.body 捕获式委托。
+//   原因：review.js 是后加载的，它通过 insertAdjacentHTML 动态插入 #reviewImgs，
+//   原来那种"逐个 getElementById + addEventListener"的方式拿不到 reviewImgs，
+//   导致批阅界面的图片无法走 API 重试兜底（其他页面都正常）。
+//   改为 body 捕获后，所有 <img>（含动态插入的）都能覆盖。
+document.body.addEventListener('error', function (e) {
+  if (e.target && e.target.tagName === 'IMG') handleImgFallback(e);
+}, true);
 
 document.addEventListener('click', function (e) {
   var loadMoreBtn = e.target.closest('#loadMoreShardsBtn');
@@ -397,7 +401,9 @@ document.addEventListener('click', function (e) {
   loadMoreBtn.style.opacity = '0.7';
   if (typeof ghPull !== 'function') { loadMoreBtn.disabled = false; loadMoreBtn.textContent = oldText; loadMoreBtn.style.opacity = ''; return; }
   Promise.resolve(ghPull(false, true)).then(function () {}).catch(function (err) {
-    loadMoreBtn.disabled = false; loadMoreBtn.textContent = oldText; loadMoreBtn.style.opacity = '';
+    loadMoreBtn.disabled = false;
+    loadMoreBtn.textContent = oldText;
+    loadMoreBtn.style.opacity = '';
     toast('加载失败：' + (err && err.message || '未知错误'));
   });
 });

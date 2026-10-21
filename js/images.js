@@ -1,15 +1,9 @@
 // js/images.js · 完整文件
-// ★ 本次改动：
-//   1) 新增孤儿图片记录：每张成功上传的图片记录到 localStorage 的 material-library.orphan-imgs
-//   2) 自动保存成功（纯图片素材直接入库）时，清理这些图片的孤儿记录
-//   3) 其余逻辑不变
+// ★ Bug G 修复：上传 promise 链末尾加 .catch/.finally，即使中间某步抛错也能复位 uploadInProgress
 
 var webpSupported = false;
 try { webpSupported = document.createElement('canvas').toDataURL('image/webp').indexOf('data:image/webp') === 0; } catch (e) {}
 
-// ============================================================
-// ★ 孤儿图片记录（供 init.js 启动检查 + items.js 保存时清理）
-// ============================================================
 var ORPHAN_KEY = 'material-library.orphan-imgs';
 
 function recordOrphanImage(path) {
@@ -18,7 +12,6 @@ function recordOrphanImage(path) {
     var list = JSON.parse(localStorage.getItem(ORPHAN_KEY) || '[]');
     list = list.filter(function (x) { return x && x.path !== path; });
     list.push({ path: path, time: Date.now() });
-    // 最多保留 500 条，超过则丢弃最旧的
     if (list.length > 500) list = list.slice(list.length - 500);
     localStorage.setItem(ORPHAN_KEY, JSON.stringify(list));
   } catch (e) { console.warn('记录孤儿图片失败', e); }
@@ -37,8 +30,6 @@ function clearOrphanImage(paths) {
 
 window.recordOrphanImage = recordOrphanImage;
 window.clearOrphanImage = clearOrphanImage;
-
-// ============================================================
 
 function tinifyCompress(file, apiKey, proxyUrl) {
   var auth = 'Basic ' + btoa('api:' + apiKey);
@@ -233,7 +224,6 @@ function startUploadPending() {
       var fullPath = rc.path + '/' + relPath;
       return blobToBase64(comp.blob).then(function (b64) { return ghPutRaw(rc, fullPath, b64, null, 'upload ' + relPath); }).then(function () {
         pendingImages.push({ path: relPath, url: '', cat: cat, tags: imgTags.slice(), size: comp.newSize, origSize: comp.origSize });
-        // ★ 记录孤儿图片（若之后被保存/自动入库，会从队列清理）
         recordOrphanImage(relPath);
         renderPendingImgs();
         success++;
@@ -260,6 +250,8 @@ function startUploadPending() {
   }
   var workers = [];
   for (var w = 0; w < CONCURRENCY; w++) workers.push(worker());
+
+  // ★ Bug G 修复：加 .catch + .finally，保证 uploadInProgress 一定复位
   Promise.all(workers).then(function () {
     $('imgProgressBar').style.background = fail > 0 ? 'var(--danger)' : '#10b981';
     $('imgProgressText').textContent = fail > 0 ? '部分失败' : '全部完成';
@@ -277,7 +269,6 @@ function startUploadPending() {
         db.items.push(newItem);
         markItemDirty(newItem); _indexAddItem(newItem);
         if (source && db.sources.indexOf(source) < 0) db.sources.push(source);
-        // ★ 自动保存成功 → 清理这些图片的孤儿记录
         clearOrphanImage(pendingImages.map(function (x) { return x.path; }).filter(Boolean));
         pendingImages = [];
         renderPendingImgs();
@@ -298,10 +289,16 @@ function startUploadPending() {
       statusEl.textContent = '完成：成功 ' + success + '，失败 ' + fail;
       toast('上传 ' + success + ' 张，失败 ' + fail + ' 张');
     }
-  }).then(function () { uploadInProgress = false; pendingUploadFiles = []; });
+  }).catch(function (e) {
+    console.error('[upload] 异常', e);
+    toast('上传异常：' + (e && e.message || '未知错误'));
+  }).finally(function () {
+    // finally 在现代浏览器都支持；即使不支持也会因为 catch 兜底而不死
+    uploadInProgress = false;
+    pendingUploadFiles = [];
+  });
 }
 
-// ============ ★ A9：图片索引缓存 ============
 var _allImagesCache = { rev: -1, result: [] };
 function collectAllImages() {
   if (_allImagesCache.rev === db._rev) return _allImagesCache.result;
@@ -315,7 +312,6 @@ function collectAllImages() {
   return arr;
 }
 
-// ============ 图片浏览（瀑布流） ============
 var IMG_VIEW_BATCH_SIZE = 60;
 var _imgViewFiltered = [];
 var _imgViewRendered = 0;

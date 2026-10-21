@@ -1,5 +1,6 @@
 /* js / imgbed.js · 图床管理：仓库图片列表 / 删除 / 清理 / 多维筛选 / 批量操作 */
 // ★ 改动：修复批量管理按钮图标与文字没有对齐的问题，优化了 SVG 的尺寸与 flex 居中对齐
+// ★ Bug A 配套修复：把 imgMgrFilteredFiles / imgMgrRenderedCount 暴露给 bind-views.js 使用
 
 (function() {
   var imgMgrCurrentCat = 'all';
@@ -178,13 +179,12 @@
     var status = $('imgMgrStatus');
     var grid = $('imgMgrGrid');
     
-    // ★ 修复：强制按钮使用 inline-flex 布局，解决图标和文字上下不对齐的问题
     var selectBtn = $('imgMgrSelectBtn');
     if (selectBtn) {
       selectBtn.style.display = 'inline-flex';
       selectBtn.style.alignItems = 'center';
       selectBtn.style.justifyContent = 'center';
-      selectBtn.style.gap = '6px'; // 图标与文字的间距
+      selectBtn.style.gap = '6px';
 
       if (imgMgrSelectMode) {
         selectBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg> <span>退出批量</span>';
@@ -558,5 +558,9 @@
   window.updateImgMgrBatchBar = updateImgMgrBatchBar;
   window.toggleSelectImgMgr = toggleSelectImgMgr;
   window.exitImgMgrSelectMode = exitImgMgrSelectMode;
+
+  // ★ Bug A 配套修复：把 IIFE 私有变量暴露给外部（bind-views.js 的"全选本页"要用）
+  window.getImgMgrFilteredFiles = function () { return imgMgrFilteredFiles; };
+  window.getImgMgrRenderedCount = function () { return imgMgrRenderedCount; };
 
 })();

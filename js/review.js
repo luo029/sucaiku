@@ -1,5 +1,8 @@
 // js/review.js · 完整文件
-// ★ 本次改动：修复了批阅界面图片因为缺少 data-img-path 导致重试机制失效（显示破图）的问题。
+// ★ Bug D 修复：批阅"准奏"后 600ms 内撤销 → 之前的 setTimeout 会跳过刚恢复的当前条。
+//   改用 pendingNextTimer 保存 setTimeout id，撤销时 clearTimeout。
+// ★ Bug E 修复：撤销"准奏"时回退 battleStats.chars，防止重复累加。
+// ★ Bug J 修复：批阅界面图片加 loading="lazy"。
 
 (function() {
   var reviewHTML = ''
@@ -49,10 +52,13 @@
     enableNumberKeys: true, enableTitle: true
   };
 
+  // ★ Bug D：保存 approve 后跳下一条的 setTimeout id，撤销时可以取消
+  var pendingNextTimer = null;
+
   var autoApproveInterval = null, autoCloseTimer = null, undoTimer = null, undoCountdownInterval = null;
   var undoData = null;
   var battleStats = { approved: 0, skipped: 0, deleted: 0, chars: 0, tags: new Set() };
-  var isProcessingAction = false; // ★ 防抖锁
+  var isProcessingAction = false;
 
   var cnNums = ['零','一','二','三','四','五','六','七','八','九','十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','二十一','二十二','二十三','二十四','二十五','二十六','二十七','二十八','二十九','三十','三十一','三十二','三十三','三十四','三十五','三十六','三十七','三十八','三十九','四十','四十一','四十二','四十三','四十四','四十五','四十六','四十七','四十八','四十九','五十','五十一','五十二','五十三','五十四','五十五','五十六','五十七','五十八','五十九','六十','六十一','六十二','六十三','六十四','六十五','六十六','六十七','六十八','六十九','七十','七十一','七十二','七十三','七十四','七十五','七十六','七十七','七十八','七十九','八十','八十一','八十二','八十三','八十四','八十五','八十六','八十七','八十八','八十九','九十','九十一','九十二','九十三','九十四','九十五','九十六','九十七','九十八','九十九','一百'];
 
@@ -423,8 +429,8 @@
     activeSearchType = null;
     var imgWrap = document.getElementById('reviewImgs');
     if (item.images && item.images.length) {
-      // ★ 修复：补上 data-img-path
-      imgWrap.innerHTML = item.images.map(function (im) { var src = typeof imageSrc === 'function' ? imageSrc(im) : im.url; return '<img src="' + esc(src) + '" data-review-img="' + esc(src) + '" data-img-path="' + esc(im.path || '') + '" title="点击查看原图">'; }).join('');
+      // ★ Bug J 修复：图片加 loading="lazy"，避免一次加载大量图片卡顿
+      imgWrap.innerHTML = item.images.map(function (im) { var src = typeof imageSrc === 'function' ? imageSrc(im) : im.url; return '<img src="' + esc(src) + '" loading="lazy" data-review-img="' + esc(src) + '" data-img-path="' + esc(im.path || '') + '" title="点击查看原图">'; }).join('');
     } else imgWrap.innerHTML = '';
     renderAllPanels();
     document.getElementById('reviewText').focus();
@@ -440,6 +446,12 @@
     else item = db.items.find(function (i) { return i.id === reviewCurrentId; });
     if (!item) return;
     undoData = { item: JSON.parse(JSON.stringify(item)), index: reviewQueue.indexOf(reviewCurrentId), action: actionType, message: message };
+
+    // ★ Bug E 修复：如果是准奏操作，记录本次保存的字数，撤销时回退
+    if (actionType === 'approve') {
+      undoData.charsAdded = item.text ? item.text.replace(/\s/g, '').length : 0;
+    }
+
     undoBtn.style.display = 'block';
     var timeLeft = rvStyle.undoTime || 5;
     undoBtn.textContent = message + ' · 撤销(' + timeLeft + 's)';
@@ -455,6 +467,10 @@
 
   document.getElementById('rvUndoBtn').addEventListener('click', function () {
     if (!undoData) return;
+
+    // ★ Bug D 修复：取消 pendingNextTimer，防止刚恢复的当前条被 setTimeout 跳走
+    if (pendingNextTimer) { clearTimeout(pendingNextTimer); pendingNextTimer = null; }
+
     var item = undoData.item;
     var index = undoData.index;
     var action = undoData.action;
@@ -475,12 +491,18 @@
     reviewQueue.splice(index, 0, item.id);
     reviewCurrentId = item.id;
     document.getElementById('rvUndoBtn').style.display = 'none';
+
+    // ★ Bug E 修复：撤销准奏时回退字数
+    if (action === 'approve') {
+      battleStats.approved--;
+      if (undoData.charsAdded) battleStats.chars -= undoData.charsAdded;
+    }
+    if (action === 'skip') battleStats.skipped--;
+    if (action === 'delete') battleStats.deleted--;
+
     undoData = null;
     if (undoTimer) clearTimeout(undoTimer);
     if (undoCountdownInterval) clearInterval(undoCountdownInterval);
-    if (action === 'approve') battleStats.approved--;
-    if (action === 'skip') battleStats.skipped--;
-    if (action === 'delete') battleStats.deleted--;
     loadReviewItem(true);
   });
 
@@ -492,6 +514,7 @@
   }
 
   function reviewNext() {
+    if (pendingNextTimer) { clearTimeout(pendingNextTimer); pendingNextTimer = null; }
     if (reviewQueue.length > 0) reviewQueue.shift();
     reviewCurrentId = reviewQueue.length > 0 ? reviewQueue[0] : null;
     loadReviewItem();
@@ -558,7 +581,8 @@
     showCornerStamp();
     battleStats.approved++;
     triggerUndoToast('已准奏', 'approve');
-    setTimeout(function () { reviewNext(); }, 600);
+    // ★ Bug D 修复：保存 setTimeout id，撤销时可以取消
+    pendingNextTimer = setTimeout(function () { pendingNextTimer = null; reviewNext(); }, 600);
   });
 
   function closeReview() {
@@ -566,6 +590,7 @@
     reviewQueue = [];
     reviewCurrentId = null;
     isProcessingAction = false;
+    if (pendingNextTimer) { clearTimeout(pendingNextTimer); pendingNextTimer = null; }
     if (autoApproveInterval) clearInterval(autoApproveInterval);
     if (autoCloseTimer) clearTimeout(autoCloseTimer);
     if (undoTimer) clearTimeout(undoTimer);
@@ -717,6 +742,7 @@
     reviewStartTime = Date.now();
     isStatsSaved = false;
     isProcessingAction = false;
+    if (pendingNextTimer) { clearTimeout(pendingNextTimer); pendingNextTimer = null; }
     document.getElementById('rvUndoBtn').style.display = 'none';
     if (!items.length) { reviewQueue = []; reviewCurrentId = null; document.getElementById('reviewMask').classList.add('show'); loadReviewItem(); return; }
     reviewQueue = items.map(function (i) { return i.id; });
