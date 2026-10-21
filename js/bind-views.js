@@ -1,5 +1,5 @@
 // js/bind-views.js · 完整文件
-// ★ Bug A 修复：imgMgrSelectAllBtn 原来访问 IIFE 私有变量会崩，改用 window.getImgMgrFilteredFiles()
+// ★ 修复：图床批量修改卡顿。去掉了深拷贝，使用 copyIndexItem 并统一刷新索引。
 
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
@@ -157,8 +157,6 @@ safeBind('imgMgrRefreshBtn', 'click', loadRepoImages);
 safeBind('imgMgrSelectBtn', 'click', function () { imgMgrSelectMode = !imgMgrSelectMode; imgMgrSelectedIds.clear(); renderImgMgrUI(); }); 
 safeBind('imgMgrBatchExit', 'click', function () { exitImgMgrSelectMode(); });
 
-// ★ Bug A + Bug L 修复：改用 window.getImgMgrFilteredFiles()，
-//   选中的是"全部筛选结果"（含尚未渲染的），不再是"仅已渲染的"。
 safeBind('imgMgrSelectAllBtn', 'click', function () {
   if (typeof window.getImgMgrFilteredFiles !== 'function') {
     toast('图床模块未就绪，请刷新页面');
@@ -200,12 +198,13 @@ safeBind('imgMgrBatchEditConfirm', 'click', function () {
   if (isCat) {
     var newCat = $('imgMgrBatchCatGrid').dataset.selected; if (!newCat) return toast('请选择分类');
     repoImagesCache.forEach(function (f) { if (imgMgrSelectedIds.has(f.relPath)) f.cat = newCat; });
-    db.items.forEach(function (item) { if (item.images) item.images.forEach(function (im) { if (!im.path) return; var ip = String(im.path).trim(); imgMgrSelectedIds.forEach(function (relPath) { var rp = String(relPath).trim(); var fn = relPath.split('/').pop(); if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.indexOf(fn) >= 0) { im.cat = newCat; updatedCount++; markItemDirty(item); _indexUpdateItem(item, item); } }); }); });
+    db.items.forEach(function (item) { if (item.images) item.images.forEach(function (im) { if (!im.path) return; var ip = String(im.path).trim(); imgMgrSelectedIds.forEach(function (relPath) { var rp = String(relPath).trim(); var fn = relPath.split('/').pop(); if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.indexOf(fn) >= 0) { im.cat = newCat; markItemDirty(item); updatedCount++; } }); }); });
   } else {
     var newTags = Array.from(selectedBatchTags);
     repoImagesCache.forEach(function (f) { if (imgMgrSelectedIds.has(f.relPath)) f.tags = newTags.slice(); });
-    db.items.forEach(function (item) { if (item.images) item.images.forEach(function (im) { if (!im.path) return; var ip = String(im.path).trim(); imgMgrSelectedIds.forEach(function (relPath) { var rp = String(relPath).trim(); var fn = relPath.split('/').pop(); if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.indexOf(fn) >= 0) { im.tags = newTags.slice(); updatedCount++; markItemDirty(item); _indexUpdateItem(item, item); } }); }); });
+    db.items.forEach(function (item) { if (item.images) item.images.forEach(function (im) { if (!im.path) return; var ip = String(im.path).trim(); imgMgrSelectedIds.forEach(function (relPath) { var rp = String(relPath).trim(); var fn = relPath.split('/').pop(); if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.indexOf(fn) >= 0) { im.tags = newTags.slice(); markItemDirty(item); updatedCount++; } }); }); });
   }
+  if (updatedCount > 0) markIndexDirty();
   save(); $('imgMgrBatchEditMask').classList.remove('show'); exitImgMgrSelectMode();
 });
 safeBind('imgMgrBatchDelBtn', 'click', function () {
@@ -460,8 +459,8 @@ safeBind('tagColorMask', 'click', function (e) { if (e.target === $('tagColorMas
 var _tagBatchMode = false; var _tagBatchSelected = new Set();
 safeBind('tagBatchToggleBtn', 'click', function () { _tagBatchMode = !_tagBatchMode; _tagBatchSelected.clear(); $('tagBatchBar').style.display = _tagBatchMode ? 'flex' : 'none'; $('tagBatchToggleBtn').textContent = _tagBatchMode ? '退出批量' : '批量选择'; renderTagManagerWithBatch(); });
 safeBind('tagBatchCancelBtn', 'click', function () { _tagBatchMode = false; _tagBatchSelected.clear(); $('tagBatchBar').style.display = 'none'; $('tagBatchToggleBtn').textContent = '批量选择'; renderTagManagerWithBatch(); });
-safeBind('tagBatchDeleteBtn', 'click', function () { if (!_tagBatchSelected.size) return toast('请先选择标签'); window.showCustomConfirm({ title: '批量删除标签', desc: '确定删除选中的 ' + _tagBatchSelected.size + ' 个标签？', isDanger: true, onConfirm: function () { var toDel = Array.from(_tagBatchSelected); db.items.forEach(function (i) { if (Array.isArray(i.tags) && i.tags.some(function (t) { return toDel.indexOf(t) >= 0; })) { var old = JSON.parse(JSON.stringify(i)); i.tags = i.tags.filter(function (t) { return toDel.indexOf(t) < 0; }); i.updatedAt = Date.now(); markItemDirty(i); _indexUpdateItem(old, i); } }); toDel.forEach(function (t) { db.fixedTags = db.fixedTags.filter(function (x) { return x !== t; }); if (db.tagColors) delete db.tagColors[t]; if (currentTag === t) currentTag = ''; if (currentTags && currentTags.has) currentTags.delete(t); }); _tagBatchSelected.clear(); save(); render(); renderTagManagerWithBatch(); toast('已删除 ' + toDel.length + ' 个标签'); } }); });
-safeBind('tagBatchMergeBtn', 'click', function () { if (_tagBatchSelected.size < 2) return toast('至少选择 2 个标签才能合并'); var def = Array.from(_tagBatchSelected)[0]; window.showCustomPrompt({ title: '合并标签', desc: '将选中的 ' + _tagBatchSelected.size + ' 个标签合并到：', value: def, onConfirm: function (target) { if (!target || !target.trim()) return; target = target.trim(); var sources = Array.from(_tagBatchSelected).filter(function (t) { return t !== target; }); db.items.forEach(function (i) { if (Array.isArray(i.tags) && i.tags.some(function (t) { return sources.indexOf(t) >= 0; })) { var old = JSON.parse(JSON.stringify(i)); i.tags = Array.from(new Set(i.tags.map(function (t) { return sources.indexOf(t) >= 0 ? target : t; }))); markItemDirty(i); _indexUpdateItem(old, i); } }); sources.forEach(function (t) { db.fixedTags = db.fixedTags.filter(function (x) { return x !== t; }); if (db.tagColors && db.tagColors[t] && !db.tagColors[target]) db.tagColors[target] = db.tagColors[t]; if (db.tagColors) delete db.tagColors[t]; }); _tagBatchSelected.clear(); save(); render(); renderTagManagerWithBatch(); toast('已合并到「' + target + '」'); } }); });
+safeBind('tagBatchDeleteBtn', 'click', function () { if (!_tagBatchSelected.size) return toast('请先选择标签'); window.showCustomConfirm({ title: '批量删除标签', desc: '确定删除选中的 ' + _tagBatchSelected.size + ' 个标签？', isDanger: true, onConfirm: function () { var toDel = Array.from(_tagBatchSelected); db.items.forEach(function (i) { if (Array.isArray(i.tags) && i.tags.some(function (t) { return toDel.indexOf(t) >= 0; })) { var old = window.copyIndexItem(i); i.tags = i.tags.filter(function (t) { return toDel.indexOf(t) < 0; }); i.updatedAt = Date.now(); markItemDirty(i); _indexUpdateItem(old, i); } }); toDel.forEach(function (t) { db.fixedTags = db.fixedTags.filter(function (x) { return x !== t; }); if (db.tagColors) delete db.tagColors[t]; if (currentTag === t) currentTag = ''; if (currentTags && currentTags.has) currentTags.delete(t); }); _tagBatchSelected.clear(); save(); render(); renderTagManagerWithBatch(); toast('已删除 ' + toDel.length + ' 个标签'); } }); });
+safeBind('tagBatchMergeBtn', 'click', function () { if (_tagBatchSelected.size < 2) return toast('至少选择 2 个标签才能合并'); var def = Array.from(_tagBatchSelected)[0]; window.showCustomPrompt({ title: '合并标签', desc: '将选中的 ' + _tagBatchSelected.size + ' 个标签合并到：', value: def, onConfirm: function (target) { if (!target || !target.trim()) return; target = target.trim(); var sources = Array.from(_tagBatchSelected).filter(function (t) { return t !== target; }); db.items.forEach(function (i) { if (Array.isArray(i.tags) && i.tags.some(function (t) { return sources.indexOf(t) >= 0; })) { var old = window.copyIndexItem(i); i.tags = Array.from(new Set(i.tags.map(function (t) { return sources.indexOf(t) >= 0 ? target : t; }))); markItemDirty(i); _indexUpdateItem(old, i); } }); sources.forEach(function (t) { db.fixedTags = db.fixedTags.filter(function (x) { return x !== t; }); if (db.tagColors && db.tagColors[t] && !db.tagColors[target]) db.tagColors[target] = db.tagColors[t]; if (db.tagColors) delete db.tagColors[t]; }); _tagBatchSelected.clear(); save(); render(); renderTagManagerWithBatch(); toast('已合并到「' + target + '」'); } }); });
 safeBind('tagManagePagination', 'click', function (e) { if (e.target.id === 'tagPagePrev') { tagManagerPage--; renderTagManagerWithBatch(); } else if (e.target.id === 'tagPageNext') { tagManagerPage++; renderTagManagerWithBatch(); } });
 
 function renderTagManagerWithBatch() {

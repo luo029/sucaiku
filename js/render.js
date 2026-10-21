@@ -1,6 +1,5 @@
 // js/render.js · 完整文件
-// ★ 缓存 key 修复：把 enableMarkdown 状态纳入 cache key，
-//   否则切换"启用 Markdown"后已缓存的 HTML 不会失效，卡片内容不刷新。
+// ★ 性能优化：长文本搜索高亮截断，防止 DOM 节点过多卡顿。
 
 var tagExpanded = false, catExpanded = false, srcExpanded = false;
 var catManagerPage = 1, tagManagerPage = 1;
@@ -151,58 +150,44 @@ function renderTagChip(t) {
 
 var _formatCache = new Map();
 var _FORMAT_CACHE_MAX = 1000;
-var _FORMAT_HIGHLIGHT_LIMIT = 5000;
-
-function _findSafeSplitPoint(text, limit) {
-  var re = /\u3010[\s\S]*?\u3011|==[\s\S]*?==|\*\*[\s\S]*?\*\*/g;
-  var m;
-  while ((m = re.exec(text))) {
-    var start = m.index;
-    var end = start + m[0].length;
-    if (end <= limit) continue;
-    if (start >= limit) return start;
-    return end;
-  }
-  return limit;
-}
 
 function getCachedFormat(item, terms) {
-  // ★ 缓存 key 修复：加入 enableMarkdown 状态，切换后缓存自动失效
   var key = item.id + ':' + (item.updatedAt || item.createdAt || 0) + ':' + (terms || []).join(',') + ':' + (db.settings.enableMarkdown !== false ? '1' : '0');
   if (_formatCache.has(key)) return _formatCache.get(key);
   var text = item.text || '';
   var html;
   
-  if (text.length > _FORMAT_HIGHLIGHT_LIMIT && terms && terms.length) {
-    var splitAt = _findSafeSplitPoint(text, _FORMAT_HIGHLIGHT_LIMIT);
-    var head = text.slice(0, splitAt);
-    var tail = text.slice(splitAt);
-    
+  // ★ 性能优化：超长文本的截断策略
+  if (text.length > 2000 && terms && terms.length) {
+    // 超过 2000 字且有关键词搜索：只取首个命中位置的上下文（前后各 200 字）
     var firstMatchIdx = -1;
     var matchedTerm = '';
     var escTerms = terms.map(function(t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|');
     var re = new RegExp('(' + escTerms + ')', 'i');
-    var match = re.exec(tail);
+    var match = re.exec(text);
     if (match) {
       firstMatchIdx = match.index;
       matchedTerm = match[0];
     }
-    
     if (firstMatchIdx >= 0) {
-      var start = Math.max(0, firstMatchIdx - 100);
-      var end = Math.min(tail.length, firstMatchIdx + matchedTerm.length + 100);
-      var snippet = tail.slice(start, end);
+      var start = Math.max(0, firstMatchIdx - 200);
+      var end = Math.min(text.length, firstMatchIdx + matchedTerm.length + 200);
+      var snippet = text.slice(start, end);
       var prefix = start > 0 ? '...' : '';
-      var suffix = end < tail.length ? '...' : '';
-      html = formatText(head, terms) + 
-             '<div style="margin: 12px 0; padding: 10px; background: var(--bg); border-left: 3px solid var(--accent); border-radius: 4px;">' +
-             '<div style="font-size: 12px; color: var(--accent); margin-bottom: 6px;">↓ 尾部命中内容预览</div>' +
+      var suffix = end < text.length ? '...' : '';
+      html = '<div style="margin: 8px 0; padding: 10px; background: var(--bg); border-left: 3px solid var(--accent); border-radius: 4px;">' +
+             '<div style="font-size: 12px; color: var(--accent); margin-bottom: 6px;">↓ 命中位置预览（原文共 ' + text.length + ' 字）</div>' +
              '<div>' + prefix + formatText(snippet, terms) + suffix + '</div>' +
              '</div>';
     } else {
-      html = formatText(head, terms) + formatText(tail, []);
+      // 没搜索到关键词，但文本极长，截断展示
+      html = formatText(text.slice(0, 2000), []) + '...';
     }
+  } else if (text.length > 5000 && (!terms || !terms.length)) {
+    // 即使没搜索，超过 5000 字也截断，防止 DOM 撑爆
+    html = formatText(text.slice(0, 5000), []) + '<div style="color:var(--text-3);font-size:12px;margin-top:8px;">（内容过长，已截断）</div>';
   } else {
+    // 正常渲染（5000字以内，或者没搜索词）
     html = formatText(text, terms);
   }
   

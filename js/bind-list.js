@@ -1,5 +1,5 @@
 // js/bind-list.js · 完整文件
-// 【改动】1) 所有批量操作入口加 markItemsDirty + _indexUpdateItem  2) 右键菜单 tag/source 修改加索引维护
+// ★ 修复：批量操作卡顿。去掉了循环里的深拷贝，改用 copyIndexItem，并统一刷新索引。
 
 listEl.addEventListener('click', function (e) {
   var img = e.target.closest('[data-open-img]');
@@ -95,8 +95,11 @@ $('moveMask').addEventListener('click', function (e) { if (e.target === $('moveM
 $('moveConfirm').addEventListener('click', function () {
   var t = $('moveCatSelect').value, n = 0;
   db.items.forEach(function (i) {
-    if (selectedIds.has(i.id) && i.type !== t) { var old = JSON.parse(JSON.stringify(i)); i.type = t; i.updatedAt = Date.now(); markItemDirty(i); _indexUpdateItem(old, i); n++; }
+    if (selectedIds.has(i.id) && i.type !== t) { 
+      i.type = t; i.updatedAt = Date.now(); markItemDirty(i); n++; 
+    }
   });
+  if (n > 0) markIndexDirty(); // 统一刷新索引
   $('moveMask').classList.remove('show');
   selectedIds.clear(); selectMode = false;
   save(); render();
@@ -118,12 +121,12 @@ $('tagAddConfirm').addEventListener('click', function () {
   var n = 0;
   db.items.forEach(function (i) {
     if (selectedIds.has(i.id)) {
-      var old = JSON.parse(JSON.stringify(i));
       var set = new Set(i.tags || []); tags.forEach(function (t) { set.add(t); });
       i.tags = Array.from(set); i.updatedAt = Date.now();
-      markItemDirty(i); _indexUpdateItem(old, i); n++;
+      markItemDirty(i); n++;
     }
   });
+  if (n > 0) markIndexDirty();
   $('tagAddMask').classList.remove('show');
   save(); render(); toast('已为 ' + n + ' 条素材添加标签');
 });
@@ -150,12 +153,12 @@ if (batchSourceConfirmEl) {
     var newSource = $('batchSourceInput').value.trim(), n = 0;
     db.items.forEach(function (i) {
       if (selectedIds.has(i.id)) {
-        var old = JSON.parse(JSON.stringify(i));
         i.source = newSource; i.updatedAt = Date.now();
-        markItemDirty(i); _indexUpdateItem(old, i); n++;
+        markItemDirty(i); n++;
       }
     });
     if (newSource && db.sources.indexOf(newSource) < 0) db.sources.push(newSource);
+    if (n > 0) markIndexDirty();
     selectedIds.clear(); selectMode = false;
     save(); render();
     $('batchSourceMask').classList.remove('show');
@@ -213,7 +216,7 @@ if (batchSourceConfirmEl) {
           title: '移动到分类', desc: '输入分类名，或点击下方建议：', value: item.type, suggestions: cats,
           onConfirm: function (target) {
             if (target && target.trim() && cats.indexOf(target.trim()) >= 0 && target.trim() !== item.type) {
-              var old = JSON.parse(JSON.stringify(item));
+              var old = window.copyIndexItem(item);
               item.type = target.trim(); item.updatedAt = Date.now();
               markItemDirty(item); _indexUpdateItem(old, item);
               save(); render(); toast('已移动到「' + target.trim() + '」');
@@ -225,7 +228,7 @@ if (batchSourceConfirmEl) {
           title: '修改标签', desc: '输入逗号分隔的标签（留空则清空）：', value: (item.tags || []).join(', '),
           onConfirm: function (t) {
             if (t !== null) {
-              var old = JSON.parse(JSON.stringify(item));
+              var old = window.copyIndexItem(item);
               item.tags = Array.from(new Set(t.split(/[,，\s]+/).filter(Boolean)));
               item.updatedAt = Date.now();
               markItemDirty(item); _indexUpdateItem(old, item);
@@ -238,7 +241,7 @@ if (batchSourceConfirmEl) {
           title: '设置来源', desc: '输入来源名称（留空则清空）：', value: item.source || '',
           onConfirm: function (s) {
             if (s !== null) {
-              var old = JSON.parse(JSON.stringify(item));
+              var old = window.copyIndexItem(item);
               item.source = s.trim();
               if (item.source && db.sources.indexOf(item.source) < 0) db.sources.push(item.source);
               item.updatedAt = Date.now();

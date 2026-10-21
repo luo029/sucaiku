@@ -1,5 +1,5 @@
 // js/core.js · 完整文件
-// ★ Bug C 修复：applySettingsToUI 末尾补上 applyFontSize 调用，让"全局字号"真正生效
+// ★ 修复：极简字号不生效。在 applySettingsToUI 中补充了 body 的 zen-font 类切换。
 
 var UNCAT = '未分类'; var IMG_TYPE = '图片'; var ALL_SOURCES = '__all__';
 var DEFAULT_CATS = ['句子', '段落', '梗', '情话', '吐槽', '点子'];
@@ -248,7 +248,13 @@ function applySettingsToUI() {
   
   if (inputEl) { var hint = s.saveShortcut === 'enter' ? '（Enter 保存，Shift+Enter 换行）' : '（Ctrl+Enter 保存）'; var isCustom = s.inputPlaceholder && s.inputPlaceholder !== DEFAULT_SETTINGS.inputPlaceholder; if (isCustom) inputEl.placeholder = s.inputPlaceholder; else inputEl.placeholder = '粘贴句子、段落' + hint + '。用【文字】可高亮。可直接粘贴图片。'; }
   if ($('inputPlaceholder')) $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
+  
   document.body.classList.remove('layout-strip'); if (s.listStyle === 'strip') document.body.classList.add('layout-strip');
+  
+  // ★ 修复：极简字号不生效
+  document.body.classList.remove('zen-font-large', 'zen-font-xlarge');
+  if (s.zenFontSize === 'large') document.body.classList.add('zen-font-large');
+  if (s.zenFontSize === 'xlarge') document.body.classList.add('zen-font-xlarge');
   
   setSegmentedActive('saveShortcut', 'data-shortcut', s.saveShortcut || 'ctrl-enter');
   setSegmentedActive('listStyleMode', 'data-style', s.listStyle || 'card');
@@ -312,7 +318,6 @@ function applySettingsToUI() {
 
   updateTinyUsageUI(); if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor(); if (typeof renderStyleOptions === 'function') renderStyleOptions();
 
-  // ★ Bug C 修复：让"全局字号"设置真正生效
   applyFontSize(s.fontSizeMode || 'normal');
 }
 
@@ -338,6 +343,19 @@ function currentMonth() { var n = new Date(); return n.getFullYear() + '-' + pad
 function loadTinyCount() { try { var d = JSON.parse(localStorage.getItem(TINY_KEY)) || {}; if (d.month !== currentMonth()) return { month: currentMonth(), count: 0 }; return { month: d.month, count: Number(d.count) || 0 }; } catch (e) { return { month: currentMonth(), count: 0 }; } }
 function bumpTinyCount() { var d = loadTinyCount(); d.count += 1; localStorage.setItem(TINY_KEY, JSON.stringify(d)); updateTinyUsageUI(); return d; }
 function updateTinyUsageUI() { var d = loadTinyCount(); var el = $('tinyUsage'); if (el) el.innerHTML = '本月（' + d.month + '）已用 <b>' + d.count + '</b> / 500 次'; }
+
+// ★ 辅助函数：用于批量操作时替代深拷贝，提高性能
+function copyIndexItem(item) {
+  if (!item) return null;
+  return { 
+    id: item.id, 
+    type: item.type, 
+    source: item.source, 
+    tags: Array.isArray(item.tags) ? item.tags.slice() : [], 
+    images: Array.isArray(item.images) ? item.images.map(function(im) { return { tags: Array.isArray(im.tags) ? im.tags.slice() : [] }; }) : []
+  };
+}
+window.copyIndexItem = copyIndexItem;
 
 window.coreHelpers = { DEFAULT_SETTINGS: DEFAULT_SETTINGS, PALETTE: PALETTE, AVAILABLE_STYLES: AVAILABLE_STYLES };
 window.db = db; window.$ = $; window.toast = toast; window.esc = esc; window.formatText = formatText; window.uid = uid; window.fmtDate = fmtDate; window.fmtFull = fmtFull; window.fmtDateOnly = fmtDateOnly; window.utf8ToBase64 = utf8ToBase64; window.base64ToUtf8 = base64ToUtf8; window.blobToBase64 = blobToBase64; window.download = download; window.copyText = copyText; window.scrollTop = scrollTop; window.formatCount = formatCount;

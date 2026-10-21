@@ -1,8 +1,5 @@
 // js/review.js · 完整文件
-// ★ Bug D 修复：批阅"准奏"后 600ms 内撤销 → 之前的 setTimeout 会跳过刚恢复的当前条。
-//   改用 pendingNextTimer 保存 setTimeout id，撤销时 clearTimeout。
-// ★ Bug E 修复：撤销"准奏"时回退 battleStats.chars，防止重复累加。
-// ★ Bug J 修复：批阅界面图片加 loading="lazy"。
+// ★ 修复：准奏/留中/焚毁时立即从队列移除，撤销时插回。彻底杜绝“撤销过快导致剩余数量+1”的 Bug。
 
 (function() {
   var reviewHTML = ''
@@ -52,7 +49,6 @@
     enableNumberKeys: true, enableTitle: true
   };
 
-  // ★ Bug D：保存 approve 后跳下一条的 setTimeout id，撤销时可以取消
   var pendingNextTimer = null;
 
   var autoApproveInterval = null, autoCloseTimer = null, undoTimer = null, undoCountdownInterval = null;
@@ -429,7 +425,6 @@
     activeSearchType = null;
     var imgWrap = document.getElementById('reviewImgs');
     if (item.images && item.images.length) {
-      // ★ Bug J 修复：图片加 loading="lazy"，避免一次加载大量图片卡顿
       imgWrap.innerHTML = item.images.map(function (im) { var src = typeof imageSrc === 'function' ? imageSrc(im) : im.url; return '<img src="' + esc(src) + '" loading="lazy" data-review-img="' + esc(src) + '" data-img-path="' + esc(im.path || '') + '" title="点击查看原图">'; }).join('');
     } else imgWrap.innerHTML = '';
     renderAllPanels();
@@ -438,16 +433,15 @@
     if (rvStyle.enableAnim && !isUndo) { rvBody.classList.remove('rv-anim-in'); void rvBody.offsetWidth; rvBody.classList.add('rv-anim-in'); }
   }
 
-  function triggerUndoToast(message, actionType) {
+  function triggerUndoToast(message, actionType, savedIndex) {
     var undoBtn = document.getElementById('rvUndoBtn');
     if (!rvStyle.enableUndo) { undoBtn.style.display = 'none'; return; }
     var item;
     if (actionType === 'delete') item = db.trash.find(function (i) { return i.id === reviewCurrentId; });
     else item = db.items.find(function (i) { return i.id === reviewCurrentId; });
     if (!item) return;
-    undoData = { item: JSON.parse(JSON.stringify(item)), index: reviewQueue.indexOf(reviewCurrentId), action: actionType, message: message };
+    undoData = { item: JSON.parse(JSON.stringify(item)), index: savedIndex, action: actionType, message: message };
 
-    // ★ Bug E 修复：如果是准奏操作，记录本次保存的字数，撤销时回退
     if (actionType === 'approve') {
       undoData.charsAdded = item.text ? item.text.replace(/\s/g, '').length : 0;
     }
@@ -467,8 +461,6 @@
 
   document.getElementById('rvUndoBtn').addEventListener('click', function () {
     if (!undoData) return;
-
-    // ★ Bug D 修复：取消 pendingNextTimer，防止刚恢复的当前条被 setTimeout 跳走
     if (pendingNextTimer) { clearTimeout(pendingNextTimer); pendingNextTimer = null; }
 
     var item = undoData.item;
@@ -488,11 +480,16 @@
       } else { db.items.push(item); markItemDirty(item); _indexAddItem(item); }
     }
     if (typeof save === 'function') save();
-    reviewQueue.splice(index, 0, item.id);
+    
+    // ★ 修复：插回原位，而不是直接 unshift
+    if (index >= 0 && index <= reviewQueue.length) {
+      reviewQueue.splice(index, 0, item.id);
+    } else {
+      reviewQueue.unshift(item.id);
+    }
     reviewCurrentId = item.id;
     document.getElementById('rvUndoBtn').style.display = 'none';
 
-    // ★ Bug E 修复：撤销准奏时回退字数
     if (action === 'approve') {
       battleStats.approved--;
       if (undoData.charsAdded) battleStats.chars -= undoData.charsAdded;
@@ -515,7 +512,7 @@
 
   function reviewNext() {
     if (pendingNextTimer) { clearTimeout(pendingNextTimer); pendingNextTimer = null; }
-    if (reviewQueue.length > 0) reviewQueue.shift();
+    // 队列已经在点按钮时移除了，这里直接跳转
     reviewCurrentId = reviewQueue.length > 0 ? reviewQueue[0] : null;
     loadReviewItem();
   }
@@ -553,7 +550,9 @@
     if (autoApproveInterval) clearInterval(autoApproveInterval);
     playSound('page');
     battleStats.skipped++;
-    triggerUndoToast('已留中', 'skip');
+    var savedIndex = reviewQueue.indexOf(reviewCurrentId);
+    if (savedIndex >= 0) reviewQueue.splice(savedIndex, 1); // 立即移除
+    triggerUndoToast('已留中', 'skip', savedIndex);
     reviewNext();
   });
 
@@ -566,7 +565,9 @@
     battleStats.deleted++;
     moveToTrash([reviewCurrentId]);
     if (typeof save === 'function') save();
-    triggerUndoToast('已焚毁', 'delete');
+    var savedIndex = reviewQueue.indexOf(reviewCurrentId);
+    if (savedIndex >= 0) reviewQueue.splice(savedIndex, 1); // 立即移除
+    triggerUndoToast('已焚毁', 'delete', savedIndex);
     reviewNext();
   });
 
@@ -580,8 +581,9 @@
     playSound('stamp');
     showCornerStamp();
     battleStats.approved++;
-    triggerUndoToast('已准奏', 'approve');
-    // ★ Bug D 修复：保存 setTimeout id，撤销时可以取消
+    var savedIndex = reviewQueue.indexOf(reviewCurrentId);
+    if (savedIndex >= 0) reviewQueue.splice(savedIndex, 1); // 立即移除
+    triggerUndoToast('已准奏', 'approve', savedIndex);
     pendingNextTimer = setTimeout(function () { pendingNextTimer = null; reviewNext(); }, 600);
   });
 
