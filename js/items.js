@@ -1,5 +1,5 @@
 // js/items.js · 完整文件
-// 【改动】1) A3 unshift→push  2) 所有变更入口加 markItemDirty + 索引增量更新  3) catVersion 维护  4) 改名/删除弹确认窗
+// ★ 本次改动：addOrUpdate 成功后调用 clearOrphanImage 清理孤儿图片记录；其余逻辑保留
 
 var zenQueue = []; var isProcessingInbox = false;
 
@@ -118,6 +118,10 @@ function addOrUpdate() {
   if (source && db.sources.indexOf(source) < 0) db.sources.push(source);
   if (currentSource !== ALL_SOURCES && source !== currentSource) currentSource = ALL_SOURCES;
   save();
+  // ★ 保存成功：清理这些图片的孤儿记录（在 cancelEdit 清空 pendingImages 之前）
+  if (typeof clearOrphanImage === 'function') {
+    try { clearOrphanImage(pendingImages.map(function (x) { return x.path; }).filter(Boolean)); } catch (e) {}
+  }
   if (wasEditingId && isProcessingInbox) {
     var focusCat = db.settings.focusModeCat || '收件箱';
     while (zenQueue.length > 0) {
@@ -182,7 +186,6 @@ function renameCat(idx, newName) {
   if (newName === oldName) return;
   if (newName === UNCAT || newName === IMG_TYPE) { toast('「' + newName + '」是系统保留名'); renderCatManager(); return; }
   if (db.cats.some(function (c, i) { return i !== idx && c === newName; })) { toast('已存在同名分类'); renderCatManager(); return; }
-  // 统计影响范围
   var affected = db.items.filter(function (i) { return i.type === oldName; });
   var shardSet = new Set(); affected.forEach(function (i) { shardSet.add(_shardKeyOfItem(i)); });
   var estSec = Math.max(1, Math.ceil(shardSet.size * 0.15));

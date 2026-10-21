@@ -1,5 +1,6 @@
 // js/render.js · 完整文件（修复标签颜色与模式不生效的问题）
 // 优化：getCachedFormat 用 id+updatedAt 做 key， _formatCache 扩大到 1000 条， deleteSource 换 showCustomConfirm
+// ★ 新增：超长文本（>5000 字）且有搜索词时，只对前 5000 字高亮，其余直接 esc（防止大文本卡顿）
 
 var tagExpanded = false, catExpanded = false, srcExpanded = false;
 var catManagerPage = 1, tagManagerPage = 1;
@@ -150,13 +151,25 @@ function renderTagChip(t) {
   return '<span class="tag-chip" data-tag="' + esc(t) + '" style="' + style + '">' + inner + '</span>';
 }
 
-// ============ 缓存（修复 key 冲突 + 扩大容量 + FIFO 淘汰） ============
+// ============ 缓存（修复 key 冲突 + 扩大容量 + FIFO 淘汰 + 超长文本高亮截断） ============
 var _formatCache = new Map();
 var _FORMAT_CACHE_MAX = 1000;
+// ★ 新增：超过此长度的文本，仅有搜索词时只高亮前 N 字
+var _FORMAT_HIGHLIGHT_LIMIT = 5000;
+
 function getCachedFormat(item, terms) {
   var key = item.id + ':' + (item.updatedAt || item.createdAt || 0) + ':' + (terms || []).join(',');
   if (_formatCache.has(key)) return _formatCache.get(key);
-  var html = formatText(item.text || '', terms);
+  var text = item.text || '';
+  var html;
+  // ★ 优化：长文本 + 有搜索词 → 只对前 5000 字做高亮，后续文字直接转义
+  if (text.length > _FORMAT_HIGHLIGHT_LIMIT && terms && terms.length) {
+    var head = text.slice(0, _FORMAT_HIGHLIGHT_LIMIT);
+    var tail = text.slice(_FORMAT_HIGHLIGHT_LIMIT);
+    html = formatText(head, terms) + esc(tail);
+  } else {
+    html = formatText(text, terms);
+  }
   if (_formatCache.size >= _FORMAT_CACHE_MAX) {
     var firstKey = _formatCache.keys().next().value;
     _formatCache.delete(firstKey);

@@ -1,4 +1,6 @@
 // js/bind-views.js · 完整文件
+// 【改动】去除了进入批量管理时多余的 Toast 提示
+
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
 window.showCustomPrompt = function (options) {
@@ -148,7 +150,7 @@ safeBind('trashList', 'click', function (e) { var r = e.target.closest('[data-re
 safeBind('menuImgManagerBtn', 'click', function () { $('menu').classList.remove('show'); openImgManager(); });
 safeBind('imgMgrCloseBtn', 'click', function () { if (imgMgrSelectMode) exitImgMgrSelectMode(); $('imgManagerView').hidden = true; document.body.style.overflow = ''; });
 safeBind('imgMgrRefreshBtn', 'click', loadRepoImages);
-safeBind('imgMgrSelectBtn', 'click', function () { imgMgrSelectMode = !imgMgrSelectMode; imgMgrSelectedIds.clear(); renderImgMgrUI(); if (imgMgrSelectMode) toast('已进入批量管理'); });
+safeBind('imgMgrSelectBtn', 'click', function () { imgMgrSelectMode = !imgMgrSelectMode; imgMgrSelectedIds.clear(); renderImgMgrUI(); }); 
 safeBind('imgMgrBatchExit', 'click', function () { exitImgMgrSelectMode(); });
 safeBind('imgMgrSelectAllBtn', 'click', function () { var pageItems = imgMgrFilteredFiles.slice(0, imgMgrRenderedCount); var allSel = pageItems.every(function (f) { return imgMgrSelectedIds.has(f.relPath); }); if (allSel) pageItems.forEach(function (f) { imgMgrSelectedIds.delete(f.relPath); }); else pageItems.forEach(function (f) { imgMgrSelectedIds.add(f.relPath); }); renderImgMgrUI(); });
 safeBind('imgMgrBatchCatBtn', 'click', function () { if (!imgMgrSelectedIds.size) return toast('请先选择图片'); $('imgMgrBatchEditTitle').textContent = '批量修改分类'; $('imgMgrBatchEditCount').textContent = imgMgrSelectedIds.size; $('imgMgrBatchCatWrap').style.display = 'block'; $('imgMgrBatchTagWrap').style.display = 'none'; var cats = (db.imageCategories.length ? db.imageCategories : DEFAULT_IMG_CATS); var grid = $('imgMgrBatchCatGrid'); grid.innerHTML = cats.map(function (c) { return '<div class="batch-cat-item" data-cat="' + esc(c) + '">' + esc(c) + '</div>'; }).join(''); var first = grid.querySelector('.batch-cat-item'); if (first) { first.classList.add('active'); grid.dataset.selected = first.dataset.cat; } $('imgMgrBatchEditMask').classList.add('show'); });

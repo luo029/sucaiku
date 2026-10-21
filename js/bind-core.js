@@ -1,5 +1,5 @@
 // js/bind-core.js · 完整文件
-// 【改动】1) ★ 删 tagManageList 的 pin/del 委托（A1 真 bug）  2) 其他基本不变
+// ★ 本次改动：handleImgFallback 增加 data-retry 重试上限，防止死循环
 
 addBtn.addEventListener('click', addOrUpdate);
 cancelBtn.addEventListener('click', cancelEdit);
@@ -220,7 +220,6 @@ $('tagManageList').addEventListener('change', function (e) {
 $('tagManageList').addEventListener('keydown', function (e) {
   if (e.target.matches('[data-tag-old]') && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
 });
-// ★ A1 修复：删除 tagManageList 的 click 委托（pin/del 已在 renderTagManagerWithBatch 里直接绑定）
 
 zenBarEl.addEventListener('click', function (e) {
   var t = e.target.closest('.zb'); if (!t) return;
@@ -311,19 +310,30 @@ function openZenFilterPanel(type) {
   });
 }
 
+// ★ 图片加载失败回退（新增：重试上限 3 次，防止死循环）
 function handleImgFallback(e) {
   var img = e.target;
   if (!img || img.tagName !== 'IMG') return;
   var path = img.dataset.imgPath;
   if (!path || img.dataset.fallbackDone) return;
-  img.dataset.fallbackDone = '1';
+  var retryCount = parseInt(img.dataset.retryCount || '0', 10);
+  if (retryCount >= 3) {
+    img.dataset.fallbackDone = '1';
+    img.style.opacity = '.3';
+    img.title = '图片加载失败（已重试 3 次）';
+    return;
+  }
+  img.dataset.retryCount = String(retryCount + 1);
   fetchImageBlobUrl(path).then(function (url) {
     img.src = url;
     if (img.dataset.openImg) img.dataset.openImg = url;
   }).catch(function (err) {
-    console.warn('图片加载失败', err);
-    img.style.opacity = '.4';
-    img.title = '图片加载失败（可能是 raw CDN 延迟或权限问题）';
+    console.warn('图片加载失败', path, err);
+    if (retryCount + 1 >= 3) {
+      img.dataset.fallbackDone = '1';
+      img.style.opacity = '.4';
+      img.title = '图片加载失败（可能是 raw CDN 延迟或权限问题）';
+    }
   });
 }
 

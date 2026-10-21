@@ -1,4 +1,7 @@
-// js/github.js · 完整文件（语法修复版）
+// js/github.js · 完整文件
+// ★ 本次改动：appendLog 增加按天数（logMaxDays）清理过期日志
+//   其余逻辑保留
+
 var STORE_VERSION = 4; var GH_INDEX_PATH = 'index.json'; var GH_TRASH_PATH = 'trash.json';
 var GH_LOG_PATH = 'push-log.json'; var GH_DEVICES_PATH = 'devices.json';
 var SHARD_PREFIX = 'data-'; var FETCH_CONCURRENCY = 8;
@@ -180,6 +183,13 @@ function appendLog(entry) {
       summary: entry.summary || '', shards: entry.shards || [], itemCount: entry.itemCount || 0,
       duration: entry.duration || 0, details: entry.details || ''
     });
+    // ★ 新增：按天数清理过期日志（logMaxDays，0 表示不按天数清理）
+    var maxDays = Number(db.settings.logMaxDays) || 30;
+    if (maxDays > 0) {
+      var cutoff = Date.now() - maxDays * 86400000;
+      logs = logs.filter(function (l) { return (l.timestamp || 0) >= cutoff; });
+    }
+    // 按条数清理
     var mode = db.settings.logCleanupMode; var maxCount = db.settings.logMaxCount;
     if (mode === 'count' && logs.length > maxCount) logs = logs.slice(0, maxCount);
     if (db.settings.logHardLimitEnabled && logs.length > db.settings.logHardLimitCount) logs = logs.slice(0, db.settings.logHardLimitCount);
@@ -263,7 +273,6 @@ function _pushOneShard(rc, cfg, key, items, existingShaMap) {
         return ghPutRaw(rc, path, b64, existingSha, 'sync ' + path).then(function () {
           return true;
         }).catch(function (e) {
-          // 修复Bug 2：如果是 422 或 409，且没有 existingSha，可能是文件已存在但树没拉到，去拿 sha 再重试
           var isConflict = e.message && (e.message.indexOf('422') >= 0 || e.message.indexOf('409') >= 0);
           if (isConflict && !existingSha) {
              return ghGetRaw(rc, path).then(function(file) {
@@ -340,11 +349,9 @@ function ghPush(silent, force) {
     for (var w = 0; w < concurrency; w++) workers.push(pushWorker());
     return Promise.all(workers).then(function () { return existingShaMap; });
   }).then(function (existingShaMap) {
-    // 修复Bug 1：删除旧分片，支持清理残缺的多个 part
     var deleteChain = Promise.resolve();
     toDelete.forEach(function (dk) {
       deleteChain = deleteChain.then(function () {
-        // 找出所有属于这个 dk 的路径，无论有几个 part
         var pathsToDelete = Object.keys(existingShaMap).filter(function(p) {
             return p.indexOf('/data-' + dk) >= 0 && p.endsWith('.json');
         });
@@ -369,7 +376,6 @@ function ghPush(silent, force) {
     });
     return deleteChain.then(function () { return existingShaMap; });
   }).then(function (existingShaMap) {
-    // 回收站
     var trashJson = JSON.stringify(db.trash);
     if (!force && _trashSnapshot === trashJson) return existingShaMap;
     var tContent = JSON.stringify({ trash: db.trash, updatedAt: new Date().toISOString() }, null, 2);
@@ -377,7 +383,6 @@ function ghPush(silent, force) {
     var tSha = existingShaMap[_pathForTrash(cfg)] || null;
     return ghPutRaw(rc, _pathForTrash(cfg), tB64, tSha, 'sync trash').then(function () { _setTrash(trashJson); }).catch(function (e) { console.warn('trash 推送失败', e); }).then(function () { return existingShaMap; });
   }).then(function (existingShaMap) {
-    // yearIndex（含分类摘要）
     var yearsToUpdate = Object.keys(yearIndexDirty);
     var currentYears = {};
     currentKeys.forEach(function (ck) { currentYears[getYearFromKey(ck)] = true; });
@@ -404,7 +409,6 @@ function ghPush(silent, force) {
     });
     return yearChain.then(function () { return existingShaMap; });
   }).then(function (existingShaMap) {
-    // index.json
     var yearSummary = {};
     Object.keys(currentYears_helper(currentKeys)).forEach(function (cy) {
       var count = 0; var shardCount = 0;

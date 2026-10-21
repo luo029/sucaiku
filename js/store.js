@@ -1,4 +1,9 @@
-// js/store.js · 完整文件（修订版：save 里加 _recordSnapshotChange）
+// js/store.js · 完整文件
+// ★ 本次改动：
+//   1) save() 里节流清理回收站（1 小时一次，通过 localStorage 持久化时间戳）
+//   2) 新增 _localDateStr() 本地日期格式化函数，暴露到 window，供 snapshots.js / github.js 使用
+//   3) 其余逻辑保留
+
 var IDB_NAME = 'material-library-db';
 var IDB_STORE = 'kv';
 var IDB_META_KEY = 'meta';
@@ -6,6 +11,29 @@ var IDB_SHARD_PREFIX = 'shard:';
 var IDB_LEGACY_KEY = 'main';
 var IDB_SCHEMA = 2;
 var _idb = null;
+
+// ★ 本地日期格式化（避免 toISOString 的 UTC 偏移问题）
+function _localDateStr(ts) {
+  var d = new Date(ts || Date.now());
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+window._localDateStr = _localDateStr;
+
+// ★ 回收站节流清理
+var _TRASH_CLEAN_KEY = 'material-library.last-trash-clean';
+var _lastTrashClean = 0;
+try { _lastTrashClean = Number(localStorage.getItem(_TRASH_CLEAN_KEY) || 0) || 0; } catch (e) {}
+var _trashCleanInProgress = false;
+function _maybeCleanTrash() {
+  if (_trashCleanInProgress) return;
+  var now = Date.now();
+  if (now - _lastTrashClean < 3600000) return;
+  _lastTrashClean = now;
+  try { localStorage.setItem(_TRASH_CLEAN_KEY, String(now)); } catch (e) {}
+  _trashCleanInProgress = true;
+  try { cleanTrash(); } catch (e) { console.warn('回收站清理失败', e); }
+  _trashCleanInProgress = false;
+}
 
 function openIDB() {
   if (_idb) return Promise.resolve(_idb);
@@ -155,10 +183,11 @@ function save() {
   db._rev = (db._rev || 0) + 1;
   _metaDirty = true;
   _pendingSave = true;
-  // ★ 新增：记录当天变更数（供快照触发判断）
   if (typeof _recordSnapshotChange === 'function') { try { _recordSnapshotChange(); } catch (e) {} }
   _scheduleSaveIDB();
   if (!suppressPush && typeof scheduleAutoPush === 'function') scheduleAutoPush();
+  // ★ 新增：节流清理回收站（1 小时一次）
+  _maybeCleanTrash();
 }
 
 function _scheduleSaveIDB() {
@@ -494,3 +523,4 @@ window._shardKeyOfItem = _shardKeyOfItem;
 window.markIndexDirty = markIndexDirty; window.rebuildIndex = rebuildIndex;
 window._indexAddItem = _indexAddItem; window._indexRemoveItem = _indexRemoveItem; window._indexUpdateItem = _indexUpdateItem;
 window.__index = _index; window.__itemById = _itemById; window.__indexEnsure = _indexEnsure; window.__dirtyShards = _dirtyShards;
+window._maybeCleanTrash = _maybeCleanTrash;

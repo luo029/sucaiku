@@ -1,6 +1,44 @@
 // js/images.js · 完整文件
+// ★ 本次改动：
+//   1) 新增孤儿图片记录：每张成功上传的图片记录到 localStorage 的 material-library.orphan-imgs
+//   2) 自动保存成功（纯图片素材直接入库）时，清理这些图片的孤儿记录
+//   3) 其余逻辑不变
+
 var webpSupported = false;
 try { webpSupported = document.createElement('canvas').toDataURL('image/webp').indexOf('data:image/webp') === 0; } catch (e) {}
+
+// ============================================================
+// ★ 孤儿图片记录（供 init.js 启动检查 + items.js 保存时清理）
+// ============================================================
+var ORPHAN_KEY = 'material-library.orphan-imgs';
+
+function recordOrphanImage(path) {
+  if (!path) return;
+  try {
+    var list = JSON.parse(localStorage.getItem(ORPHAN_KEY) || '[]');
+    list = list.filter(function (x) { return x && x.path !== path; });
+    list.push({ path: path, time: Date.now() });
+    // 最多保留 500 条，超过则丢弃最旧的
+    if (list.length > 500) list = list.slice(list.length - 500);
+    localStorage.setItem(ORPHAN_KEY, JSON.stringify(list));
+  } catch (e) { console.warn('记录孤儿图片失败', e); }
+}
+
+function clearOrphanImage(paths) {
+  if (!paths || !paths.length) return;
+  try {
+    var set = new Set(paths.map(function (p) { return String(p || '').trim(); }).filter(Boolean));
+    if (!set.size) return;
+    var list = JSON.parse(localStorage.getItem(ORPHAN_KEY) || '[]');
+    list = list.filter(function (x) { return x && !set.has(String(x.path || '').trim()); });
+    localStorage.setItem(ORPHAN_KEY, JSON.stringify(list));
+  } catch (e) { console.warn('清理孤儿图片失败', e); }
+}
+
+window.recordOrphanImage = recordOrphanImage;
+window.clearOrphanImage = clearOrphanImage;
+
+// ============================================================
 
 function tinifyCompress(file, apiKey, proxyUrl) {
   var auth = 'Basic ' + btoa('api:' + apiKey);
@@ -195,6 +233,8 @@ function startUploadPending() {
       var fullPath = rc.path + '/' + relPath;
       return blobToBase64(comp.blob).then(function (b64) { return ghPutRaw(rc, fullPath, b64, null, 'upload ' + relPath); }).then(function () {
         pendingImages.push({ path: relPath, url: '', cat: cat, tags: imgTags.slice(), size: comp.newSize, origSize: comp.origSize });
+        // ★ 记录孤儿图片（若之后被保存/自动入库，会从队列清理）
+        recordOrphanImage(relPath);
         renderPendingImgs();
         success++;
         statusEl.textContent = '[' + (idx + 1) + '/' + files.length + '] 完成：' + f.filename;
@@ -237,6 +277,8 @@ function startUploadPending() {
         db.items.push(newItem);
         markItemDirty(newItem); _indexAddItem(newItem);
         if (source && db.sources.indexOf(source) < 0) db.sources.push(source);
+        // ★ 自动保存成功 → 清理这些图片的孤儿记录
+        clearOrphanImage(pendingImages.map(function (x) { return x.path; }).filter(Boolean));
         pendingImages = [];
         renderPendingImgs();
         tagsEl.value = db.fixedTags.length ? db.fixedTags.join(', ') : '';

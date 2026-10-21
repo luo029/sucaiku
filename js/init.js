@@ -1,11 +1,128 @@
 // js/init.js · 完整文件
-// 【改动】1) 启动时检查快照（若开启）  2) 启动时检查导出提醒  3) 其他保持
+// ★ 本次改动：
+//   1) 启动时检查"未保存的孤儿图片"，弹窗询问是否清理（走图床删除接口）
+//   2) 新增每小时定时清理回收站（兜底，store.js 里也有 save 节流清理）
+//   3) 保留原有初始化逻辑
 
 var PUBLIC_OWNER = 'luo029';
 var PUBLIC_REPO = 'sucaiuk_data';
 var PUBLIC_IMG_REPO = 'sucaiuk_pictures';
 var PUBLIC_PATH = 'material-library.json';
 
+// ============================================================
+// ★ 孤儿图片检查（上传后未保存的图片）
+// ============================================================
+var ORPHAN_KEY = 'material-library.orphan-imgs';
+var ORPHAN_SNOOZE_KEY = 'material-library.orphan-snooze';
+
+function checkOrphanImages() {
+  try {
+    // 24 小时静默期：用户取消过一次，避免每次启动都弹
+    var snooze = Number(localStorage.getItem(ORPHAN_SNOOZE_KEY) || 0) || 0;
+    if (Date.now() < snooze) return;
+
+    var raw = JSON.parse(localStorage.getItem(ORPHAN_KEY) || '[]');
+    if (!Array.isArray(raw) || !raw.length) return;
+
+    // 过期记录（>7 天）直接丢弃，避免误删旧文件
+    var now = Date.now();
+    var valid = raw.filter(function (x) { return x && x.path && (now - (x.time || 0)) < 7 * 86400000; });
+    if (valid.length !== raw.length) {
+      try { localStorage.setItem(ORPHAN_KEY, JSON.stringify(valid)); } catch (e) {}
+    }
+    if (!valid.length) return;
+
+    // 构建引用集合（所有素材里出现过的 images.path）
+    var used = new Set();
+    db.items.forEach(function (item) {
+      (item.images || []).forEach(function (im) {
+        if (im && im.path) used.add(String(im.path).trim());
+      });
+    });
+
+    // 真孤儿 = 队列里有、但素材里没引用的
+    var orphans = valid.filter(function (x) { return !used.has(String(x.path).trim()); });
+    if (!orphans.length) {
+      // 全部被引用了，清空队列
+      try { localStorage.setItem(ORPHAN_KEY, '[]'); } catch (e) {}
+      return;
+    }
+
+    // 检查图床配置
+    var rc = ghRepoConfig('img');
+    if (!rc || !rc.token || !rc.owner || !rc.repo) {
+      console.warn('[init] 孤儿图片存在但未配置图床，跳过清理');
+      return;
+    }
+
+    console.log('[init] 发现 ' + orphans.length + ' 张孤儿图片，等待用户确认清理');
+
+    var cleaned = false;
+    window.showCustomConfirm({
+      title: '发现未保存的图片',
+      desc: '有 ' + orphans.length + ' 张图片上传后未保存到素材库。\n\n是否从图床清理这些图片？（取消则在 24 小时后再提醒）',
+      isDanger: false,
+      onConfirm: function () {
+        cleaned = true;
+        cleanupOrphanImages(orphans);
+      }
+    });
+
+    // 监听取消：如果没有触发 onConfirm，设置 24 小时静默
+    var checkTimer = setInterval(function () {
+      var mask = document.getElementById('customConfirmMask');
+      if (!mask || !mask.classList.contains('show')) {
+        clearInterval(checkTimer);
+        if (!cleaned) {
+          try { localStorage.setItem(ORPHAN_SNOOZE_KEY, String(Date.now() + 86400000)); } catch (e) {}
+        }
+      }
+    }, 500);
+    // 兜底：5 分钟后自动清理定时器
+    setTimeout(function () { clearInterval(checkTimer); }, 5 * 60 * 1000);
+  } catch (e) {
+    console.warn('[init] 检查孤儿图片失败', e);
+  }
+}
+
+function cleanupOrphanImages(orphans) {
+  var rc = ghRepoConfig('img');
+  if (!rc || !rc.token) { toast('未配置图床'); return; }
+  var successPaths = new Set();
+  var failPaths = new Set();
+  toast('正在清理 ' + orphans.length + ' 张图片…');
+  var chain = Promise.resolve();
+  orphans.forEach(function (o) {
+    chain = chain.then(function () {
+      var fullPath = rc.path + '/' + o.path;
+      return ghGetRaw(rc, fullPath).then(function (file) {
+        if (!file) { successPaths.add(o.path); return; } // 云端不存在，视为已清
+        return ghDeleteRaw(rc, fullPath, file.sha, 'cleanup orphan ' + o.path).then(function () {
+          successPaths.add(o.path);
+        });
+      }).catch(function (e) {
+        failPaths.add(o.path);
+        console.warn('[init] 删除孤儿图片失败', o.path, e);
+      }).then(function () {
+        return new Promise(function (r) { setTimeout(r, 250); });
+      });
+    });
+  });
+  chain.then(function () {
+    // 从队列移除成功的
+    try {
+      var list = JSON.parse(localStorage.getItem(ORPHAN_KEY) || '[]');
+      list = list.filter(function (x) { return !successPaths.has(x.path); });
+      localStorage.setItem(ORPHAN_KEY, JSON.stringify(list));
+    } catch (e) {}
+    if (successPaths.size > 0) toast('✅ 已清理 ' + successPaths.size + ' 张孤儿图片');
+    if (failPaths.size > 0) toast('⚠️ 还有 ' + failPaths.size + ' 张清理失败，下次启动再试');
+  });
+}
+
+// ============================================================
+// 应用初始化
+// ============================================================
 (function initApp() {
   try {
     try {
@@ -49,15 +166,18 @@ var PUBLIC_PATH = 'material-library.json';
       renderPendingImgs();
       fetchHitokoto();
 
-      // ★ 启动时检查导出提醒（延迟 3 秒，避免打断首屏）
+      // ★ 启动时检查导出提醒（延迟 3 秒）
       setTimeout(function () { try { checkExportReminder(); } catch (e) {} }, 3000);
 
-      // ★ 启动时检查是否需要创建快照（延迟 5 秒）
+      // ★ 启动时检查孤儿图片（延迟 5 秒，等首屏渲染完成 + 云端数据可能已拉取）
+      setTimeout(function () { try { checkOrphanImages(); } catch (e) { console.warn(e); } }, 5000);
+
+      // ★ 启动时检查是否需要创建快照（延迟 8 秒，避免和云端拉取冲突）
       setTimeout(function () {
         if (typeof maybeCreateSnapshot === 'function') {
           maybeCreateSnapshot().catch(function (e) { console.warn('启动快照失败', e); });
         }
-      }, 5000);
+      }, 8000);
 
       var cfg = loadGH();
       var isOwner = !!(cfg.token && cfg.owner && cfg.repo);
@@ -65,15 +185,20 @@ var PUBLIC_PATH = 'material-library.json';
       if (isOwner) {
         document.body.classList.remove('guest-mode');
         handleOwnerSync(cfg);
-        return;
+      } else {
+        initGuestMode();
       }
-      initGuestMode();
     }).catch(function (err) {
       console.error('[init] 本地加载失败', err);
       try {
         render(); updateSourcePickerUI(); updateTagPickerUI(); renderPendingImgs();
       } catch (e) { console.error('[init] 渲染失败', e); }
     });
+
+    // ★ 新增：每小时定时清理回收站（兜底，store.js 里 save 已做 1 小时节流）
+    setInterval(function () {
+      try { if (typeof cleanTrash === 'function') cleanTrash(); } catch (e) {}
+    }, 3600000);
   } catch (err) {
     console.error('[init] 初始化失败', err);
   }
@@ -100,7 +225,13 @@ function handleOwnerSync(cfg) {
       var shouldPull = cfg.autoSync || db.items.length === 0;
       if (shouldPull) {
         console.log('[init] 云端有分片，开始拉取...');
-        ghPull(true).then(function (ok) { if (ok) console.log('[init] ✅ 自动拉取成功，共 ' + db.items.length + ' 条素材'); else console.warn('[init] ❌ 自动拉取失败'); });
+        ghPull(true).then(function (ok) {
+          if (ok) {
+            console.log('[init] ✅ 自动拉取成功，共 ' + db.items.length + ' 条素材');
+            // ★ 拉取成功后重新检查一次孤儿图片（此时引用关系已更新）
+            setTimeout(function () { try { checkOrphanImages(); } catch (e) {} }, 1000);
+          } else { console.warn('[init] ❌ 自动拉取失败'); }
+        });
       } else { console.log('[init] 云端有分片，本地有数据，未开启自动拉取，跳过'); }
     }
   }).catch(function (e) {

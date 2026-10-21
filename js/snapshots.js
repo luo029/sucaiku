@@ -1,10 +1,15 @@
-// js/snapshots.js · 新文件
-// 快照功能：创建 / 列表 / 恢复 / 清理 / gzip 压缩
-// 依赖：github.js（ghGetRaw / ghPutRaw / ghDeleteRaw / ghRepoConfig）
+// js/snapshots.js · 完整文件
+// ★ 本次改动：_shouldCreateSnapshot 里的 lastDate 改用本地时区格式化（原来用 toISOString 是 UTC，
+//   会导致"距上次快照天数"判断在非 UTC 时区出错，例如北京时间比 UTC 早 8 小时）
+//   其余逻辑保留
 
-// ============================================================
-// 触发逻辑（在 ghPush 成功后被调用、启动时被调用）
-// ============================================================
+// ★ 本地日期格式化（优先用 store.js 暴露的 window._localDateStr，兼容旧版本）
+function _fmtLocalDate(ts) {
+  if (typeof window._localDateStr === 'function') return window._localDateStr(ts);
+  var d = new Date(ts || Date.now());
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 function _shouldCreateSnapshot() {
   if (!db.settings.snapshotEnabled) return false;
   var now = new Date();
@@ -16,8 +21,8 @@ function _shouldCreateSnapshot() {
   if (lastAt === 0 || daysSinceLast >= forceDays) return 'force';
 
   // 2. 今天变更超过阈值
-  var today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-  var lastDate = lastAt ? new Date(lastAt).toISOString().slice(0, 10) : '';
+  var today = _fmtLocalDate(Date.now());
+  var lastDate = lastAt ? _fmtLocalDate(lastAt) : '';
   var changesToday = 0;
   try {
     var changeLog = JSON.parse(localStorage.getItem('material-library.snapshot-changes') || '{}');
@@ -36,8 +41,7 @@ function _shouldCreateSnapshot() {
 // 记录当天变更数（在 save() 时调用）
 function _recordSnapshotChange() {
   try {
-    var today = new Date();
-    var dayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    var dayStr = _fmtLocalDate(Date.now());
     var changeLog = JSON.parse(localStorage.getItem('material-library.snapshot-changes') || '{}');
     changeLog[dayStr] = (changeLog[dayStr] || 0) + 1;
     // 只保留最近 30 天
@@ -237,7 +241,6 @@ async function cleanupOldSnapshots() {
     var list = byKind[kind];
     var keep = keepMap[kind] || 0;
     list.forEach(function (s, idx) {
-      // 超出保留份数 或 超龄 都删
       if (idx >= keep) toDelete.push(s);
       else {
         var t = new Date(s.date.replace(' ', 'T')).getTime();
