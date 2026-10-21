@@ -1,64 +1,39 @@
-// js/bind-list.js - 事件绑定：列表 / 分页 / 分类管理 / 批量操作 / 右键菜单
+// js/bind-list.js · 完整文件
+// 【改动】1) 所有批量操作入口加 markItemsDirty + _indexUpdateItem  2) 右键菜单 tag/source 修改加索引维护
 
 listEl.addEventListener('click', function (e) {
   var img = e.target.closest('[data-open-img]');
   if (img) { window.open(img.dataset.openImg, '_blank', 'noopener'); return; }
-
   if (zenMode) {
     var card = e.target.closest('.card');
-    if (card) {
-      var item = db.items.find(function (i) { return i.id === card.dataset.id; });
-      if (item) copyText(item.text, item.source);
-    }
+    if (card) { var item = db.items.find(function (i) { return i.id === card.dataset.id; }); if (item) copyText(item.text, item.source); }
     return;
   }
-
   var tagEl = e.target.closest('.tag-chip');
   if (tagEl && !selectMode) {
     var t = tagEl.dataset.tag;
-    if (currentTags.has(t)) {
-      currentTags.delete(t);
-    } else {
-      currentTags.add(t);
-    }
+    if (currentTags.has(t)) currentTags.delete(t); else currentTags.add(t);
     currentTag = currentTags.size > 0 ? Array.from(currentTags)[0] : '';
     currentPage = 1; render(); scrollTop(); return;
   }
-
   var expandEl = e.target.closest('.expand-btn');
-  if (expandEl) {
-    var id = expandEl.dataset.expand;
-    if (expandedIds.has(id)) expandedIds.delete(id); else expandedIds.add(id);
-    renderList(); return;
-  }
-
+  if (expandEl) { var id = expandEl.dataset.expand; if (expandedIds.has(id)) expandedIds.delete(id); else expandedIds.add(id); renderList(); return; }
   var srcEl = e.target.closest('.src-clickable');
   if (srcEl && !selectMode) {
     var s = srcEl.dataset.source;
-    if (s && db.sources.indexOf(s) >= 0) {
-      currentSource = (currentSource === s) ? ALL_SOURCES : s;
-      currentPage = 1; render(); scrollTop();
-    }
+    if (s && db.sources.indexOf(s) >= 0) { currentSource = (currentSource === s) ? ALL_SOURCES : s; currentPage = 1; render(); scrollTop(); }
     return;
   }
-
-  if (selectMode) {
-    var card2 = e.target.closest('.card');
-    if (card2) toggleSelect(card2.dataset.id);
-    return;
-  }
-
+  if (selectMode) { var card2 = e.target.closest('.card'); if (card2) toggleSelect(card2.dataset.id); return; }
   var btn = e.target.closest('button[data-act]'); if (!btn) return;
   var act = btn.dataset.act;
   var item2 = db.items.find(function (i) { return i.id === btn.dataset.id; });
   if (!item2) return;
-
   if (act === 'copy') copyText(item2.text || '', item2.source);
   if (act === 'edit') startEdit(item2.id);
   if (act === 'del') {
     requestDeleteConfirm(1, function () {
-      moveToTrash([item2.id]);
-      if (editingId === item2.id) cancelEdit();
+      moveToTrash([item2.id]); if (editingId === item2.id) cancelEdit();
       cleanupSources(); save();
       var totalPages = Math.max(1, Math.ceil(getFilteredItems().length / pageSize));
       if (currentPage > totalPages) currentPage = totalPages;
@@ -68,11 +43,8 @@ listEl.addEventListener('click', function (e) {
 });
 
 $('pagination').addEventListener('click', function (e) {
-  var loadMoreBtn = e.target.closest('#loadMoreShardsBtn');
-  if (loadMoreBtn) return;
-
-  var btn = e.target.closest('.page-btn[data-page]');
-  if (!btn || btn.disabled) return;
+  var loadMoreBtn = e.target.closest('#loadMoreShardsBtn'); if (loadMoreBtn) return;
+  var btn = e.target.closest('.page-btn[data-page]'); if (!btn || btn.disabled) return;
   var p = btn.dataset.page;
   var filtered = getFilteredItems();
   var totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -82,23 +54,15 @@ $('pagination').addEventListener('click', function (e) {
   renderList(); scrollTop();
 });
 $('pagination').addEventListener('change', function (e) {
-  if (e.target.id === 'pageSizeSelect') {
-    pageSize = parseInt(e.target.value, 10);
-    currentPage = 1;
-    renderList();
-  }
+  if (e.target.id === 'pageSizeSelect') { pageSize = parseInt(e.target.value, 10); currentPage = 1; renderList(); }
 });
-
-// ★ 移除之前的 catListEl 事件，改为绑定在弹窗内的元素 (已在 bind-views.js 处理)
 
 $('selectBtn').addEventListener('click', function () {
   selectMode = !selectMode;
   if (!selectMode) selectedIds.clear();
   renderList();
 });
-$('batchExit').addEventListener('click', function () {
-  selectMode = false; selectedIds.clear(); renderList();
-});
+$('batchExit').addEventListener('click', function () { selectMode = false; selectedIds.clear(); renderList(); });
 $('selectAllBtn').addEventListener('click', function () {
   var pageItems = getPageItems(); if (!pageItems.length) return;
   var allSel = pageItems.every(function (i) { return selectedIds.has(i.id); });
@@ -123,18 +87,15 @@ $('batchMoveBtn').addEventListener('click', function () {
   var opts = db.cats.slice();
   if (db.items.some(function (i) { return i.type === UNCAT; })) opts.push(UNCAT);
   if (!opts.length) opts = [UNCAT];
-  $('moveCatSelect').innerHTML = opts.map(function (c) {
-    return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
-  }).join('');
+  $('moveCatSelect').innerHTML = opts.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
   $('moveMask').classList.add('show');
 });
 $('moveCancel').addEventListener('click', function () { $('moveMask').classList.remove('show'); });
 $('moveMask').addEventListener('click', function (e) { if (e.target === $('moveMask')) $('moveMask').classList.remove('show'); });
 $('moveConfirm').addEventListener('click', function () {
-  var t = $('moveCatSelect').value;
-  var n = 0;
+  var t = $('moveCatSelect').value, n = 0;
   db.items.forEach(function (i) {
-    if (selectedIds.has(i.id) && i.type !== t) { i.type = t; i.updatedAt = Date.now(); n++; }
+    if (selectedIds.has(i.id) && i.type !== t) { var old = JSON.parse(JSON.stringify(i)); i.type = t; i.updatedAt = Date.now(); markItemDirty(i); _indexUpdateItem(old, i); n++; }
   });
   $('moveMask').classList.remove('show');
   selectedIds.clear(); selectMode = false;
@@ -157,9 +118,10 @@ $('tagAddConfirm').addEventListener('click', function () {
   var n = 0;
   db.items.forEach(function (i) {
     if (selectedIds.has(i.id)) {
-      var set = new Set(i.tags || []);
-      tags.forEach(function (t) { set.add(t); });
-      i.tags = Array.from(set); i.updatedAt = Date.now(); n++;
+      var old = JSON.parse(JSON.stringify(i));
+      var set = new Set(i.tags || []); tags.forEach(function (t) { set.add(t); });
+      i.tags = Array.from(set); i.updatedAt = Date.now();
+      markItemDirty(i); _indexUpdateItem(old, i); n++;
     }
   });
   $('tagAddMask').classList.remove('show');
@@ -176,33 +138,21 @@ if (batchSourceBtn) {
     setTimeout(function () { $('batchSourceInput').focus(); }, 60);
   });
 }
-
 var batchSourceCancel = $('batchSourceCancel');
-if (batchSourceCancel) {
-  batchSourceCancel.addEventListener('click', function () { $('batchSourceMask').classList.remove('show'); });
-}
+if (batchSourceCancel) batchSourceCancel.addEventListener('click', function () { $('batchSourceMask').classList.remove('show'); });
 var batchSourceMaskEl = $('batchSourceMask');
-if (batchSourceMaskEl) {
-  batchSourceMaskEl.addEventListener('click', function (e) {
-    if (e.target === batchSourceMaskEl) batchSourceMaskEl.classList.remove('show');
-  });
-}
+if (batchSourceMaskEl) batchSourceMaskEl.addEventListener('click', function (e) { if (e.target === batchSourceMaskEl) batchSourceMaskEl.classList.remove('show'); });
 var batchSourceInputEl = $('batchSourceInput');
-if (batchSourceInputEl) {
-  batchSourceInputEl.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') { e.preventDefault(); $('batchSourceConfirm').click(); }
-  });
-}
+if (batchSourceInputEl) batchSourceInputEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('batchSourceConfirm').click(); } });
 var batchSourceConfirmEl = $('batchSourceConfirm');
 if (batchSourceConfirmEl) {
   batchSourceConfirmEl.addEventListener('click', function () {
-    var newSource = $('batchSourceInput').value.trim();
-    var n = 0;
+    var newSource = $('batchSourceInput').value.trim(), n = 0;
     db.items.forEach(function (i) {
       if (selectedIds.has(i.id)) {
-        i.source = newSource;
-        i.updatedAt = Date.now();
-        n++;
+        var old = JSON.parse(JSON.stringify(i));
+        i.source = newSource; i.updatedAt = Date.now();
+        markItemDirty(i); _indexUpdateItem(old, i); n++;
       }
     });
     if (newSource && db.sources.indexOf(newSource) < 0) db.sources.push(newSource);
@@ -213,9 +163,7 @@ if (batchSourceConfirmEl) {
   });
 }
 
-// ============================================================
-// ★ 右键菜单 (使用带建议的自定义 Prompt)
-// ============================================================
+// 右键菜单
 (function () {
   if (!document.getElementById('ctxMenuStyle')) {
     var st = document.createElement('style');
@@ -229,160 +177,106 @@ if (batchSourceConfirmEl) {
       + '.card-ctx-menu .ctx-divider{height:1px;background:var(--line);margin:4px 6px;}';
     document.head.appendChild(st);
   }
-
   var ctxMenu = null;
-  function closeCtxMenu() {
-    if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; }
-  }
-
+  function closeCtxMenu() { if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; } }
   function showCtxMenu(x, y, itemId) {
     closeCtxMenu();
     var item = db.items.find(function (i) { return i.id === itemId; });
     if (!item) return;
-
     ctxMenu = document.createElement('div');
     ctxMenu.className = 'card-ctx-menu';
-    ctxMenu.innerHTML = ''
-      + '<button data-ctx="copy">📋 复制内容</button>'
-      + '<button data-ctx="edit">✏️ 编辑</button>'
-      + '<div class="ctx-divider"></div>'
-      + '<button data-ctx="move">📁 移动到分类</button>'
-      + '<button data-ctx="tag">🏷 添加标签</button>'
-      + '<button data-ctx="source">📚 设置来源</button>'
-      + '<div class="ctx-divider"></div>'
-      + '<button data-ctx="del" class="danger">🗑 删除（可恢复）</button>';
+    ctxMenu.innerHTML = '<button data-ctx="copy">📋 复制内容</button><button data-ctx="edit">✏️ 编辑</button><div class="ctx-divider"></div><button data-ctx="move">📁 移动到分类</button><button data-ctx="tag">🏷 添加标签</button><button data-ctx="source">📚 设置来源</button><div class="ctx-divider"></div><button data-ctx="del" class="danger">🗑 删除（可恢复）</button>';
     document.body.appendChild(ctxMenu);
-
     var rect = ctxMenu.getBoundingClientRect();
     var px = x, py = y;
     if (px + rect.width > window.innerWidth - 8) px = window.innerWidth - rect.width - 8;
     if (py + rect.height > window.innerHeight - 8) py = window.innerHeight - rect.height - 8;
-    if (px < 8) px = 8;
-    if (py < 8) py = 8;
-    ctxMenu.style.left = px + 'px';
-    ctxMenu.style.top = py + 'px';
-
+    if (px < 8) px = 8; if (py < 8) py = 8;
+    ctxMenu.style.left = px + 'px'; ctxMenu.style.top = py + 'px';
     ctxMenu.addEventListener('click', function (e) {
-      var btn = e.target.closest('button[data-ctx]');
-      if (!btn) return;
+      var btn = e.target.closest('button[data-ctx]'); if (!btn) return;
       var act = btn.dataset.ctx;
       closeCtxMenu();
-
-      if (act === 'copy') {
-        copyText(item.text || '', item.source);
-      } else if (act === 'edit') {
-        startEdit(item.id);
-      } else if (act === 'del') {
+      if (act === 'copy') copyText(item.text || '', item.source);
+      else if (act === 'edit') startEdit(item.id);
+      else if (act === 'del') {
         requestDeleteConfirm(1, function () {
-          moveToTrash([item.id]);
-          if (editingId === item.id) cancelEdit();
+          moveToTrash([item.id]); if (editingId === item.id) cancelEdit();
           cleanupSources(); save();
           var totalPages = Math.max(1, Math.ceil(getFilteredItems().length / pageSize));
           if (currentPage > totalPages) currentPage = totalPages;
           render(); toast('已移入回收站');
         });
       } else if (act === 'move') {
-        var cats = db.cats.slice();
-        if (!cats.length) { toast('还没有分类'); return; }
+        var cats = db.cats.slice(); if (!cats.length) { toast('还没有分类'); return; }
         window.showCustomPrompt({
-          title: '移动到分类',
-          desc: '输入分类名，或点击下方建议：',
-          value: item.type,
-          suggestions: cats,
-          onConfirm: function(target) {
+          title: '移动到分类', desc: '输入分类名，或点击下方建议：', value: item.type, suggestions: cats,
+          onConfirm: function (target) {
             if (target && target.trim() && cats.indexOf(target.trim()) >= 0 && target.trim() !== item.type) {
-              item.type = target.trim();
-              item.updatedAt = Date.now();
-              save(); render();
-              toast('已移动到「' + target.trim() + '」');
-            } else if (target && target.trim() && cats.indexOf(target.trim()) < 0) {
-              toast('分类不存在：' + target.trim());
-            }
+              var old = JSON.parse(JSON.stringify(item));
+              item.type = target.trim(); item.updatedAt = Date.now();
+              markItemDirty(item); _indexUpdateItem(old, item);
+              save(); render(); toast('已移动到「' + target.trim() + '」');
+            } else if (target && target.trim() && cats.indexOf(target.trim()) < 0) toast('分类不存在：' + target.trim());
           }
         });
       } else if (act === 'tag') {
         window.showCustomPrompt({
-          title: '修改标签',
-          desc: '输入逗号分隔的标签（留空则清空）：',
-          value: (item.tags || []).join(', '),
-          onConfirm: function(t) {
+          title: '修改标签', desc: '输入逗号分隔的标签（留空则清空）：', value: (item.tags || []).join(', '),
+          onConfirm: function (t) {
             if (t !== null) {
-              var cur = t.split(/[,，\s]+/).filter(Boolean);
-              item.tags = Array.from(new Set(cur));
+              var old = JSON.parse(JSON.stringify(item));
+              item.tags = Array.from(new Set(t.split(/[,，\s]+/).filter(Boolean)));
               item.updatedAt = Date.now();
-              save(); render();
-              toast('标签已更新');
+              markItemDirty(item); _indexUpdateItem(old, item);
+              save(); render(); toast('标签已更新');
             }
           }
         });
       } else if (act === 'source') {
         window.showCustomPrompt({
-          title: '设置来源',
-          desc: '输入来源名称（留空则清空）：',
-          value: item.source || '',
-          onConfirm: function(s) {
+          title: '设置来源', desc: '输入来源名称（留空则清空）：', value: item.source || '',
+          onConfirm: function (s) {
             if (s !== null) {
+              var old = JSON.parse(JSON.stringify(item));
               item.source = s.trim();
               if (item.source && db.sources.indexOf(item.source) < 0) db.sources.push(item.source);
               item.updatedAt = Date.now();
-              save(); render();
-              toast('来源已更新');
+              markItemDirty(item); _indexUpdateItem(old, item);
+              save(); render(); toast('来源已更新');
             }
           }
         });
       }
     });
   }
-
   document.addEventListener('contextmenu', function (e) {
     if (!db.settings || db.settings.enableContextMenu === false) return;
-    var card = e.target.closest('#list .card');
-    if (!card) return;
+    var card = e.target.closest('#list .card'); if (!card) return;
     if (selectMode || zenMode) return;
     if (document.body.classList.contains('focus-mode')) return;
     if (document.body.classList.contains('guest-mode')) return;
     e.preventDefault();
     showCtxMenu(e.clientX, e.clientY, card.dataset.id);
   });
-
-  var lpTimer = null;
-  var lpCard = null;
-  var lpX = 0, lpY = 0;
+  var lpTimer = null, lpCard = null, lpX = 0, lpY = 0;
   document.addEventListener('touchstart', function (e) {
     if (!db.settings || db.settings.enableContextMenu === false) return;
-    var card = e.target.closest('#list .card');
-    if (!card) return;
+    var card = e.target.closest('#list .card'); if (!card) return;
     if (selectMode || zenMode) return;
     if (document.body.classList.contains('focus-mode')) return;
     if (document.body.classList.contains('guest-mode')) return;
-    var touch = e.touches[0];
-    lpCard = card;
-    lpX = touch.clientX;
-    lpY = touch.clientY;
+    var touch = e.touches[0]; lpCard = card; lpX = touch.clientX; lpY = touch.clientY;
     clearTimeout(lpTimer);
-    lpTimer = setTimeout(function () {
-      if (lpCard === card) {
-        showCtxMenu(lpX, lpY, card.dataset.id);
-        lpCard = null;
-      }
-    }, 600);
+    lpTimer = setTimeout(function () { if (lpCard === card) { showCtxMenu(lpX, lpY, card.dataset.id); lpCard = null; } }, 600);
   }, { passive: true });
-  document.addEventListener('touchend', function () {
-    clearTimeout(lpTimer);
-    lpCard = null;
-  });
+  document.addEventListener('touchend', function () { clearTimeout(lpTimer); lpCard = null; });
   document.addEventListener('touchmove', function (e) {
     if (!lpCard) return;
     var touch = e.touches[0];
-    if (Math.abs(touch.clientX - lpX) > 10 || Math.abs(touch.clientY - lpY) > 10) {
-      clearTimeout(lpTimer);
-      lpCard = null;
-    }
+    if (Math.abs(touch.clientX - lpX) > 10 || Math.abs(touch.clientY - lpY) > 10) { clearTimeout(lpTimer); lpCard = null; }
   }, { passive: true });
-
-  document.addEventListener('click', function (e) {
-    if (ctxMenu && !ctxMenu.contains(e.target)) closeCtxMenu();
-  });
+  document.addEventListener('click', function (e) { if (ctxMenu && !ctxMenu.contains(e.target)) closeCtxMenu(); });
   document.addEventListener('scroll', closeCtxMenu, { passive: true });
   window.addEventListener('resize', closeCtxMenu);
 })();

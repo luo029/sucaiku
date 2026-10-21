@@ -377,114 +377,124 @@ function renderImgMgrBatch() {
 }
 
 async function deleteRepoImage(relPath, sha) {
-  if (!confirm(`确定要从 GitHub 图床彻底删除这张图片吗？\n\n注意：删除后不可恢复！如果该图片被素材引用，相关素材里的这张图也会被同步清理。`)) return;
-  
-  const rc = ghRepoConfig('img');
-  const fullPath = `${rc.path}/${relPath}`;
-  
-  try {
-    const url = ghApiUrl(rc, fullPath);
-    const res = await fetch(url, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${rc.token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: `delete ${relPath}`, sha: sha, branch: rc.branch })
-    });
-    
-    if (!res.ok) throw new Error(`HTTP ${res.status} ${await res.text()}`);
-    
-    repoImagesCache = repoImagesCache.filter(f => f.relPath !== relPath);
-    
-    const affectedIds = new Set();
-    let removedImagesCount = 0;
-    
-    db.items.forEach(item => {
-      if (item.images) {
-        const beforeLen = item.images.length;
-        item.images = item.images.filter(im => {
-          if (!im.path) return true;
-          const ip = String(im.path).trim();
-          const rp = String(relPath).trim();
-          const isMatch = ip === rp || ip.endsWith(rp) || rp.endsWith(ip);
-          if (isMatch) {
-            removedImagesCount++;
-            return false;
-          }
-          return true;
-        });
-        if (item.images.length !== beforeLen) {
-          affectedIds.add(item.id);
-        }
-      }
-    });
-    
-    let removedItemsCount = 0;
-    if (affectedIds.size > 0) {
-      const beforeCount = db.items.length;
-      db.items = db.items.filter(i => {
-        if (!affectedIds.has(i.id)) return true;
-        return i.text || (i.images && i.images.length > 0);
-      });
-      removedItemsCount = beforeCount - db.items.length;
+  window.showCustomConfirm({
+    title: '彻底删除图片',
+    desc: '确定要从 GitHub 图床彻底删除这张图片吗？\n\n注意：删除后不可恢复！如果该图片被素材引用，相关素材里的这张图也会被同步清理。',
+    isDanger: true,
+    onConfirm: async function() {
+      const rc = ghRepoConfig('img');
+      const fullPath = `${rc.path}/${relPath}`;
       
-      save();
-      render();
+      try {
+        const url = ghApiUrl(rc, fullPath);
+        const res = await fetch(url, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${rc.token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: `delete ${relPath}`, sha: sha, branch: rc.branch })
+        });
+        
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${await res.text()}`);
+        
+        repoImagesCache = repoImagesCache.filter(f => f.relPath !== relPath);
+        
+        const affectedIds = new Set();
+        let removedImagesCount = 0;
+        
+        db.items.forEach(item => {
+          if (item.images) {
+            const beforeLen = item.images.length;
+            item.images = item.images.filter(im => {
+              if (!im.path) return true;
+              const ip = String(im.path).trim();
+              const rp = String(relPath).trim();
+              const isMatch = ip === rp || ip.endsWith(rp) || rp.endsWith(ip);
+              if (isMatch) {
+                removedImagesCount++;
+                return false;
+              }
+              return true;
+            });
+            if (item.images.length !== beforeLen) {
+              affectedIds.add(item.id);
+            }
+          }
+        });
+        
+        let removedItemsCount = 0;
+        if (affectedIds.size > 0) {
+          const beforeCount = db.items.length;
+          db.items = db.items.filter(i => {
+            if (!affectedIds.has(i.id)) return true;
+            return i.text || (i.images && i.images.length > 0);
+          });
+          removedItemsCount = beforeCount - db.items.length;
+          
+          save();
+          render();
+        }
+        
+        if (removedItemsCount > 0) {
+          toast(`图片已删，并清理了 ${removedItemsCount} 条失去所有内容的空素材`);
+        } else if (removedImagesCount > 0) {
+          toast(`图片已删，并从素材中移除了 ${removedImagesCount} 处引用`);
+        } else {
+          toast('已彻底删除物理图片');
+        }
+        
+        renderImgMgrUI();
+        
+      } catch (err) {
+        console.error(err);
+        toast('删除失败：' + err.message);
+      }
     }
-    
-    if (removedItemsCount > 0) {
-      toast(`图片已删，并清理了 ${removedItemsCount} 条失去所有内容的空素材`);
-    } else if (removedImagesCount > 0) {
-      toast(`图片已删，并从素材中移除了 ${removedImagesCount} 处引用`);
-    } else {
-      toast('已彻底删除物理图片');
-    }
-    
-    renderImgMgrUI();
-    
-  } catch (err) {
-    console.error(err);
-    toast('删除失败：' + err.message);
-  }
+  });
 }
 
 async function cleanAllUnusedImages() {
   const unused = repoImagesCache.filter(f => !f.isUsed);
   if (!unused.length) return;
   
-  if (!confirm(`确定要一键清理这 ${unused.length} 张未被引用的图片吗？\n\n这会直接向 GitHub 发送 ${unused.length} 个删除请求，不可恢复！`)) return;
+  window.showCustomConfirm({
+    title: '清理未引用图片',
+    desc: `确定要一键清理这 ${unused.length} 张未被引用的图片吗？\n\n这会直接向 GitHub 发送 ${unused.length} 个删除请求，不可恢复！`,
+    isDanger: true,
+    onConfirm: async function() {
+      const btn = $('imgMgrCleanBtn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '正在清理...';
 
-  const btn = $('imgMgrCleanBtn');
-  const originalText = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '正在清理...';
+      const rc = ghRepoConfig('img');
+      let success = 0;
+      let fail = 0;
 
-  const rc = ghRepoConfig('img');
-  let success = 0;
-  let fail = 0;
-
-  try {
-    for (const f of unused) {
       try {
-        const fullPath = `${rc.path}/${f.relPath}`;
-        const url = ghApiUrl(rc, fullPath);
-        const res = await fetch(url, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${rc.token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: `delete unused ${f.relPath}`, sha: f.sha, branch: rc.branch })
-        });
-        if (res.ok) success++;
-        else fail++;
-      } catch (e) {
-        fail++;
+        for (const f of unused) {
+          try {
+            const fullPath = `${rc.path}/${f.relPath}`;
+            const url = ghApiUrl(rc, fullPath);
+            const res = await fetch(url, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${rc.token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: `delete unused ${f.relPath}`, sha: f.sha, branch: rc.branch })
+            });
+            if (res.ok) success++;
+            else fail++;
+          } catch (e) {
+            fail++;
+          }
+          await new Promise(r => setTimeout(r, 300));
+        }
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
       }
-      await new Promise(r => setTimeout(r, 300));
+      
+      toast(`清理完成：成功 ${success} 张，失败 ${fail} 张`);
+      await loadRepoImages();
     }
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalText;
-  }
-  
-  toast(`清理完成：成功 ${success} 张，失败 ${fail} 张`);
-  await loadRepoImages();
+  });
 }
 
 function updateImgMgrBatchBar() {

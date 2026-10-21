@@ -1,4 +1,4 @@
-// js/core.js
+// js/core.js · 完整文件（修复所有按钮回显 + 增加自检钩子）
 var UNCAT = '未分类'; var IMG_TYPE = '图片'; var ALL_SOURCES = '__all__';
 var DEFAULT_CATS = ['句子', '段落', '梗', '情话', '吐槽', '点子'];
 var DEFAULT_IMG_CATS = ['梗图', '情节', '插画', '其他'];
@@ -22,7 +22,6 @@ var DEFAULT_SETTINGS = {
   focusModeCat: '收件箱', saveShortcut: 'ctrl-enter', enableMarkdown: true,
   copyWithoutMarks: true, copyKeepBlankLines: true, focusImgAutoUpload: true, focusImgDefaultCat: '其他',
   imgNamingTemplate: '{cat}-{timestamp}-{rand}',
-
   dataDir: 'material-library', shardSubdir: 'data', shardMode: 'daily', enableYearIndex: true,
   loadMode: 'smart', smartThresholdMB: 5, manualRangeDays: 90, customRangeDays: 90,
   historyLoadMode: 'auto', lazyLoadBatchSize: 30, startupAutoPull: true, cloudCheckEnabled: true,
@@ -30,6 +29,13 @@ var DEFAULT_SETTINGS = {
   enableFullTextIndex: false, searchHistoryEnabled: true, searchDebounceMs: 180,
   autoPush: true, pushDelayMs: 2000, pushConcurrency: 3, pushBatchDelay: 500,
   conflictAction: 'prompt', maxShardSizeKB: 800, forceConfirm: true, snapshotBeforePush: true,
+  shardMaxSizeKB: 650, shardSplitEnabled: true, gitTreeBatchEnabled: true,
+  pushRetryCount: 3, pushRetryDelaySec: 10, syncStatusIcon: true, showSyncProgress: true,
+  snapshotEnabled: true, snapshotDailyKeep: 3, snapshotWeeklyKeep: 4, snapshotMonthlyKeep: 3,
+  snapshotManualKeep: 10, snapshotMaxAgeDays: 180, snapshotChangeThreshold: 100, snapshotForceDays: 7,
+  snapshotCompress: true, snapshotPath: 'snapshots/', snapshotAutoCleanup: true, lastSnapshotAt: 0,
+  catSyncAction: 'ask', catConflictMode: 'last-write',
+  trashAutoCleanupThreshold: 1000, repoVisibility: 'public', showPrivacyNotice: false,
   enableLog: true, logCleanupMode: 'count', logMaxCount: 500, logMaxSizeKB: 100, logMaxDays: 30,
   logHardLimitEnabled: true, logHardLimitCount: 1000, logRecordPush: true, logRecordPull: true,
   logRecordConflict: true, logRecordAutoPull: false, logRecordSettings: false, logRecordShardSha: true,
@@ -41,14 +47,8 @@ var DEFAULT_SETTINGS = {
   tagAutoColor: false, tagFilterLogic: 'and', autoCompleteChars: 1, autoCompleteMax: 10,
   importDefaultAction: 'ask', timezoneMode: 'local', showProgressBar: true,
   integrityCheckMode: 'weekly', maxSplitParts: 10, autoDeleteEmptyShard: true,
-
-  // ★ 移除 enableStatsCache（强制开启）
-  enableShortcuts: true,
-  shortcutSearch: '/',
-  shortcutNew: 'n',
-  shortcutPush: 'ctrl+s',
-  maxTagsInHeader: 3,
-  enableContextMenu: true
+  enableShortcuts: true, shortcutSearch: '/', shortcutNew: 'n', shortcutPush: 'ctrl+s',
+  maxTagsInHeader: 3, enableContextMenu: true
 };
 
 var PALETTE = [
@@ -65,7 +65,7 @@ var db = {
   items: [], cats: DEFAULT_CATS.slice(), colors: {}, sources: [], fixedSource: '', fixedTags: [],
   imageCategories: DEFAULT_IMG_CATS.slice(), settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
   trash: [], tagColors: {}, _rev: 0, _shardSnapshots: {}, _trashSnapshot: '', _metaSnapshot: '',
-  _deviceId: '', _loadedShardKeys: [], _allShardKeys: []
+  _deviceId: '', _loadedShardKeys: [], _allShardKeys: [], catVersion: 0, _indexRev: -1
 };
 
 var currentType = '全部'; var currentSource = ALL_SOURCES; var currentTag = '';
@@ -83,7 +83,6 @@ function $(id) { return document.getElementById(id); }
 
 var inputEl = $('input'), typeEl = $('type'), sourceEl = $('source'), tagsEl = $('tags');
 var addBtn = $('addBtn'), cancelBtn = $('cancelBtn'), listEl = $('list'), searchEl = $('search');
-// ★ 移除旧版分类管理 DOM 变量
 var batchBar = $('batchBar'), sourcePicker = $('sourcePicker'), sourcePanel = $('sourcePanel');
 var spList = $('spList'), spSearch = $('spSearch'), tagPicker = $('tagPicker');
 var tagPanel = $('tagPanel'), tpList = $('tpList'), tpSearch = $('tpSearch');
@@ -94,18 +93,28 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
 function getSearchTerms() { return keyword.trim().toLowerCase().split(/\s+/).filter(Boolean); }
 function formatCount(num) { return num > 99 ? '99+' : num; }
 
+var _MARKUP_RE = /\u3010([\s\S]*?)\u3011|==([\s\S]*?)==|\*\*([\s\S]*?)\*\*/g;
+var _hlRegexCache = new Map();
+var _HL_CACHE_MAX = 60;
+
 function highlightEscaped(escaped, kws) {
   var list = (kws || []).filter(Boolean); if (!list.length) return escaped;
   var pat = list.map(function (k) { return esc(k).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|');
   if (!pat) return escaped;
-  try { return escaped.replace(new RegExp('(' + pat + ')', 'gi'), '<mark class="kw">$1</mark>'); } catch (e) { return escaped; }
+  var re = _hlRegexCache.get(pat);
+  if (!re) {
+    try { re = new RegExp('(' + pat + ')', 'gi'); } catch (e) { return escaped; }
+    if (_hlRegexCache.size >= _HL_CACHE_MAX) _hlRegexCache.clear();
+    _hlRegexCache.set(pat, re);
+  }
+  try { return escaped.replace(re, '<mark class="kw">$1</mark>'); } catch (e) { return escaped; }
 }
 
 function formatText(text, kws) {
   var raw = String(text == null ? '' : text); var enableMD = db.settings.enableMarkdown !== false;
-  var re = new RegExp('\u3010([\\s\\S]*?)\u3011|==([\\s\\S]*?)==|\\*\\*([\\s\\S]*?)\\*\\*', 'g');
+  _MARKUP_RE.lastIndex = 0;
   var out = '', last = 0, m;
-  while ((m = re.exec(raw))) {
+  while ((m = _MARKUP_RE.exec(raw))) {
     out += highlightEscaped(esc(raw.slice(last, m.index)), kws);
     if (typeof m[1] == 'string') out += '<mark class="hl">' + esc(m[1]) + '</mark>';
     else if (typeof m[2] == 'string') out += '<mark class="hl">' + esc(m[2]) + '</mark>';
@@ -116,11 +125,62 @@ function formatText(text, kws) {
 }
 
 function pad2(n) { return String(n).padStart(2, '0'); }
-function fmtDate(ts) { if (!ts) return ''; if (db.settings.useRelativeTime) { var diff = Date.now() - ts; if (diff < 60000) return '刚刚'; if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前'; if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前'; if (diff < 86400000 * 30) return Math.floor(diff / 86400000) + ' 天前'; } var d = new Date(ts || Date.now()); var now = new Date(); var hm = pad2(d.getHours()) + ':' + pad2(d.getMinutes()); if (d.getFullYear() === now.getFullYear()) return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + hm; return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + hm; }
+function fmtDate(ts) {
+  if (!ts) return '';
+  if (db.settings.useRelativeTime) {
+    var diff = Date.now() - ts;
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
+    if (diff < 86400000 * 30) return Math.floor(diff / 86400000) + ' 天前';
+  }
+  var d = new Date(ts || Date.now()); var now = new Date();
+  var hm = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  if (d.getFullYear() === now.getFullYear()) return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + hm;
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + hm;
+}
 function fmtDateOnly(ts) { var d = new Date(ts || Date.now()); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
 function fmtFull(ts) { var d = new Date(ts || Date.now()); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
 
-var toastTimer; function toast(msg) { var el = $('toast'); if (!el) return; el.textContent = msg; var imgMgrBar = $('imgMgrBatchBar'); el.classList.toggle('raised', (batchBar && batchBar.classList.contains('show')) || (imgMgrBar && imgMgrBar.classList.contains('show'))); el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2400); }
+// ★ Toast 队列升级版
+var toastTimer;
+var toastQueue = [];
+var isToasting = false;
+
+function toast(msg) {
+  if (!msg) return;
+  if (toastQueue.length >= 3) {
+    toastQueue.shift(); // 防止消息堆积过多
+  }
+  toastQueue.push(msg);
+  if (!isToasting) {
+    processToastQueue();
+  }
+}
+
+function processToastQueue() {
+  var el = $('toast');
+  if (!el) return;
+  
+  if (toastQueue.length === 0) {
+    isToasting = false;
+    el.classList.remove('show');
+    return;
+  }
+
+  isToasting = true;
+  var currentMsg = toastQueue.shift();
+  el.textContent = currentMsg;
+  
+  var imgMgrBar = $('imgMgrBatchBar');
+  el.classList.toggle('raised', (batchBar && batchBar.classList.contains('show')) || (imgMgrBar && imgMgrBar.classList.contains('show')));
+  el.classList.add('show');
+
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () {
+    processToastQueue(); // 2.4 秒后处理下一个
+  }, 2400);
+}
 
 function copyText(text, source) {
   var finalText = String(text || ''); if (db.settings.copyWithoutMarks !== false) finalText = finalText.replace(/【([\s\S]*?)】/g, '$1').replace(/==([\s\S]*?)==/g, '$1').replace(/\*\*([\s\S]*?)\*\*/g, '$1');
@@ -138,7 +198,11 @@ function blobToBase64(blob) { return new Promise(function (resolve, reject) { va
 function fetchHitokoto() { var txtEl = $('hitokotoText'), fromEl = $('hitokotoFrom'); if (!txtEl) return; txtEl.textContent = '正在获取...'; if (fromEl) fromEl.textContent = ''; fetch('https://v1.hitokoto.cn/').then(function (r) { return r.json(); }).then(function (data) { if (data.hitokoto) { txtEl.textContent = data.hitokoto; var fromStr = data.from ? '—— ' + data.from : ''; if (data.from_who) fromStr += ' · ' + data.from_who; if (fromEl) fromEl.textContent = fromStr; } }).catch(function () { txtEl.textContent = '获取失败'; }); }
 
 function applyLayout() { document.body.classList.toggle('layout-sidebar', layoutMode === 'sidebar'); document.body.classList.toggle('layout-compact', layoutMode === 'compact'); updateLayoutBtn(); }
-function updateLayoutBtn() { var btn = $('layoutBtn'); if (!btn) return; if (layoutMode === 'sidebar') { btn.title = '收起侧栏'; btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m10 9 3 3-3 3"/></svg>'; } else { btn.title = '展开侧栏'; btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m13 9-3 3 3 3"/></svg>'; } }
+function updateLayoutBtn() {
+  var btn = $('layoutBtn'); if (!btn) return;
+  if (layoutMode === 'sidebar') { btn.title = '收起侧栏'; btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m10 9 3 3-3 3"/></svg>'; }
+  else { btn.title = '展开侧栏'; btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m13 9-3 3 3 3"/></svg>'; }
+}
 function setLayout(mode) { layoutMode = mode; localStorage.setItem(LAYOUT_KEY, mode); applyLayout(); closeSidebar(); renderSourceFilter(); }
 function setTheme(mode, persist) { if (typeof persist === 'undefined') persist = true; themeMode = mode; document.documentElement.setAttribute('data-theme', mode); if (persist) localStorage.setItem(THEME_KEY, mode); var sun = $('themeIconSun'), moon = $('themeIconMoon'); if (sun) sun.style.display = mode === 'dark' ? 'none' : 'block'; if (moon) moon.style.display = mode === 'dark' ? 'block' : 'none'; }
 function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(db.settings)); if (typeof save === 'function') save(); if (typeof scheduleAutoPush === 'function' && !window.suppressPush) scheduleAutoPush(); }
@@ -146,6 +210,14 @@ function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(db.s
 function getOrCreateDevice() { var stored = null; try { stored = JSON.parse(localStorage.getItem(DEVICE_KEY) || 'null'); } catch (e) { stored = null; } if (stored && stored.id) return stored; var id = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); var auto = detectDevice(); var device = { id: id, name: auto.name, icon: auto.icon, type: auto.type, createdAt: Date.now() }; try { localStorage.setItem(DEVICE_KEY, JSON.stringify(device)); } catch (e) {} return device; }
 function detectDevice() { var ua = navigator.userAgent || ''; var screenW = (window.screen && window.screen.width) ? window.screen.width : 1024; var isMobileUA = /Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua); var isTabletUA = /iPad|Android(?!.*Mobile)/i.test(ua); var isMac = /Macintosh|Mac OS X/i.test(ua); var isWindows = /Windows/i.test(ua); var isLinux = /Linux/i.test(ua) && !/Android/i.test(ua); if (isTabletUA || (!isMobileUA && screenW >= 768 && screenW < 1024)) return { name: isMac ? 'iPad' : '平板', icon: '📱', type: 'tablet' }; if (isMobileUA || screenW < 768) { if (/iPhone/i.test(ua)) return { name: 'iPhone', icon: '📱', type: 'mobile' }; if (/Android/i.test(ua)) return { name: 'Android 手机', icon: '📱', type: 'mobile' }; return { name: '手机', icon: '📱', type: 'mobile' }; } if (isMac) return { name: 'MacBook', icon: '💻', type: 'desktop' }; if (isWindows) return { name: 'Windows PC', icon: '💻', type: 'desktop' }; if (isLinux) return { name: 'Linux PC', icon: '💻', type: 'desktop' }; return { name: '电脑', icon: '💻', type: 'desktop' }; }
 function getDeviceDisplay() { var dev = getOrCreateDevice(); return { id: dev.id, name: db.settings.deviceName || dev.name, icon: db.settings.deviceIcon || dev.icon, type: dev.type }; }
+
+function setSegmentedActive(containerId, attribute, value) {
+  var el = $(containerId);
+  if (!el) return;
+  el.querySelectorAll('button').forEach(function (b) {
+    b.classList.toggle('active', b.getAttribute(attribute) === String(value));
+  });
+}
 
 function applySettingsToUI() {
   var s = db.settings;
@@ -167,42 +239,93 @@ function applySettingsToUI() {
   if ($('themeDarkToggle')) $('themeDarkToggle').checked = themeMode === 'dark';
   if ($('focusModeCatInput')) $('focusModeCatInput').value = s.focusModeCat || '收件箱';
   if ($('sidebarShowCat')) $('sidebarShowCat').checked = s.sidebarShowCat !== false; if ($('sidebarShowSrc')) $('sidebarShowSrc').checked = s.sidebarShowSrc !== false; if ($('sidebarShowTag')) $('sidebarShowTag').checked = s.sidebarShowTag !== false;
+  
   var catGroup = $('catNav') && $('catNav').closest ? $('catNav').closest('.nav-group') : null; var srcGroup = $('sourceNav') && $('sourceNav').closest ? $('sourceNav').closest('.nav-group') : null; var tagGroup = $('tagNav') && $('tagNav').closest ? $('tagNav').closest('.nav-group') : null;
   if (catGroup) catGroup.style.display = s.sidebarShowCat !== false ? '' : 'none'; if (srcGroup) srcGroup.style.display = s.sidebarShowSrc !== false ? '' : 'none'; if (tagGroup) tagGroup.style.display = s.sidebarShowTag !== false ? '' : 'none';
+  
   if (inputEl) { var hint = s.saveShortcut === 'enter' ? '（Enter 保存，Shift+Enter 换行）' : '（Ctrl+Enter 保存）'; var isCustom = s.inputPlaceholder && s.inputPlaceholder !== DEFAULT_SETTINGS.inputPlaceholder; if (isCustom) inputEl.placeholder = s.inputPlaceholder; else inputEl.placeholder = '粘贴句子、段落' + hint + '。用【文字】可高亮。可直接粘贴图片。'; }
   if ($('inputPlaceholder')) $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
   document.body.classList.remove('layout-strip'); if (s.listStyle === 'strip') document.body.classList.add('layout-strip');
-  document.querySelectorAll('#listStyleMode button').forEach(function (b) { b.classList.toggle('active', b.dataset.style === (s.listStyle || 'card')); });
-  document.querySelectorAll('#saveShortcut button').forEach(function (b) { b.classList.toggle('active', b.dataset.shortcut === (s.saveShortcut || 'ctrl-enter')); });
-  document.body.classList.remove('zen-font-large', 'zen-font-xlarge'); if (s.zenFontSize === 'large') document.body.classList.add('zen-font-large'); if (s.zenFontSize === 'xlarge') document.body.classList.add('zen-font-xlarge');
-  document.querySelectorAll('#zenFontSize button').forEach(function (b) { b.classList.toggle('active', b.dataset.zfs === (s.zenFontSize || 'normal')); });
+  
+  // ★ 补全所有分段按钮的回显
+  setSegmentedActive('saveShortcut', 'data-shortcut', s.saveShortcut || 'ctrl-enter');
+  setSegmentedActive('listStyleMode', 'data-style', s.listStyle || 'card');
+  setSegmentedActive('zenFontSize', 'data-zfs', s.zenFontSize || 'normal');
+  setSegmentedActive('fontSizeMode', 'data-size', s.fontSizeMode || 'normal');
+  setSegmentedActive('compressMode', 'data-mode', s.compressMode || 'local');
+  setSegmentedActive('loadMode', 'data-mode', s.loadMode || 'smart');
+  setSegmentedActive('historyLoadMode', 'data-mode', s.historyLoadMode || 'auto');
+  setSegmentedActive('conflictAction', 'data-act', s.conflictAction || 'prompt');
+  setSegmentedActive('searchScope', 'data-scope', s.searchScope || 'local');
+  setSegmentedActive('unloadedSearch', 'data-act', s.unloadedSearch || 'ask');
+  setSegmentedActive('tagColorMode', 'data-mode', s.tagColorMode || 'dot');
+  setSegmentedActive('tagFilterLogic', 'data-logic', s.tagFilterLogic || 'and');
+  setSegmentedActive('importDefaultAction', 'data-action', s.importDefaultAction || 'ask');
+  setSegmentedActive('shardMode', 'data-mode', s.shardMode || 'daily');
+  setSegmentedActive('timezoneMode', 'data-mode', s.timezoneMode || 'local');
+  setSegmentedActive('shardSyncMode', 'data-mode', s.shardSyncMode || 'all');
+  setSegmentedActive('deviceStatus', 'data-status', s.deviceStatus || 'active');
+  setSegmentedActive('logCleanupMode', 'data-mode', s.logCleanupMode || 'count');
+  setSegmentedActive('catSyncAction', 'data-act', s.catSyncAction || 'ask');
+  setSegmentedActive('catConflictMode', 'data-mode', s.catConflictMode || 'last-write');
+
   if ($('catLimitInput')) $('catLimitInput').value = Number(s.catLimit) || 3; if ($('srcLimitInput')) $('srcLimitInput').value = Number(s.srcLimit) || 3; if ($('tagLimitInput')) $('tagLimitInput').value = Number(s.tagLimit) || 3; if ($('collapseLimitInput')) $('collapseLimitInput').value = Number(s.collapseLimit) || 150;
   if ($('showHitokoto')) $('showHitokoto').checked = s.showHitokoto !== false; if ($('enableAnim')) $('enableAnim').checked = s.enableAnim !== false; if ($('defaultPageSizeSelect')) $('defaultPageSizeSelect').value = String(s.defaultPageSize) || '12';
+  
   if ($('defaultTypeSelect')) { var sel = $('defaultTypeSelect'); sel.innerHTML = '<option value="">跟随系统（无）</option>' + db.cats.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join(''); sel.value = s.defaultType || ''; }
-  var mode = s.compressMode || 'local'; document.querySelectorAll('#compressMode button').forEach(function (b) { b.classList.toggle('active', b.dataset.mode === mode); }); if ($('tinypngFields')) $('tinypngFields').style.display = mode === 'tinypng' ? 'block' : 'none';
-  document.querySelectorAll('#fontSizeMode button').forEach(function (b) { b.classList.toggle('active', b.dataset.size === (s.fontSizeMode || 'normal')); }); applyFontSize(s.fontSizeMode);
+  if ($('tinypngFields')) $('tinypngFields').style.display = (s.compressMode === 'tinypng') ? 'block' : 'none';
   document.body.classList.toggle('no-anim', s.enableAnim === false);
   var hitokotoBox = document.querySelector('.hitokoto-box'); if (hitokotoBox) hitokotoBox.style.display = (s.showHitokoto !== false) ? 'flex' : 'none';
+  
   if ($('focusImgAutoUpload')) $('focusImgAutoUpload').checked = s.focusImgAutoUpload !== false; if ($('focusImgCatWrap')) $('focusImgCatWrap').style.display = (s.focusImgAutoUpload !== false) ? 'block' : 'none';
   if ($('focusImgDefaultCat')) { var selCat = $('focusImgDefaultCat'); selCat.innerHTML = db.imageCategories.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join(''); selCat.value = s.focusImgDefaultCat || '其他'; }
   if ($('imgNamingTemplate')) $('imgNamingTemplate').value = s.imgNamingTemplate || '{cat}-{timestamp}-{rand}'; if (typeof window.updateImgNamingPreview === 'function') window.updateImgNamingPreview();
-  
-  // 快捷操作回显（移除 enableStatsCache）
+
   if ($('enableShortcuts')) $('enableShortcuts').checked = s.enableShortcuts !== false;
   if ($('shortcutSearch')) $('shortcutSearch').value = s.shortcutSearch || '/';
   if ($('shortcutNew')) $('shortcutNew').value = s.shortcutNew || 'n';
   if ($('maxTagsInHeader')) $('maxTagsInHeader').value = Number(s.maxTagsInHeader) || 3;
   if ($('enableContextMenu')) $('enableContextMenu').checked = s.enableContextMenu !== false;
 
+  if ($('snapshotEnabled')) $('snapshotEnabled').checked = s.snapshotEnabled !== false;
+  if ($('snapshotDailyKeep')) $('snapshotDailyKeep').value = Number(s.snapshotDailyKeep) || 0;
+  if ($('snapshotWeeklyKeep')) $('snapshotWeeklyKeep').value = Number(s.snapshotWeeklyKeep) || 0;
+  if ($('snapshotMonthlyKeep')) $('snapshotMonthlyKeep').value = Number(s.snapshotMonthlyKeep) || 0;
+  if ($('snapshotManualKeep')) $('snapshotManualKeep').value = Number(s.snapshotManualKeep) || 10;
+  if ($('snapshotMaxAgeDays')) $('snapshotMaxAgeDays').value = Number(s.snapshotMaxAgeDays) || 180;
+  if ($('snapshotChangeThreshold')) $('snapshotChangeThreshold').value = Number(s.snapshotChangeThreshold) || 100;
+  if ($('snapshotForceDays')) $('snapshotForceDays').value = Number(s.snapshotForceDays) || 7;
+  if ($('snapshotCompress')) $('snapshotCompress').checked = s.snapshotCompress !== false;
+  if ($('snapshotAutoCleanup')) $('snapshotAutoCleanup').checked = s.snapshotAutoCleanup !== false;
+  if ($('snapshotPath')) $('snapshotPath').value = s.snapshotPath || 'snapshots/';
+
+  if ($('shardMaxSizeKB')) $('shardMaxSizeKB').value = Number(s.shardMaxSizeKB) || 650;
+  if ($('shardSplitEnabled')) $('shardSplitEnabled').checked = s.shardSplitEnabled !== false;
+  if ($('gitTreeBatchEnabled')) $('gitTreeBatchEnabled').checked = s.gitTreeBatchEnabled !== false;
+  if ($('pushRetryCount')) $('pushRetryCount').value = Number(s.pushRetryCount) || 3;
+  if ($('pushRetryDelaySec')) $('pushRetryDelaySec').value = Number(s.pushRetryDelaySec) || 10;
+  if ($('syncStatusIcon')) $('syncStatusIcon').checked = s.syncStatusIcon !== false;
+  if ($('showSyncProgress')) $('showSyncProgress').checked = s.showSyncProgress !== false;
+  if ($('trashAutoCleanupThreshold')) $('trashAutoCleanupThreshold').value = Number(s.trashAutoCleanupThreshold) || 1000;
+
   updateTinyUsageUI(); if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor(); if (typeof renderStyleOptions === 'function') renderStyleOptions();
 }
 
 function applyFontSize(mode) { document.documentElement.classList.remove('font-large', 'font-xlarge'); if (mode === 'large') document.documentElement.classList.add('font-large'); if (mode === 'xlarge') document.documentElement.classList.add('font-xlarge'); }
-function loadSettings() { try { var s = JSON.parse(localStorage.getItem(SETTINGS_KEY)); if (s && typeof s === 'object') { var merged = {}; var k; for (k in DEFAULT_SETTINGS) if (DEFAULT_SETTINGS.hasOwnProperty(k)) merged[k] = DEFAULT_SETTINGS[k]; for (k in s) if (s.hasOwnProperty(k)) merged[k] = s[k]; merged.statsDims = {}; for (k in DEFAULT_SETTINGS.statsDims) merged.statsDims[k] = DEFAULT_SETTINGS.statsDims[k]; if (s.statsDims) for (k in s.statsDims) merged.statsDims[k] = s.statsDims[k]; db.settings = merged; } } catch (e) {}
+function loadSettings() {
+  try { var s = JSON.parse(localStorage.getItem(SETTINGS_KEY)); if (s && typeof s === 'object') { var merged = {}; var k; for (k in DEFAULT_SETTINGS) if (DEFAULT_SETTINGS.hasOwnProperty(k)) merged[k] = DEFAULT_SETTINGS[k]; for (k in s) if (s.hasOwnProperty(k)) merged[k] = s[k]; merged.statsDims = {}; for (k in DEFAULT_SETTINGS.statsDims) merged.statsDims[k] = DEFAULT_SETTINGS.statsDims[k]; if (s.statsDims) for (k in s.statsDims) merged.statsDims[k] = s.statsDims[k]; db.settings = merged; } } catch (e) {}
   db.settings.trashTtlDays = Math.max(1, Math.min(365, Number(db.settings.trashTtlDays) || 30)); db.settings.statsLimit = Math.max(3, Math.min(30, Number(db.settings.statsLimit) || 8)); db.settings.catLimit = Math.max(1, Math.min(30, Number(db.settings.catLimit) || 3)); db.settings.srcLimit = Math.max(1, Math.min(30, Number(db.settings.srcLimit) || 3)); db.settings.tagLimit = Math.max(1, Math.min(30, Number(db.settings.tagLimit) || 3)); db.settings.collapseLimit = Math.max(50, Math.min(9999, Number(db.settings.collapseLimit) || 150)); db.settings.defaultPageSize = Number(db.settings.defaultPageSize) || 12; db.settings.syncCheckInterval = Math.max(10, Math.min(3600, Number(db.settings.syncCheckInterval) || 60));
   if (['none', 'local', 'tinypng'].indexOf(db.settings.compressMode) < 0) db.settings.compressMode = 'local'; if (['normal', 'large', 'xlarge'].indexOf(db.settings.fontSizeMode) < 0) db.settings.fontSizeMode = 'normal';
+  if (['ask', 'auto', 'never'].indexOf(db.settings.catSyncAction) < 0) db.settings.catSyncAction = 'ask';
+  if (['last-write', 'merge'].indexOf(db.settings.catConflictMode) < 0) db.settings.catConflictMode = 'last-write';
   if (typeof db.settings.imgNamingTemplate !== 'string' || !db.settings.imgNamingTemplate.trim()) db.settings.imgNamingTemplate = DEFAULT_SETTINGS.imgNamingTemplate;
   if (typeof db.settings.dataDir !== 'string') db.settings.dataDir = DEFAULT_SETTINGS.dataDir; if (typeof db.settings.shardSubdir !== 'string') db.settings.shardSubdir = DEFAULT_SETTINGS.shardSubdir;
+  if (typeof db.settings.snapshotPath !== 'string' || !db.settings.snapshotPath) db.settings.snapshotPath = 'snapshots/';
+  db.settings.shardMaxSizeKB = Math.max(200, Math.min(2000, Number(db.settings.shardMaxSizeKB) || 650));
+  db.settings.snapshotDailyKeep = Math.max(0, Math.min(30, Number(db.settings.snapshotDailyKeep) || 0)); db.settings.snapshotWeeklyKeep = Math.max(0, Math.min(26, Number(db.settings.snapshotWeeklyKeep) || 0)); db.settings.snapshotMonthlyKeep = Math.max(0, Math.min(24, Number(db.settings.snapshotMonthlyKeep) || 0));
+  db.settings.snapshotManualKeep = Math.max(0, Math.min(99, Number(db.settings.snapshotManualKeep) || 10)); db.settings.snapshotMaxAgeDays = Math.max(30, Math.min(3650, Number(db.settings.snapshotMaxAgeDays) || 180));
+  db.settings.snapshotChangeThreshold = Math.max(10, Math.min(10000, Number(db.settings.snapshotChangeThreshold) || 100)); db.settings.snapshotForceDays = Math.max(1, Math.min(365, Number(db.settings.snapshotForceDays) || 7));
+  db.settings.pushRetryCount = Math.max(0, Math.min(10, Number(db.settings.pushRetryCount) || 3)); db.settings.pushRetryDelaySec = Math.max(1, Math.min(120, Number(db.settings.pushRetryDelaySec) || 10)); db.settings.trashAutoCleanupThreshold = Math.max(100, Math.min(100000, Number(db.settings.trashAutoCleanupThreshold) || 1000));
   pageSize = db.settings.defaultPageSize; applySettingsToUI();
 }
 
@@ -211,4 +334,5 @@ function loadTinyCount() { try { var d = JSON.parse(localStorage.getItem(TINY_KE
 function bumpTinyCount() { var d = loadTinyCount(); d.count += 1; localStorage.setItem(TINY_KEY, JSON.stringify(d)); updateTinyUsageUI(); return d; }
 function updateTinyUsageUI() { var d = loadTinyCount(); var el = $('tinyUsage'); if (el) el.innerHTML = '本月（' + d.month + '）已用 <b>' + d.count + '</b> / 500 次'; }
 
+window.coreHelpers = { DEFAULT_SETTINGS: DEFAULT_SETTINGS, PALETTE: PALETTE, AVAILABLE_STYLES: AVAILABLE_STYLES };
 window.db = db; window.$ = $; window.toast = toast; window.esc = esc; window.formatText = formatText; window.uid = uid; window.fmtDate = fmtDate; window.fmtFull = fmtFull; window.fmtDateOnly = fmtDateOnly; window.utf8ToBase64 = utf8ToBase64; window.base64ToUtf8 = base64ToUtf8; window.blobToBase64 = blobToBase64; window.download = download; window.copyText = copyText; window.scrollTop = scrollTop; window.formatCount = formatCount;

@@ -1,32 +1,21 @@
-// js/io.js - 极简模式 / 专注模式 / 导入导出 / 侧边栏开关
+// js/io.js · 完整文件
+// 【改动】1) 导入后 markIndexDirty + markAllShardsDirty  2) 导出提醒落地  3) 保持其他逻辑
 
 // ============ 极简模式 ============
 function setZen(on) {
   zenMode = on;
   document.body.classList.toggle('zen-mode', on);
   localStorage.setItem(ZEN_KEY, on ? '1' : '0');
-  if (on) {
-    closeSidebar();
-    selectMode = false;
-    selectedIds.clear();
-    closeImgView();
-    setFocus(false);
-  }
-  renderList();
-  scrollTop();
+  if (on) { closeSidebar(); selectMode = false; selectedIds.clear(); closeImgView(); setFocus(false); }
+  renderList(); scrollTop();
 }
 
 // ============ 专注模式 ============
 function setFocus(on) {
   focusMode = on;
   document.body.classList.toggle('focus-mode', on);
-  if (on) {
-    setZen(false);
-    closeSidebar();
-    inputEl.focus();
-  }
-  renderList();
-  scrollTop();
+  if (on) { setZen(false); closeSidebar(); inputEl.focus(); }
+  renderList(); scrollTop();
 }
 
 // ============ 导出 ============
@@ -37,25 +26,16 @@ function openExportModal(preset) {
   var opts = ['<option value="__all__">全部素材（' + db.items.length + ' 条）</option>'];
   if (filtered.length !== db.items.length) opts.push('<option value="__filtered__">当前筛选结果（' + filtered.length + ' 条）</option>');
   if (selectedIds.size) opts.push('<option value="__selected__">已选中（' + selectedIds.size + ' 条）</option>');
-  db.cats.forEach(function (c) {
-    opts.push('<option value="' + esc(c) + '">' + esc(c) + '（' + (counts[c] || 0) + ' 条）</option>');
-  });
+  db.cats.forEach(function (c) { opts.push('<option value="' + esc(c) + '">' + esc(c) + '（' + (counts[c] || 0) + ' 条）</option>'); });
   if ((counts[IMG_TYPE] || 0) > 0) opts.push('<option value="' + esc(IMG_TYPE) + '">' + IMG_TYPE + '（' + counts[IMG_TYPE] + ' 条）</option>');
   if ((counts[UNCAT] || 0) > 0) opts.push('<option value="' + esc(UNCAT) + '">' + UNCAT + '（' + counts[UNCAT] + ' 条）</option>');
   $('exportScope').innerHTML = opts.join('');
-  if (preset && Array.prototype.some.call($('exportScope').options, function (o) { return o.value === preset; })) {
-    $('exportScope').value = preset;
-  }
+  if (preset && Array.prototype.some.call($('exportScope').options, function (o) { return o.value === preset; })) $('exportScope').value = preset;
   exportFormat = 'json';
-  $('exportFormat').querySelectorAll('button').forEach(function (b) {
-    b.classList.toggle('active', b.dataset.fmt === 'json');
-  });
+  $('exportFormat').querySelectorAll('button').forEach(function (b) { b.classList.toggle('active', b.dataset.fmt === 'json'); });
   $('exportMask').classList.add('show');
 }
-
-function closeExportModal() {
-  $('exportMask').classList.remove('show');
-}
+function closeExportModal() { $('exportMask').classList.remove('show'); }
 
 function doExport() {
   var scope = $('exportScope').value;
@@ -71,13 +51,7 @@ function doExport() {
   var scopeName = isAll ? '全库' : scope === '__filtered__' ? '筛选结果' : scope === '__selected__' ? '已选中' : scope;
 
   if (exportFormat === 'json') {
-    var payload = isAll ? db : {
-      items: items,
-      cats: db.cats.slice(),
-      colors: Object.assign({}, db.colors),
-      sources: db.sources.slice(),
-      imageCategories: db.imageCategories.slice()
-    };
+    var payload = isAll ? db : { items: items, cats: db.cats.slice(), colors: Object.assign({}, db.colors), sources: db.sources.slice(), imageCategories: db.imageCategories.slice() };
     var fname = isAll ? '素材库备份-' + dateStr + '.json' : '素材库-' + scopeName + '-' + dateStr + '.json';
     download(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), fname);
     toast('已导出备份');
@@ -139,7 +113,20 @@ function doExport() {
     download(new Blob([outTxt], { type: 'text/plain;charset=utf-8' }), fname4);
     toast('已导出 TXT');
   }
+  // ★ 记录导出时间，用于提醒
+  try { localStorage.setItem('material-library.last-export', String(Date.now())); } catch (e) {}
   closeExportModal();
+}
+
+// ★ 导出提醒检查
+function checkExportReminder() {
+  var last = 0;
+  try { last = Number(localStorage.getItem('material-library.last-export') || 0); } catch (e) {}
+  if (!last) return;
+  var days = Number(db.settings.exportReminderDays) || 30;
+  if ((Date.now() - last) > days * 86400000) {
+    toast('⏰ 距离上次导出已超过 ' + days + ' 天，建议导出备份');
+  }
 }
 
 // ============ 导入 ============
@@ -148,17 +135,9 @@ function handleImportFile(file) {
   reader.onload = function () {
     try {
       var data = JSON.parse(reader.result);
-      var incomingItems = [];
-      var incomingCats = [];
-      var incomingColors = {};
-      var incomingSources = [];
-      var incomingTrash = [];
-      var incomingFixedTags = [];
-      var incomingImgCats = [];
-
-      if (Array.isArray(data)) {
-        incomingItems = data;
-      } else if (data && Array.isArray(data.items)) {
+      var incomingItems = [], incomingCats = [], incomingColors = {}, incomingSources = [], incomingTrash = [], incomingFixedTags = [], incomingImgCats = [];
+      if (Array.isArray(data)) incomingItems = data;
+      else if (data && Array.isArray(data.items)) {
         incomingItems = data.items;
         incomingCats = Array.isArray(data.cats) ? data.cats : [];
         incomingColors = (data.colors && typeof data.colors === 'object') ? data.colors : {};
@@ -166,186 +145,92 @@ function handleImportFile(file) {
         incomingTrash = Array.isArray(data.trash) ? data.trash : [];
         incomingFixedTags = Array.isArray(data.fixedTags) ? data.fixedTags : [];
         incomingImgCats = Array.isArray(data.imageCategories) ? data.imageCategories : [];
-      } else {
-        throw new Error('bad');
-      }
+      } else throw new Error('bad');
 
-      var added = 0;
-      var skipped = 0;
-      var monthsTouched = {};
-
+      var added = 0, skipped = 0, monthsTouched = {};
       incomingItems.forEach(function (i) {
         if (!i || typeof i.text !== 'string') return;
         if (!i.text && (!Array.isArray(i.images) || i.images.length === 0)) return;
-        if (i.id && db.items.some(function (x) { return x.id === i.id; })) {
-          skipped++;
-          return;
-        }
+        if (i.id && db.items.some(function (x) { return x.id === i.id; })) { skipped++; return; }
         var newItem = {
-          id: i.id || uid(),
-          text: i.text,
-          type: i.type || UNCAT,
-          source: i.source || '',
-          tags: Array.isArray(i.tags) ? Array.from(new Set(i.tags)) : [],
-          images: normalizeImages(i.images),
-          createdAt: i.createdAt || Date.now(),
-          updatedAt: i.updatedAt || undefined
+          id: i.id || uid(), text: i.text, type: i.type || UNCAT,
+          source: i.source || '', tags: Array.isArray(i.tags) ? Array.from(new Set(i.tags)) : [],
+          images: normalizeImages(i.images), createdAt: i.createdAt || Date.now(), updatedAt: i.updatedAt || undefined
         };
         db.items.push(newItem);
+        markItemDirty(newItem);
         if (i.source && db.sources.indexOf(i.source) < 0) db.sources.push(i.source);
         var d = new Date(newItem.createdAt);
         var monthKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
         monthsTouched[monthKey] = (monthsTouched[monthKey] || 0) + 1;
         added++;
       });
-
       incomingTrash.forEach(function (i) {
         if (!i || typeof i.text !== 'string') return;
         if (!i.text && (!Array.isArray(i.images) || i.images.length === 0)) return;
         if (i.id && db.trash.some(function (x) { return x.id === i.id; })) return;
         db.trash.push({
-          id: i.id || uid(),
-          text: i.text,
-          type: i.type || UNCAT,
-          source: i.source || '',
-          tags: Array.isArray(i.tags) ? Array.from(new Set(i.tags)) : [],
-          images: normalizeImages(i.images),
-          createdAt: i.createdAt || Date.now(),
-          updatedAt: i.updatedAt || undefined,
-          deletedAt: i.deletedAt || Date.now()
+          id: i.id || uid(), text: i.text, type: i.type || UNCAT,
+          source: i.source || '', tags: Array.isArray(i.tags) ? Array.from(new Set(i.tags)) : [],
+          images: normalizeImages(i.images), createdAt: i.createdAt || Date.now(),
+          updatedAt: i.updatedAt || undefined, deletedAt: i.deletedAt || Date.now()
         });
       });
-
-      incomingCats.forEach(function (c) {
-        if (typeof c === 'string' && c.trim() && c !== UNCAT && c !== IMG_TYPE && db.cats.indexOf(c) < 0) db.cats.push(c);
-      });
-      incomingSources.forEach(function (s) {
-        if (typeof s === 'string' && s.trim() && db.sources.indexOf(s) < 0) db.sources.push(s);
-      });
-      incomingFixedTags.forEach(function (s) {
-        if (typeof s === 'string' && s.trim() && db.fixedTags.indexOf(s) < 0) db.fixedTags.push(s);
-      });
-      incomingImgCats.forEach(function (s) {
-        if (typeof s === 'string' && s.trim() && db.imageCategories.indexOf(s) < 0) db.imageCategories.push(s);
-      });
+      incomingCats.forEach(function (c) { if (typeof c === 'string' && c.trim() && c !== UNCAT && c !== IMG_TYPE && db.cats.indexOf(c) < 0) db.cats.push(c); });
+      incomingSources.forEach(function (s) { if (typeof s === 'string' && s.trim() && db.sources.indexOf(s) < 0) db.sources.push(s); });
+      incomingFixedTags.forEach(function (s) { if (typeof s === 'string' && s.trim() && db.fixedTags.indexOf(s) < 0) db.fixedTags.push(s); });
+      incomingImgCats.forEach(function (s) { if (typeof s === 'string' && s.trim() && db.imageCategories.indexOf(s) < 0) db.imageCategories.push(s); });
 
       var used = new Set(Object.values(db.colors));
       Object.keys(incomingColors).forEach(function (c) {
         if (db.cats.indexOf(c) >= 0 && !(c in db.colors)) {
           var idx = incomingColors[c];
-          if (typeof idx === 'number' && !used.has(idx)) {
-            db.colors[c] = idx;
-            used.add(idx);
-          }
+          if (typeof idx === 'number' && !used.has(idx)) { db.colors[c] = idx; used.add(idx); }
         }
       });
 
+      // ★ 导入完成后：重建索引 + 标记所有分片脏
       markNeedNormalize();
       normalize();
+      markIndexDirty();
+      markAllShardsDirty();
       db.items.sort(function (a, b) { return b.createdAt - a.createdAt; });
 
-      // 触发保存
       save();
       render();
-
-      // ============ 弹窗：询问是否推送 ============
       showImportResultModal(added, skipped, Object.keys(monthsTouched));
-    } catch (err) {
-      alert('导入失败：请选择本工具导出的 JSON 备份文件');
-    }
+    } catch (err) { toast('导入失败：请选择本工具导出的 JSON 备份文件'); }
   };
   reader.readAsText(file);
 }
 
-// 导入结果弹窗（A 方案）
 function showImportResultModal(added, skipped, months) {
-  // 删除旧的（如果存在）
   var old = document.getElementById('importResultMask');
   if (old) old.remove();
-
-  var monthsPreview = months.length > 3
-    ? months.slice(0, 3).join('、') + ' 等 ' + months.length + ' 个月'
-    : months.join('、');
-
-  var html = ''
-    + '<div class="modal-mask" id="importResultMask" style="z-index: 200;">'
-    + '<div class="modal" style="max-width: 440px;">'
-    + '<div class="modal-icon export-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 8 12 3 17 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>'
-    + '<h3 class="modal-title">导入成功</h3>'
-    + '<p class="modal-desc">共导入 <b>' + added + '</b> 条素材' + (skipped > 0 ? '，跳过 ' + skipped + ' 条（ID 重复）' : '') + '</p>'
-    + (months.length > 0 ? '<p style="font-size:13px; color:var(--text-3); margin:0 0 20px; line-height:1.6;">覆盖 ' + esc(monthsPreview) + '</p>' : '')
-    + '<div style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">'
-    + '<button class="primary" id="importPushNow" style="width:100%; padding:12px;">立即推送到云端</button>'
-    + '<button class="btn" id="importPushLater" style="width:100%; padding:12px; text-align:left; display:flex; flex-direction:column; align-items:flex-start; gap:4px;">'
-    + '<span style="font-weight:600;">稍后自动推送</span>'
-    + '<span style="font-size:12px; color:var(--text-3);">2 秒后自动推送（与日常保存一致）</span>'
-    + '</button>'
-    + '<button class="btn" id="importOnlyLocal" style="width:100%; padding:12px; text-align:left; display:flex; flex-direction:column; align-items:flex-start; gap:4px;">'
-    + '<span style="font-weight:600;">仅本地</span>'
-    + '<span style="font-size:12px; color:var(--text-3);">暂不推送，但后续修改会一起推送</span>'
-    + '</button>'
-    + '</div>'
-    + '</div>'
-    + '</div>';
-
+  var monthsPreview = months.length > 3 ? months.slice(0, 3).join('、') + ' 等 ' + months.length + ' 个月' : months.join('、');
+  var html = '<div class="modal-mask" id="importResultMask" style="z-index: 200;"><div class="modal" style="max-width: 440px;"><div class="modal-icon export-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 8 12 3 17 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><h3 class="modal-title">导入成功</h3><p class="modal-desc">共导入 <b>' + added + '</b> 条素材' + (skipped > 0 ? '，跳过 ' + skipped + ' 条（ID 重复）' : '') + '</p>' + (months.length > 0 ? '<p style="font-size:13px; color:var(--text-3); margin:0 0 20px; line-height:1.6;">覆盖 ' + esc(monthsPreview) + '</p>' : '') + '<div style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;"><button class="primary" id="importPushNow" style="width:100%; padding:12px;">立即推送到云端</button><button class="btn" id="importPushLater" style="width:100%; padding:12px; text-align:left; display:flex; flex-direction:column; align-items:flex-start; gap:4px;"><span style="font-weight:600;">稍后自动推送</span><span style="font-size:12px; color:var(--text-3);">2 秒后自动推送（与日常保存一致）</span></button><button class="btn" id="importOnlyLocal" style="width:100%; padding:12px; text-align:left; display:flex; flex-direction:column; align-items:flex-start; gap:4px;"><span style="font-weight:600;">仅本地</span><span style="font-size:12px; color:var(--text-3);">暂不推送，但后续修改会一起推送</span></button></div></div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
-
   var mask = document.getElementById('importResultMask');
-
   function close() { mask.remove(); }
-
   document.getElementById('importPushNow').addEventListener('click', function () {
     close();
-    if (typeof ghPush === 'function') {
-      toast('正在推送...');
-      ghPush(false).then(function (ok) {
-        if (ok) toast('推送成功');
-        else toast('推送失败，请检查网络');
-      });
-    }
+    if (typeof ghPush === 'function') { toast('正在推送...'); ghPush(false).then(function (ok) { if (ok) toast('推送成功'); else toast('推送失败，请检查网络'); }); }
   });
-
-  document.getElementById('importPushLater').addEventListener('click', function () {
-    close();
-    if (typeof scheduleAutoPush === 'function') {
-      scheduleAutoPush();
-      toast('将在 2 秒后自动推送');
-    }
-  });
-
-  document.getElementById('importOnlyLocal').addEventListener('click', function () {
-    close();
-    toast('已保留在本地，后续修改会自动推送');
-  });
-
-  mask.addEventListener('click', function (e) {
-    if (e.target === mask) close();
-  });
+  document.getElementById('importPushLater').addEventListener('click', function () { close(); if (typeof scheduleAutoPush === 'function') { scheduleAutoPush(); toast('将在 2 秒后自动推送'); } });
+  document.getElementById('importOnlyLocal').addEventListener('click', function () { close(); toast('已保留在本地，后续修改会自动推送'); });
+  mask.addEventListener('click', function (e) { if (e.target === mask) close(); });
 }
 
 // ============ 侧边栏 ============
-function openSidebar() {
-  $('sidebar').classList.add('open');
-  $('sidebarOverlay').classList.add('show');
-  document.body.style.overflow = 'hidden';
-}
-function closeSidebar() {
-  $('sidebar').classList.remove('open');
-  $('sidebarOverlay').classList.remove('show');
-  document.body.style.overflow = '';
-}
-function closeSidebarIfMobile() {
-  if (window.innerWidth <= 960) closeSidebar();
-}
+function openSidebar() { $('sidebar').classList.add('open'); $('sidebarOverlay').classList.add('show'); document.body.style.overflow = 'hidden'; }
+function closeSidebar() { $('sidebar').classList.remove('open'); $('sidebarOverlay').classList.remove('show'); document.body.style.overflow = ''; }
+function closeSidebarIfMobile() { if (window.innerWidth <= 960) closeSidebar(); }
 
-// 全局暴露
-window.setZen = setZen;
-window.setFocus = setFocus;
-window.openExportModal = openExportModal;
-window.closeExportModal = closeExportModal;
-window.doExport = doExport;
-window.handleImportFile = handleImportFile;
+// ============ 全局暴露 ============
+window.setZen = setZen; window.setFocus = setFocus;
+window.openExportModal = openExportModal; window.closeExportModal = closeExportModal;
+window.doExport = doExport; window.handleImportFile = handleImportFile;
 window.showImportResultModal = showImportResultModal;
-window.openSidebar = openSidebar;
-window.closeSidebar = closeSidebar;
+window.openSidebar = openSidebar; window.closeSidebar = closeSidebar;
 window.closeSidebarIfMobile = closeSidebarIfMobile;
+window.checkExportReminder = checkExportReminder;
