@@ -70,15 +70,9 @@ function cleanupSources() { var activeSources = new Set(db.items.map(function (i
 function catColor(name) { if (name === UNCAT) return { bg: '#f1f5f9', fg: '#64748b' }; if (name === IMG_TYPE) return { bg: '#f5f3ff', fg: '#a855f7' }; var idx = db.colors[name]; if (typeof idx !== 'number') return PALETTE[0]; if (idx < PALETTE.length) return PALETTE[idx]; var hue = Math.round((idx * 137.508) % 360); return { bg: 'hsl(' + hue + ', 70%, 95%)', fg: 'hsl(' + hue + ', 60%, 40%)' }; }
 function collectTags() { var counts = {}; db.items.forEach(function (i) { var tSet = new Set(i.tags || []); (i.images || []).forEach(function (im) { (im.tags || []).forEach(function (t) { tSet.add(t); }); }); tSet.forEach(function (t) { counts[t] = (counts[t] || 0) + 1; }); }); return counts; }
 
-// ★ 新增：侧边栏统计缓存（极大优化性能）
+// ★ 移除开关判断，强制走缓存 (因为底层优化对用户不应可见)
 var _statsCache = { rev: -1, catCounts: {}, sourceCounts: {}, tagCounts: {} };
 function getSidebarStats() {
-  if (db.settings.enableStatsCache === false) {
-    // 如果关闭了缓存，则实时计算
-    var c = {}, s = {}, t = {};
-    db.items.forEach(function (i) { c[i.type] = (c[i.type] || 0) + 1; if (i.source) s[i.source] = (s[i.source] || 0) + 1; var tSet = new Set(i.tags || []); (i.images || []).forEach(function (im) { (im.tags || []).forEach(function (tg) { tSet.add(tg); }); }); tSet.forEach(function (tg) { t[tg] = (t[tg] || 0) + 1; }); });
-    return { catCounts: c, sourceCounts: s, tagCounts: t };
-  }
   if (_statsCache.rev === db._rev) return _statsCache;
   var cc = {}, sc = {}, tc = {};
   db.items.forEach(function (i) {

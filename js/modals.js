@@ -126,12 +126,11 @@ var modalsHtml = ''
   + '<div style="display:flex; gap:10px;"><div style="flex:1;"><div style="font-size:12px; text-align:center; margin-bottom:6px;">分类</div><input type="number" id="catLimitInput" min="1" max="30" value="3" style="width:100%; text-align:center; padding:8px; border:none; background:var(--bg);"></div><div style="flex:1;"><div style="font-size:12px; text-align:center; margin-bottom:6px;">来源</div><input type="number" id="srcLimitInput" min="1" max="30" value="3" style="width:100%; text-align:center; padding:8px; border:none; background:var(--bg);"></div><div style="flex:1;"><div style="font-size:12px; text-align:center; margin-bottom:6px;">标签</div><input type="number" id="tagLimitInput" min="1" max="30" value="3" style="width:100%; text-align:center; padding:8px; border:none; background:var(--bg);"></div></div>'
   + '</div></div>'
 
-  // ============ ★ 新增：极客 DIY · 快捷键与交互 ============
-  + '<div class="st-card" data-group="general"><div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div class="st-card-title">极客 DIY · 快捷键与交互</div><div class="st-card-desc">全部可自由开关，小白也能一键还原</div></div></div><div class="st-card-body">'
+  // ============ ★ 新增：快捷操作与交互（修改标题与描述） ============
+  + '<div class="st-card" data-group="general"><div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div class="st-card-title">快捷操作与交互体验</div><div class="st-card-desc">定制专属快捷键、右键菜单与标签折叠，打造顺滑操作流</div></div></div><div class="st-card-body">'
   + '<label class="st-toggle"><div><div class="st-toggle-title">开启全局快捷键</div><div class="st-toggle-desc">/ 搜索 · N 新建 · Ctrl+S 推送 · Alt+Enter 盲盒</div></div><input type="checkbox" id="enableShortcuts" checked></label>'
   + '<div class="st-grid-2" style="margin-bottom:16px;"><div class="st-field"><label>搜索快捷键</label><input type="text" id="shortcutSearch" maxlength="1" value="/" placeholder="/"><div class="st-hint">单个字符，默认 /</div></div><div class="st-field"><label>新建快捷键</label><input type="text" id="shortcutNew" maxlength="1" value="n" placeholder="n"><div class="st-hint">单个字符，默认 N</div></div></div>'
   + '<label class="st-toggle"><div><div class="st-toggle-title">开启右键 / 长按菜单</div><div class="st-toggle-desc">桌面端右键、移动端长按卡片弹出快捷操作</div></div><input type="checkbox" id="enableContextMenu" checked></label>'
-  + '<label class="st-toggle"><div><div class="st-toggle-title">开启侧栏统计缓存</div><div class="st-toggle-desc">万条级数据下点击分类、标签依旧顺滑</div></div><input type="checkbox" id="enableStatsCache" checked></label>'
   + '<div class="st-field"><label>标签折叠阈值</label><div class="st-inline"><input type="number" class="setting-num" id="maxTagsInHeader" min="1" max="10" value="3"><span class="st-suffix">个</span></div><div class="st-hint">页头显示的标签超过此数量时折叠为「等 X 个」</div></div>'
   + '</div></div>'
 
@@ -380,6 +379,14 @@ var modalsHtml = ''
   + '<h3 class="modal-title">数据健康检查</h3><p class="modal-desc">共 <b id="healthTotal">0</b> 条素材</p>'
   + '<div class="health-list" id="healthList"></div>'
   + '<div class="modal-actions" style="justify-content:flex-end;"><button class="btn" id="healthCloseBtn">关闭</button></div>'
+  + '</div></div>'
+
+  // ============ ★ 自定义输入弹窗（替代原生 prompt） ============
+  + '<div class="modal-mask" id="customPromptMask">'
+  + '<div class="modal"><div class="modal-icon export-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>'
+  + '<h3 class="modal-title" id="cpTitle">修改</h3><p class="modal-desc" id="cpDesc">请输入：</p>'
+  + '<div class="export-field"><input class="modal-input" id="cpInput" autocomplete="off"></div>'
+  + '<div class="modal-actions"><button class="btn" id="cpCancel">取消</button><button class="primary" id="cpConfirm">确定</button></div>'
   + '</div></div>'
 
   + '<input type="file" id="fileInput" accept=".json" hidden>'

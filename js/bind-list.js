@@ -68,9 +68,8 @@ listEl.addEventListener('click', function (e) {
 });
 
 $('pagination').addEventListener('click', function (e) {
-  // ★ 优先处理「加载更早历史素材」（由 bind-core.js 中的全局委托处理）
   var loadMoreBtn = e.target.closest('#loadMoreShardsBtn');
-  if (loadMoreBtn) return; // 交给 bind-core.js 的 document 委托处理
+  if (loadMoreBtn) return;
 
   var btn = e.target.closest('.page-btn[data-page]');
   if (!btn || btn.disabled) return;
@@ -229,11 +228,10 @@ if (batchSourceConfirmEl) {
 }
 
 // ============================================================
-// ★ 新增：卡片右键 / 长按快捷菜单
+// ★ 新增：卡片右键 / 长按快捷菜单 (替换为自定义弹窗)
 //    受 db.settings.enableContextMenu 控制
 // ============================================================
 (function () {
-  // 注入样式
   if (!document.getElementById('ctxMenuStyle')) {
     var st = document.createElement('style');
     st.id = 'ctxMenuStyle';
@@ -270,7 +268,6 @@ if (batchSourceConfirmEl) {
       + '<button data-ctx="del" class="danger">🗑 删除（可恢复）</button>';
     document.body.appendChild(ctxMenu);
 
-    // 边界修正
     var rect = ctxMenu.getBoundingClientRect();
     var px = x, py = y;
     if (px + rect.width > window.innerWidth - 8) px = window.innerWidth - rect.width - 8;
@@ -302,38 +299,55 @@ if (batchSourceConfirmEl) {
       } else if (act === 'move') {
         var cats = db.cats.slice();
         if (!cats.length) { toast('还没有分类'); return; }
-        var target = prompt('移动到分类（输入其中一个）：\n' + cats.join(' / '), item.type);
-        if (target && target.trim() && cats.indexOf(target.trim()) >= 0 && target.trim() !== item.type) {
-          item.type = target.trim();
-          item.updatedAt = Date.now();
-          save(); render();
-          toast('已移动到「' + target.trim() + '」');
-        } else if (target && target.trim() && cats.indexOf(target.trim()) < 0) {
-          toast('分类不存在：' + target.trim());
-        }
+        window.showCustomPrompt({
+          title: '移动到分类',
+          desc: '输入分类名（可选：' + cats.join(' / ') + '）：',
+          value: item.type,
+          onConfirm: function(target) {
+            if (target && target.trim() && cats.indexOf(target.trim()) >= 0 && target.trim() !== item.type) {
+              item.type = target.trim();
+              item.updatedAt = Date.now();
+              save(); render();
+              toast('已移动到「' + target.trim() + '」');
+            } else if (target && target.trim() && cats.indexOf(target.trim()) < 0) {
+              toast('分类不存在：' + target.trim());
+            }
+          }
+        });
       } else if (act === 'tag') {
-        var t = prompt('添加/修改标签（逗号分隔，留空则清空）:', (item.tags || []).join(', '));
-        if (t !== null) {
-          var cur = t.split(/[,，\s]+/).filter(Boolean);
-          item.tags = Array.from(new Set(cur));
-          item.updatedAt = Date.now();
-          save(); render();
-          toast('标签已更新');
-        }
+        window.showCustomPrompt({
+          title: '修改标签',
+          desc: '输入逗号分隔的标签（留空则清空）：',
+          value: (item.tags || []).join(', '),
+          onConfirm: function(t) {
+            if (t !== null) {
+              var cur = t.split(/[,，\s]+/).filter(Boolean);
+              item.tags = Array.from(new Set(cur));
+              item.updatedAt = Date.now();
+              save(); render();
+              toast('标签已更新');
+            }
+          }
+        });
       } else if (act === 'source') {
-        var s = prompt('设置来源（留空则清空）:', item.source || '');
-        if (s !== null) {
-          item.source = s.trim();
-          if (item.source && db.sources.indexOf(item.source) < 0) db.sources.push(item.source);
-          item.updatedAt = Date.now();
-          save(); render();
-          toast('来源已更新');
-        }
+        window.showCustomPrompt({
+          title: '设置来源',
+          desc: '输入来源名称（留空则清空）：',
+          value: item.source || '',
+          onConfirm: function(s) {
+            if (s !== null) {
+              item.source = s.trim();
+              if (item.source && db.sources.indexOf(item.source) < 0) db.sources.push(item.source);
+              item.updatedAt = Date.now();
+              save(); render();
+              toast('来源已更新');
+            }
+          }
+        });
       }
     });
   }
 
-  // 桌面端：右键
   document.addEventListener('contextmenu', function (e) {
     if (!db.settings || db.settings.enableContextMenu === false) return;
     var card = e.target.closest('#list .card');
@@ -345,7 +359,6 @@ if (batchSourceConfirmEl) {
     showCtxMenu(e.clientX, e.clientY, card.dataset.id);
   });
 
-  // 移动端：长按 600ms
   var lpTimer = null;
   var lpCard = null;
   var lpX = 0, lpY = 0;
@@ -381,7 +394,6 @@ if (batchSourceConfirmEl) {
     }
   }, { passive: true });
 
-  // 点击外部 / 滚动关闭
   document.addEventListener('click', function (e) {
     if (ctxMenu && !ctxMenu.contains(e.target)) closeCtxMenu();
   });

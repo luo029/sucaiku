@@ -42,14 +42,13 @@ var DEFAULT_SETTINGS = {
   importDefaultAction: 'ask', timezoneMode: 'local', showProgressBar: true,
   integrityCheckMode: 'weekly', maxSplitParts: 10, autoDeleteEmptyShard: true,
 
-  // ★ 本次新增的 DIY 体验设置
-  enableStatsCache: true,      // 开启侧边栏统计缓存（提速）
-  enableShortcuts: true,       // 开启全局快捷键
-  shortcutSearch: '/',         // 搜索快捷键
-  shortcutNew: 'n',            // 新建快捷键
-  shortcutPush: 'ctrl+s',      // 强制推送快捷键
-  maxTagsInHeader: 3,          // 标题栏标签折叠阈值
-  enableContextMenu: true      // 开启右键菜单
+  // ★ 移除 enableStatsCache（强制开启）
+  enableShortcuts: true,
+  shortcutSearch: '/',
+  shortcutNew: 'n',
+  shortcutPush: 'ctrl+s',
+  maxTagsInHeader: 3,
+  enableContextMenu: true
 };
 
 var PALETTE = [
@@ -188,8 +187,7 @@ function applySettingsToUI() {
   if ($('focusImgDefaultCat')) { var selCat = $('focusImgDefaultCat'); selCat.innerHTML = db.imageCategories.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join(''); selCat.value = s.focusImgDefaultCat || '其他'; }
   if ($('imgNamingTemplate')) $('imgNamingTemplate').value = s.imgNamingTemplate || '{cat}-{timestamp}-{rand}'; if (typeof window.updateImgNamingPreview === 'function') window.updateImgNamingPreview();
   
-  // 新增体验设置回显
-  if ($('enableStatsCache')) $('enableStatsCache').checked = s.enableStatsCache !== false;
+  // 快捷操作回显（移除 enableStatsCache）
   if ($('enableShortcuts')) $('enableShortcuts').checked = s.enableShortcuts !== false;
   if ($('shortcutSearch')) $('shortcutSearch').value = s.shortcutSearch || '/';
   if ($('shortcutNew')) $('shortcutNew').value = s.shortcutNew || 'n';

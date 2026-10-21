@@ -5,6 +5,38 @@ var safeBind = function (id, event, fn) {
   if (el) el.addEventListener(event, fn);
 };
 
+// ============ 自定义输入弹窗 (替代原生 prompt) ============
+window.showCustomPrompt = function(options) {
+  var mask = $('customPromptMask');
+  if (!mask) return;
+  $('cpTitle').textContent = options.title || '输入';
+  $('cpDesc').textContent = options.desc || '';
+  $('cpInput').value = options.value || '';
+  $('cpInput').placeholder = options.placeholder || '';
+  
+  mask.classList.add('show');
+  setTimeout(function() { $('cpInput').focus(); $('cpInput').select(); }, 50);
+  
+  var newConfirm = $('cpConfirm').cloneNode(true);
+  $('cpConfirm').parentNode.replaceChild(newConfirm, $('cpConfirm'));
+  
+  var newCancel = $('cpCancel').cloneNode(true);
+  $('cpCancel').parentNode.replaceChild(newCancel, $('cpCancel'));
+  
+  newConfirm.addEventListener('click', function() {
+    var val = $('cpInput').value;
+    mask.classList.remove('show');
+    if (options.onConfirm) options.onConfirm(val);
+  });
+  newCancel.addEventListener('click', function() { mask.classList.remove('show'); });
+  
+  $('cpInput').onkeydown = function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); newConfirm.click(); }
+    if (e.key === 'Escape') newCancel.click();
+  };
+  mask.onclick = function(e) { if (e.target === mask) newCancel.click(); };
+};
+
 // ============ 视图切换 ============
 safeBind('batchExportBtn', 'click', function () {
   if (!selectedIds.size) { toast('请先选择素材'); return; }
@@ -752,7 +784,7 @@ safeBind('tinypngKey', 'change', function (e) { db.settings.tinypngKey = e.targe
 safeBind('tinypngProxy', 'change', function (e) { db.settings.tinypngProxy = e.target.value.trim(); saveSettings(); });
 
 // ============================================================
-// ★ 新增：极客 DIY 设置项绑定
+// ★ 修改：快捷操作绑定（移除统计缓存开关绑定）
 // ============================================================
 safeBind('enableShortcuts', 'change', function (e) {
   db.settings.enableShortcuts = e.target.checked;
@@ -769,7 +801,6 @@ safeBind('shortcutSearch', 'change', function (e) {
   toast('搜索快捷键已设为 ' + v);
 });
 safeBind('shortcutSearch', 'input', function (e) {
-  // 保证始终单字符
   if (e.target.value.length > 1) e.target.value = e.target.value.charAt(0);
 });
 safeBind('shortcutNew', 'change', function (e) {
@@ -788,12 +819,6 @@ safeBind('enableContextMenu', 'change', function (e) {
   db.settings.enableContextMenu = e.target.checked;
   saveSettings();
   toast(e.target.checked ? '已开启右键/长按菜单' : '已关闭右键/长按菜单');
-});
-safeBind('enableStatsCache', 'change', function (e) {
-  db.settings.enableStatsCache = e.target.checked;
-  saveSettings();
-  render();
-  toast(e.target.checked ? '已开启侧栏统计缓存' : '已关闭侧栏统计缓存');
 });
 safeBind('maxTagsInHeader', 'change', function (e) {
   var v = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 3));
@@ -1080,11 +1105,17 @@ function renderDeviceList() {
       var devs = loadDevices();
       var d = devs[id];
       if (!d) return;
-      var name = prompt('输入新设备名：', d.name);
-      if (!name || !name.trim()) return;
-      d.name = name.trim();
-      localStorage.setItem('material-library.devices-cache', JSON.stringify(devs));
-      renderDeviceList();
+      window.showCustomPrompt({
+        title: '重命名设备',
+        desc: '输入新的设备名称：',
+        value: d.name,
+        onConfirm: function(name) {
+          if (!name || !name.trim()) return;
+          d.name = name.trim();
+          localStorage.setItem('material-library.devices-cache', JSON.stringify(devs));
+          renderDeviceList();
+        }
+      });
     });
   });
   wrap.querySelectorAll('[data-device-status]').forEach(function (btn) {
@@ -1203,23 +1234,30 @@ safeBind('tagBatchDeleteBtn', 'click', function () {
 });
 safeBind('tagBatchMergeBtn', 'click', function () {
   if (_tagBatchSelected.size < 2) return toast('至少选择 2 个标签才能合并');
-  var target = prompt('合并到哪个标签？', Array.from(_tagBatchSelected)[0]);
-  if (!target || !target.trim()) return;
-  target = target.trim();
-  var sources = Array.from(_tagBatchSelected).filter(function (t) { return t !== target; });
-  db.items.forEach(function (i) {
-    if (Array.isArray(i.tags) && i.tags.some(function (t) { return sources.indexOf(t) >= 0; })) {
-      i.tags = Array.from(new Set(i.tags.map(function (t) { return sources.indexOf(t) >= 0 ? target : t; })));
+  var def = Array.from(_tagBatchSelected)[0];
+  window.showCustomPrompt({
+    title: '合并标签',
+    desc: '将选中的 ' + _tagBatchSelected.size + ' 个标签合并到：',
+    value: def,
+    onConfirm: function(target) {
+      if (!target || !target.trim()) return;
+      target = target.trim();
+      var sources = Array.from(_tagBatchSelected).filter(function (t) { return t !== target; });
+      db.items.forEach(function (i) {
+        if (Array.isArray(i.tags) && i.tags.some(function (t) { return sources.indexOf(t) >= 0; })) {
+          i.tags = Array.from(new Set(i.tags.map(function (t) { return sources.indexOf(t) >= 0 ? target : t; })));
+        }
+      });
+      sources.forEach(function (t) {
+        db.fixedTags = db.fixedTags.filter(function (x) { return x !== t; });
+        if (db.tagColors && db.tagColors[t] && !db.tagColors[target]) db.tagColors[target] = db.tagColors[t];
+        if (db.tagColors) delete db.tagColors[t];
+      });
+      _tagBatchSelected.clear();
+      save(); render(); renderTagManagerWithBatch();
+      toast('已合并到「' + target + '」');
     }
   });
-  sources.forEach(function (t) {
-    db.fixedTags = db.fixedTags.filter(function (x) { return x !== t; });
-    if (db.tagColors && db.tagColors[t] && !db.tagColors[target]) db.tagColors[target] = db.tagColors[t];
-    if (db.tagColors) delete db.tagColors[t];
-  });
-  _tagBatchSelected.clear();
-  save(); render(); renderTagManagerWithBatch();
-  toast('已合并到「' + target + '」');
 });
 
 function renderTagManagerWithBatch() {
