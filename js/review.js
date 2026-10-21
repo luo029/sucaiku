@@ -1,6 +1,5 @@
 // js/review.js · 完整文件
-// 【改动】1) saveCurrent 里加 markItemDirty + _indexUpdateItem  2) rvUndoBtn 里恢复时加索引维护
-// 其余与原版完全一致
+// 【改动】修复纯图片素材无法“准奏”
 
 (function() {
   var reviewHTML = ''
@@ -494,13 +493,16 @@
     loadReviewItem();
   }
 
-  // ★ 关键：saveCurrent 里加索引维护
+  // ★ 修复Bug 3：判断是否有文字或图片，只要有一样就算有内容
   function saveCurrent() {
     if (!reviewCurrentId) return false;
     var item = db.items.find(function (i) { return i.id === reviewCurrentId; });
     if (!item) return false;
     var newText = document.getElementById('reviewText').value.trim();
-    if (!newText && (!item.images || item.images.length === 0)) {
+    var hasText = newText.length > 0;
+    var hasImgs = item.images && item.images.length > 0;
+    
+    if (!hasText && !hasImgs) {
       if (rvStyle.preventAccident) { if (window.toast) toast('内容已被清空，请点击【焚毁】来销毁，或按 Ctrl+Z 撤销'); return false; }
       else return true;
     }
@@ -511,7 +513,6 @@
     item.source = currentSource;
     if (currentSource && db.sources.indexOf(currentSource) < 0) db.sources.push(currentSource);
     item.updatedAt = Date.now();
-    // ★ 维护脏分片 + 增量索引
     markItemDirty(item);
     _indexUpdateItem(oldCopy, item);
     battleStats.chars += newText.replace(/\s/g, '').length;

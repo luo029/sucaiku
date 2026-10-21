@@ -258,10 +258,22 @@ function _pushOneShard(rc, cfg, key, items, existingShaMap) {
       var b64 = utf8ToBase64(content);
       var existingSha = existingShaMap[path] || null;
       var attempt = 0;
+      
       function tryOnce() {
         return ghPutRaw(rc, path, b64, existingSha, 'sync ' + path).then(function () {
           return true;
         }).catch(function (e) {
+          // 修复Bug 2：如果是 422 或 409，且没有 existingSha，可能是文件已存在但树没拉到，去拿 sha 再重试
+          var isConflict = e.message && (e.message.indexOf('422') >= 0 || e.message.indexOf('409') >= 0);
+          if (isConflict && !existingSha) {
+             return ghGetRaw(rc, path).then(function(file) {
+                 if (file && file.sha) {
+                     existingSha = file.sha;
+                     return ghPutRaw(rc, path, b64, existingSha, 'sync ' + path).then(function(){ return true; });
+                 }
+                 throw e;
+             });
+          }
           attempt++;
           if (attempt <= retryCount) {
             return new Promise(function (r) { setTimeout(r, retryDelay); }).then(function () { return tryOnce(); });
@@ -328,14 +340,31 @@ function ghPush(silent, force) {
     for (var w = 0; w < concurrency; w++) workers.push(pushWorker());
     return Promise.all(workers).then(function () { return existingShaMap; });
   }).then(function (existingShaMap) {
-    // 删除旧分片
+    // 修复Bug 1：删除旧分片，支持清理残缺的多个 part
     var deleteChain = Promise.resolve();
     toDelete.forEach(function (dk) {
       deleteChain = deleteChain.then(function () {
-        var dpath = _pathForShard(cfg, dk, 1);
-        var sha = existingShaMap[dpath];
-        if (!sha) { _delSnap(dk); _syncProgress.done++; _updateSyncProgress(); return; }
-        return ghDeleteRaw(rc, dpath, sha, 'delete ' + dpath).then(function () { _delSnap(dk); }).catch(function (e) { console.warn('删除分片失败', dk, e); }).then(function () { _syncProgress.done++; _updateSyncProgress(); });
+        // 找出所有属于这个 dk 的路径，无论有几个 part
+        var pathsToDelete = Object.keys(existingShaMap).filter(function(p) {
+            return p.indexOf('/data-' + dk) >= 0 && p.endsWith('.json');
+        });
+        if (pathsToDelete.length === 0) {
+            _delSnap(dk); _syncProgress.done++; _updateSyncProgress(); 
+            return; 
+        }
+        var pChain = Promise.resolve();
+        pathsToDelete.forEach(function(dpath) {
+            var sha = existingShaMap[dpath];
+            pChain = pChain.then(function() {
+                return ghDeleteRaw(rc, dpath, sha, 'delete ' + dpath)
+                    .catch(function (e) { console.warn('删除分片失败', dpath, e); });
+            });
+        });
+        return pChain.then(function() {
+            _delSnap(dk); 
+            _syncProgress.done++; 
+            _updateSyncProgress();
+        });
       });
     });
     return deleteChain.then(function () { return existingShaMap; });

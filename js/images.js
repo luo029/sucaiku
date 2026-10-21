@@ -1,6 +1,4 @@
 // js/images.js · 完整文件
-// 【改动】1) A9 图片索引缓存 _allImagesCache 按 rev 缓存，避免每次全扫
-
 var webpSupported = false;
 try { webpSupported = document.createElement('canvas').toDataURL('image/webp').indexOf('data:image/webp') === 0; } catch (e) {}
 
