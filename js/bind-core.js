@@ -1,12 +1,13 @@
-/* js / bind-core.js · 事件绑定：输入区 / 选择器 / 搜索 / 导航 / 图片兜底 */
-addBtn.addEventListener('click',addOrUpdate);
-cancelBtn.addEventListener('click',cancelEdit);
+// js/bind-core.js - 事件绑定：输入区 / 选择器 / 搜索 / 导航 / 图片兜底
 
-inputEl.addEventListener('keydown',e=>{
-  if(e.key !== 'Enter') return;
+addBtn.addEventListener('click', addOrUpdate);
+cancelBtn.addEventListener('click', cancelEdit);
+
+inputEl.addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter') return;
   
-  const isCtrl = e.ctrlKey || e.metaKey;
-  const shortcut = db.settings.saveShortcut || 'ctrl-enter';
+  var isCtrl = e.ctrlKey || e.metaKey;
+  var shortcut = db.settings.saveShortcut || 'ctrl-enter';
 
   if (shortcut === 'enter') {
     if (!e.shiftKey) {
@@ -23,13 +24,10 @@ inputEl.addEventListener('keydown',e=>{
 
 function handleIncomingImages(files) {
   if (!files.length) return;
-  
-  // ★ 判断是否在专注模式，且开启了跳过分类
   if (focusMode && db.settings.focusImgAutoUpload !== false) {
     pendingUploadFiles = files;
-    const cats = db.imageCategories.length ? db.imageCategories : DEFAULT_IMG_CATS;
-    // 校验默认分类是否存在，不存在就用第一个
-    pendingUploadCat = cats.includes(db.settings.focusImgDefaultCat) ? db.settings.focusImgDefaultCat : cats[0];
+    var cats = db.imageCategories.length ? db.imageCategories : DEFAULT_IMG_CATS;
+    pendingUploadCat = cats.indexOf(db.settings.focusImgDefaultCat) >= 0 ? db.settings.focusImgDefaultCat : cats[0];
     
     if ($('imgUploadTags')) $('imgUploadTags').value = '';
     startUploadPending();
@@ -38,153 +36,138 @@ function handleIncomingImages(files) {
   }
 }
 
-inputEl.addEventListener('paste',e=>{
-  const items=(e.clipboardData||e.originalEvent.clipboardData).items;
-  const files=[];
-  for(let i=0;i<items.length;i++){
-    const it=items[i];
-    if(it.kind==='file'&&it.type.startsWith('image/')){files.push(it.getAsFile());}
+inputEl.addEventListener('paste', function (e) {
+  var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+  var files = [];
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if (it.kind === 'file' && it.type.indexOf('image/') === 0) {
+      files.push(it.getAsFile());
+    }
   }
-  if(files.length){
+  if (files.length) {
     e.preventDefault();
     handleIncomingImages(files);
   }
 });
 
-$('imgBtn').addEventListener('click',()=>{
-  const cfg=loadGH();
-  if(!ghReady(cfg)){toast('请先在设置中配置 GitHub');return;}
+$('imgBtn').addEventListener('click', function () {
+  var cfg = loadGH();
+  if (!ghReady(cfg)) { toast('请先在设置中配置 GitHub'); return; }
   $('imgFileInput').click();
 });
-$('imgFileInput').addEventListener('change',e=>{
-  const files=Array.from(e.target.files||[]);
-  e.target.value='';
+$('imgFileInput').addEventListener('change', function (e) {
+  var files = Array.from(e.target.files || []);
+  e.target.value = '';
   handleIncomingImages(files);
 });
 
-// ★ 新增：全局剪贴板粘贴监听（在任何地方按 Ctrl+V 都能吸入输入框）
-document.addEventListener('paste', e => {
-  // 1. 如果当前是在输入框、搜索框等地方，交还浏览器默认处理，不干预
-  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) {
-    return;
-  }
-
-  // 2. 如果有弹窗打开（如设置、图床等），不干预
+document.addEventListener('paste', function (e) {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
   if (document.querySelector('.modal-mask.show') || 
       (document.getElementById('imgView') && !document.getElementById('imgView').hidden) ||
-      (document.getElementById('imgManagerView') && !document.getElementById('imgManagerView').hidden)) {
-    return;
-  }
+      (document.getElementById('imgManagerView') && !document.getElementById('imgManagerView').hidden)) return;
+  if (document.body.classList.contains('zen-mode') || document.body.classList.contains('guest-mode')) return;
 
-  // 3. 极简模式、访客模式下不干预
-  if (document.body.classList.contains('zen-mode') || document.body.classList.contains('guest-mode')) {
-    return;
-  }
-
-  // 4. 读取纯文本
-  const clipboardData = e.clipboardData || window.clipboardData;
+  var clipboardData = e.clipboardData || window.clipboardData;
   if (!clipboardData) return;
-  const text = clipboardData.getData('text/plain');
+  var text = clipboardData.getData('text/plain');
   if (!text || !text.trim()) return;
 
-  // 5. 阻止默认行为（防止粘贴到奇怪的地方），并吸入输入框
   e.preventDefault();
-  
-  if (inputEl.value.trim()) {
-    inputEl.value += '\n' + text;
-  } else {
-    inputEl.value = text;
-  }
+  if (inputEl.value.trim()) inputEl.value += '\n' + text;
+  else inputEl.value = text;
 
   scrollTop();
   inputEl.focus();
   inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
-  
-  if (!document.body.classList.contains('focus-mode')) {
-    toast('已自动吸入剪贴板');
-  }
+  if (!document.body.classList.contains('focus-mode')) toast('已自动吸入剪贴板');
 });
 
-$('imgCatList').addEventListener('click',e=>{
-  const opt=e.target.closest('.img-cat-opt');if(!opt)return;
-  pendingUploadCat=opt.dataset.cat;
-  $('imgCatList').querySelectorAll('.img-cat-opt').forEach(el=>{
-    el.classList.toggle('active',el.dataset.cat===pendingUploadCat);
+$('imgCatList').addEventListener('click', function (e) {
+  var opt = e.target.closest('.img-cat-opt'); if (!opt) return;
+  pendingUploadCat = opt.dataset.cat;
+  $('imgCatList').querySelectorAll('.img-cat-opt').forEach(function (el) {
+    el.classList.toggle('active', el.dataset.cat === pendingUploadCat);
   });
 });
-$('imgCatCancel').addEventListener('click',()=>{
-  if(uploadInProgress)return;
+$('imgCatCancel').addEventListener('click', function () {
+  if (uploadInProgress) return;
   $('imgCatMask').classList.remove('show');
-  pendingUploadFiles=[];
+  pendingUploadFiles = [];
 });
-$('imgCatConfirm').addEventListener('click',()=>startUploadPending());
-$('imgCatMask').addEventListener('click',e=>{
-  if(e.target===$('imgCatMask')&&!uploadInProgress){
+$('imgCatConfirm').addEventListener('click', function () { startUploadPending(); });
+$('imgCatMask').addEventListener('click', function (e) {
+  if (e.target === $('imgCatMask') && !uploadInProgress) {
     $('imgCatMask').classList.remove('show');
-    pendingUploadFiles=[];
+    pendingUploadFiles = [];
   }
 });
 
-pendingImgsEl.addEventListener('click',e=>{
-  const btn=e.target.closest('[data-rm-img]');if(!btn)return;
-  const idx=parseInt(btn.dataset.rmImg,10);
-  if(idx>=0&&idx<pendingImages.length){pendingImages.splice(idx,1);renderPendingImgs();}
+pendingImgsEl.addEventListener('click', function (e) {
+  var btn = e.target.closest('[data-rm-img]'); if (!btn) return;
+  var idx = parseInt(btn.dataset.rmImg, 10);
+  if (idx >= 0 && idx < pendingImages.length) {
+    pendingImages.splice(idx, 1);
+    renderPendingImgs();
+  }
 });
 
-$('sourceToggle').addEventListener('click',e=>{
-  e.stopPropagation();closeTagPanel();
-  if(sourcePanel.hidden)openSourcePanel();else closeSourcePanel();
+$('sourceToggle').addEventListener('click', function (e) {
+  e.stopPropagation(); closeTagPanel();
+  if (sourcePanel.hidden) openSourcePanel(); else closeSourcePanel();
 });
-spSearch.addEventListener('input',()=>renderSourcePanelList(spSearch.value));
-spSearch.addEventListener('keydown',e=>{if(e.key==='Escape')closeSourcePanel();});
-spList.addEventListener('click',e=>{
-  const pinEl=e.target.closest('.sp-pin');
-  if(pinEl){e.stopPropagation();setFixedSource(pinEl.dataset.pin);return;}
-  const item=e.target.closest('.sp-item');if(!item)return;
-  const s=item.dataset.pick||'';
-  sourceEl.value=s;updateSourcePickerUI();closeSourcePanel();sourceEl.focus();
-});
-
-$('tagToggle').addEventListener('click',e=>{
-  e.stopPropagation();closeSourcePanel();
-  if(tagPanel.hidden)openTagPanel();else closeTagPanel();
-});
-tpSearch.addEventListener('input',()=>renderTagPanelList(tpSearch.value));
-tpSearch.addEventListener('keydown',e=>{if(e.key==='Escape')closeTagPanel();});
-tpList.addEventListener('click',e=>{
-  const pinEl=e.target.closest('.sp-pin');
-  if(pinEl){e.stopPropagation();toggleFixedTag(pinEl.dataset.pin);return;}
-  const item=e.target.closest('.sp-item');if(!item)return;
-  const t=item.dataset.pick||'';
-  let cur=tagsEl.value.trim().split(/[,，\s]+/).filter(Boolean);
-  if(cur.includes(t))cur=cur.filter(x=>x!==t);else cur.push(t);
-  tagsEl.value=cur.join(', ');
-  updateTagPickerUI();renderTagPanelList(tpSearch.value);tagsEl.focus();
+spSearch.addEventListener('input', function () { renderSourcePanelList(spSearch.value); });
+spSearch.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSourcePanel(); });
+spList.addEventListener('click', function (e) {
+  var pinEl = e.target.closest('.sp-pin');
+  if (pinEl) { e.stopPropagation(); setFixedSource(pinEl.dataset.pin); return; }
+  var item = e.target.closest('.sp-item'); if (!item) return;
+  var s = item.dataset.pick || '';
+  sourceEl.value = s; updateSourcePickerUI(); closeSourcePanel(); sourceEl.focus();
 });
 
-document.addEventListener('click',e=>{
-  if(!sourcePanel.hidden&&!sourcePicker.contains(e.target))closeSourcePanel();
-  if(!tagPanel.hidden&&!tagPicker.contains(e.target))closeTagPanel();
+$('tagToggle').addEventListener('click', function (e) {
+  e.stopPropagation(); closeSourcePanel();
+  if (tagPanel.hidden) openTagPanel(); else closeTagPanel();
+});
+tpSearch.addEventListener('input', function () { renderTagPanelList(tpSearch.value); });
+tpSearch.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeTagPanel(); });
+tpList.addEventListener('click', function (e) {
+  var pinEl = e.target.closest('.sp-pin');
+  if (pinEl) { e.stopPropagation(); toggleFixedTag(pinEl.dataset.pin); return; }
+  var item = e.target.closest('.sp-item'); if (!item) return;
+  var t = item.dataset.pick || '';
+  var cur = tagsEl.value.trim().split(/[,，\s]+/).filter(Boolean);
+  if (cur.indexOf(t) >= 0) cur = cur.filter(function (x) { return x !== t; });
+  else cur.push(t);
+  tagsEl.value = cur.join(', ');
+  updateTagPickerUI(); renderTagPanelList(tpSearch.value); tagsEl.focus();
+});
+
+document.addEventListener('click', function (e) {
+  if (!sourcePanel.hidden && !sourcePicker.contains(e.target)) closeSourcePanel();
+  if (!tagPanel.hidden && !tagPicker.contains(e.target)) closeTagPanel();
   if ($('sourceFilterPanel') && !$('sourceFilterPanel').hidden && !$('sourceFilterWrap').contains(e.target)) {
     $('sourceFilterPanel').hidden = true;
   }
   if ($('catFilterPanel') && !$('catFilterPanel').hidden && !$('catFilterWrap').contains(e.target)) {
     $('catFilterPanel').hidden = true;
   }
-  const zenPanel = document.getElementById('zenFilterPanel');
+  var zenPanel = document.getElementById('zenFilterPanel');
   if (zenPanel && !zenPanel.contains(e.target) && !e.target.closest('.zen-filter-btn')) {
     zenPanel.remove();
   }
 });
 
-$('hitokotoRefresh').addEventListener('click',fetchHitokoto);
+$('hitokotoRefresh').addEventListener('click', fetchHitokoto);
 
-let searchDebounceTimer = null;
-searchEl.addEventListener('input',()=>{
+var searchDebounceTimer = null;
+searchEl.addEventListener('input', function () {
   clearTimeout(searchDebounceTimer);
-  searchDebounceTimer = setTimeout(()=>{
-    keyword=searchEl.value;
-    currentPage=1;
+  searchDebounceTimer = setTimeout(function () {
+    keyword = searchEl.value;
+    currentPage = 1;
     clearFilterCache();
     renderList();
     renderHeader();
@@ -192,14 +175,14 @@ searchEl.addEventListener('input',()=>{
 });
 
 if ($('catFilterBtn')) {
-  $('catFilterBtn').addEventListener('click', e => {
+  $('catFilterBtn').addEventListener('click', function (e) {
     e.stopPropagation();
-    const panel = $('catFilterPanel');
+    var panel = $('catFilterPanel');
     if (panel.hidden) {
       $('catFilterSearch').value = '';
       renderCatFilterList();
       panel.hidden = false;
-      setTimeout(() => $('catFilterSearch').focus(), 50);
+      setTimeout(function () { $('catFilterSearch').focus(); }, 50);
     } else {
       panel.hidden = true;
     }
@@ -207,12 +190,12 @@ if ($('catFilterBtn')) {
 }
 if ($('catFilterSearch')) {
   $('catFilterSearch').addEventListener('input', renderCatFilterList);
-  $('catFilterSearch').addEventListener('keydown', e => { if (e.key === 'Escape') $('catFilterPanel').hidden = true; });
+  $('catFilterSearch').addEventListener('keydown', function (e) { if (e.key === 'Escape') $('catFilterPanel').hidden = true; });
 }
 if ($('catFilterList')) {
-  $('catFilterList').addEventListener('click', e => {
-    const item = e.target.closest('.sp-item'); if (!item) return;
-    const val = item.dataset.pick;
+  $('catFilterList').addEventListener('click', function (e) {
+    var item = e.target.closest('.sp-item'); if (!item) return;
+    var val = item.dataset.pick;
     currentType = val === '__all__' ? '全部' : val;
     currentPage = 1;
     render();
@@ -221,14 +204,14 @@ if ($('catFilterList')) {
 }
 
 if ($('sourceFilterBtn')) {
-  $('sourceFilterBtn').addEventListener('click', e => {
+  $('sourceFilterBtn').addEventListener('click', function (e) {
     e.stopPropagation();
-    const panel = $('sourceFilterPanel');
+    var panel = $('sourceFilterPanel');
     if (panel.hidden) {
       $('sourceFilterSearch').value = '';
       renderSourceFilterList();
       panel.hidden = false;
-      setTimeout(() => $('sourceFilterSearch').focus(), 50);
+      setTimeout(function () { $('sourceFilterSearch').focus(); }, 50);
     } else {
       panel.hidden = true;
     }
@@ -236,12 +219,12 @@ if ($('sourceFilterBtn')) {
 }
 if ($('sourceFilterSearch')) {
   $('sourceFilterSearch').addEventListener('input', renderSourceFilterList);
-  $('sourceFilterSearch').addEventListener('keydown', e => { if (e.key === 'Escape') $('sourceFilterPanel').hidden = true; });
+  $('sourceFilterSearch').addEventListener('keydown', function (e) { if (e.key === 'Escape') $('sourceFilterPanel').hidden = true; });
 }
 if ($('sourceFilterList')) {
-  $('sourceFilterList').addEventListener('click', e => {
-    const item = e.target.closest('.sp-item'); if (!item) return;
-    const val = item.dataset.pick;
+  $('sourceFilterList').addEventListener('click', function (e) {
+    var item = e.target.closest('.sp-item'); if (!item) return;
+    var val = item.dataset.pick;
     currentSource = val === '__all__' ? ALL_SOURCES : val;
     currentPage = 1;
     render();
@@ -249,69 +232,76 @@ if ($('sourceFilterList')) {
   });
 }
 
-$('catNav').addEventListener('click',e=>{
-  const btn=e.target.closest('.nav-item[data-type]');if(!btn)return;
-  currentType=btn.dataset.type;currentPage=1;
-  render();closeSidebarIfMobile();scrollTop();
+$('catNav').addEventListener('click', function (e) {
+  var btn = e.target.closest('.nav-item[data-type]'); if (!btn) return;
+  currentType = btn.dataset.type; currentPage = 1;
+  render(); closeSidebarIfMobile(); scrollTop();
 });
-$('tagNav').addEventListener('click',e=>{
-  const btn=e.target.closest('.nav-item[data-tag]');if(!btn)return;
-  const t=btn.dataset.tag;currentTag=(currentTag===t)?'':t;
-  currentPage=1;render();closeSidebarIfMobile();scrollTop();
+$('sourceNav').addEventListener('click', function (e) {
+  var delBtn = e.target.closest('[data-del-source]');
+  if (delBtn) { e.stopPropagation(); deleteSource(delBtn.dataset.delSource); return; }
+  var btn = e.target.closest('.nav-item[data-source]'); if (!btn) return;
+  currentSource = btn.dataset.source; currentPage = 1;
+  render(); closeSidebarIfMobile(); scrollTop();
 });
-$('sourceNav').addEventListener('click',e=>{
-  const delBtn=e.target.closest('[data-del-source]');
-  if(delBtn){e.stopPropagation();deleteSource(delBtn.dataset.delSource);return;}
-  const btn=e.target.closest('.nav-item[data-source]');if(!btn)return;
-  currentSource=btn.dataset.source;currentPage=1;
-  render();closeSidebarIfMobile();scrollTop();
+
+// ★★★ 核心改动：侧边栏标签点击支持多选 ★★★
+$('tagNav').addEventListener('click', function (e) {
+  var btn = e.target.closest('.nav-item[data-tag]'); if (!btn) return;
+  var t = btn.dataset.tag;
+
+  if (t === '__all__') {
+    currentTags.clear();
+  } else {
+    if (currentTags.has(t)) currentTags.delete(t);
+    else currentTags.add(t);
+  }
+
+  // 兼容遗留的单标签变量
+  currentTag = currentTags.size > 0 ? Array.from(currentTags)[0] : '';
+
+  currentPage = 1;
+  render();
+  closeSidebarIfMobile();
+  scrollTop();
 });
-$('manageCatBtn').addEventListener('click',()=>{
-  catManager.hidden=!catManager.hidden;
-  if(!catManager.hidden){
-    renderCatManager();newCatInput.focus();closeSidebarIfMobile();
-    setTimeout(()=>catManager.scrollIntoView({behavior:'smooth',block:'start'}),100);
+
+$('manageCatBtn').addEventListener('click', function () {
+  catManager.hidden = !catManager.hidden;
+  if (!catManager.hidden) {
+    renderCatManager(); newCatInput.focus(); closeSidebarIfMobile();
+    setTimeout(function () { catManager.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
   }
 });
-$('closeCatManagerBtn').addEventListener('click',()=>{catManager.hidden=true;});
-$('manageTagBtn').addEventListener('click',()=>{
-  renderTagManager();$('tagManageMask').classList.add('show');closeSidebarIfMobile();
+$('closeCatManagerBtn').addEventListener('click', function () { catManager.hidden = true; });
+$('manageTagBtn').addEventListener('click', function () {
+  renderTagManager(); $('tagManageMask').classList.add('show'); closeSidebarIfMobile();
 });
-$('tagManageCloseBtn').addEventListener('click',()=>$('tagManageMask').classList.remove('show'));
-$('tagManageMask').addEventListener('click',e=>{if(e.target===$('tagManageMask'))$('tagManageMask').classList.remove('show');});
-$('tagManageList').addEventListener('change',e=>{
-  const inp=e.target.closest('[data-tag-old]');if(!inp)return;
-  renameTag(inp.dataset.tagOld,inp.value);
+$('tagManageCloseBtn').addEventListener('click', function () { $('tagManageMask').classList.remove('show'); });
+$('tagManageMask').addEventListener('click', function (e) { if (e.target === $('tagManageMask')) $('tagManageMask').classList.remove('show'); });
+$('tagManageList').addEventListener('change', function (e) {
+  var inp = e.target.closest('[data-tag-old]'); if (!inp) return;
+  renameTag(inp.dataset.tagOld, inp.value);
 });
-$('tagManageList').addEventListener('keydown',e=>{
-  if(e.target.matches('[data-tag-old]')&&e.key==='Enter'){e.preventDefault();e.target.blur();}
+$('tagManageList').addEventListener('keydown', function (e) {
+  if (e.target.matches('[data-tag-old]') && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
 });
-$('tagManageList').addEventListener('click',e=>{
-  const pinBtn=e.target.closest('[data-tag-pin]');
-  if(pinBtn){toggleFixedTag(pinBtn.dataset.tagPin);renderTagManager();return;}
-  const btn=e.target.closest('[data-tag-del]');if(!btn)return;
+$('tagManageList').addEventListener('click', function (e) {
+  var pinBtn = e.target.closest('[data-tag-pin]');
+  if (pinBtn) { toggleFixedTag(pinBtn.dataset.tagPin); renderTagManager(); return; }
+  var btn = e.target.closest('[data-tag-del]'); if (!btn) return;
   delTag(btn.dataset.tagDel);
 });
 
-zenBarEl.addEventListener('click',e=>{
-  const t=e.target.closest('.zb');if(!t)return;
-  
-  if (t.id === 'zenTypeBtn') {
-    openZenFilterPanel('type');
-    return;
-  }
-  if (t.id === 'zenSrcBtn') {
-    openZenFilterPanel('source');
-    return;
-  }
-  if (t.id === 'zenTagBtn') {
-    openZenFilterPanel('tag');
-    return;
-  }
+zenBarEl.addEventListener('click', function (e) {
+  var t = e.target.closest('.zb'); if (!t) return;
+  if (t.id === 'zenTypeBtn') { openZenFilterPanel('type'); return; }
+  if (t.id === 'zenSrcBtn') { openZenFilterPanel('source'); return; }
+  if (t.id === 'zenTagBtn') { openZenFilterPanel('tag'); return; }
 });
 
 function openZenFilterPanel(type) {
-  let panel = document.getElementById('zenFilterPanel');
+  var panel = document.getElementById('zenFilterPanel');
   if (panel) {
     if (panel.dataset.type === type && !panel.hidden) {
       panel.hidden = true;
@@ -326,74 +316,75 @@ function openZenFilterPanel(type) {
   panel.dataset.type = type;
   panel.style.cssText = 'position:absolute; width:240px; z-index:999; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--sh-3);';
   
-  panel.innerHTML = `
-    <div class="sp-search-wrap"><input id="zenFilterSearch" placeholder="搜索..." autocomplete="off"></div>
-    <div class="sp-list" id="zenFilterList" style="max-height:260px;"></div>
-  `;
+  panel.innerHTML = ''
+    + '<div class="sp-search-wrap"><input id="zenFilterSearch" placeholder="搜索..." autocomplete="off"></div>'
+    + '<div class="sp-list" id="zenFilterList" style="max-height:260px;"></div>';
   
   document.body.appendChild(panel);
   
-  const btnId = type === 'type' ? 'zenTypeBtn' : (type === 'source' ? 'zenSrcBtn' : 'zenTagBtn');
-  const btn = document.getElementById(btnId);
+  var btnId = type === 'type' ? 'zenTypeBtn' : (type === 'source' ? 'zenSrcBtn' : 'zenTagBtn');
+  var btn = document.getElementById(btnId);
   if (btn) {
-    const rect = btn.getBoundingClientRect();
+    var rect = btn.getBoundingClientRect();
     panel.style.top = (rect.bottom + window.scrollY + 8) + 'px';
-    let left = rect.left + window.scrollX;
-    const maxLeft = window.innerWidth - 240 - 20; 
+    var left = rect.left + window.scrollX;
+    var maxLeft = window.innerWidth - 240 - 20; 
     if (left > maxLeft) left = maxLeft;
     panel.style.left = left + 'px';
   }
   
-  const searchInput = document.getElementById('zenFilterSearch');
-  setTimeout(() => searchInput.focus(), 50);
+  var searchInput = document.getElementById('zenFilterSearch');
+  setTimeout(function () { searchInput.focus(); }, 50);
   
-  const renderZenList = (q='') => {
-    const listEl = document.getElementById('zenFilterList');
+  var renderZenList = function (q) {
+    q = q || '';
+    var listEl = document.getElementById('zenFilterList');
     if (!listEl) return;
-    const lowerQ = q.toLowerCase();
-    let html = '';
+    var lowerQ = q.toLowerCase();
+    var html = '';
     
     if (type === 'type') {
-      const textItems = db.items.filter(i => i.text);
-      const counts={};
-      textItems.forEach(i=>counts[i.type]=(counts[i.type]||0)+1);
-      const allCats = ['全部', ...db.cats];
-      if((counts[UNCAT]||0)>0) allCats.push(UNCAT);
+      var textItems = db.items.filter(function (i) { return i.text; });
+      var counts = {};
+      textItems.forEach(function (i) { counts[i.type] = (counts[i.type] || 0) + 1; });
+      var allCats = ['全部'].concat(db.cats);
+      if ((counts[UNCAT] || 0) > 0) allCats.push(UNCAT);
       
-      let list = allCats;
-      if (lowerQ) list = list.filter(s => s.toLowerCase().includes(lowerQ));
+      var list = allCats;
+      if (lowerQ) list = list.filter(function (s) { return s.toLowerCase().indexOf(lowerQ) >= 0; });
       
-      html += `<div class="sp-item ${currentType==='全部'?'sp-selected':''}" data-pick="__all__"><span class="sp-name">全部分类</span></div>`;
-      list.forEach(s => {
+      html += '<div class="sp-item ' + (currentType === '全部' ? 'sp-selected' : '') + '" data-pick="__all__"><span class="sp-name">全部分类</span></div>';
+      list.forEach(function (s) {
         if (s === '全部') return;
-        const n = counts[s] || 0;
-        html += `<div class="sp-item ${currentType===s?'sp-selected':''}" data-pick="${esc(s)}">
-          <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${formatCount(n)}</span>` : ''}</span>
-        </div>`;
+        var n = counts[s] || 0;
+        html += '<div class="sp-item ' + (currentType === s ? 'sp-selected' : '') + '" data-pick="' + esc(s) + '">'
+          + '<span class="sp-name">' + esc(s) + (n ? '<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">' + formatCount(n) + '</span>' : '') + '</span>'
+          + '</div>';
       });
     } else if (type === 'source') {
-      const counts={};db.items.forEach(i=>{if(i.source)counts[i.source]=(counts[i.source]||0)+1;});
-      let list = db.sources;
-      if (lowerQ) list = list.filter(s => s.toLowerCase().includes(lowerQ));
+      var sCounts = {};
+      db.items.forEach(function (i) { if (i.source) sCounts[i.source] = (sCounts[i.source] || 0) + 1; });
+      var sList = db.sources;
+      if (lowerQ) sList = sList.filter(function (s) { return s.toLowerCase().indexOf(lowerQ) >= 0; });
       
-      html += `<div class="sp-item ${currentSource===ALL_SOURCES?'sp-selected':''}" data-pick="__all__"><span class="sp-name">全部来源</span></div>`;
-      list.forEach(s => {
-        const n = counts[s] || 0;
-        html += `<div class="sp-item ${currentSource===s?'sp-selected':''}" data-pick="${esc(s)}">
-          <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${formatCount(n)}</span>` : ''}</span>
-        </div>`;
+      html += '<div class="sp-item ' + (currentSource === ALL_SOURCES ? 'sp-selected' : '') + '" data-pick="__all__"><span class="sp-name">全部来源</span></div>';
+      sList.forEach(function (s) {
+        var n = sCounts[s] || 0;
+        html += '<div class="sp-item ' + (currentSource === s ? 'sp-selected' : '') + '" data-pick="' + esc(s) + '">'
+          + '<span class="sp-name">' + esc(s) + (n ? '<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">' + formatCount(n) + '</span>' : '') + '</span>'
+          + '</div>';
       });
     } else {
-      const counts=collectTags();
-      let list=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]||a.localeCompare(b,'zh'));
-      if (lowerQ) list=list.filter(s=>s.toLowerCase().includes(lowerQ));
+      var tCounts = collectTags();
+      var tList = Object.keys(tCounts).sort(function (a, b) { return tCounts[b] - tCounts[a] || a.localeCompare(b, 'zh'); });
+      if (lowerQ) tList = tList.filter(function (s) { return s.toLowerCase().indexOf(lowerQ) >= 0; });
       
-      html += `<div class="sp-item ${!currentTag?'sp-selected':''}" data-pick=""><span class="sp-name">全部标签</span></div>`;
-      list.forEach(s => {
-        const n = counts[s] || 0;
-        html += `<div class="sp-item ${currentTag===s?'sp-selected':''}" data-pick="${esc(s)}">
-          <span class="sp-name">${esc(s)}${n ? `<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">${formatCount(n)}</span>` : ''}</span>
-        </div>`;
+      html += '<div class="sp-item ' + (!currentTag ? 'sp-selected' : '') + '" data-pick=""><span class="sp-name">全部标签</span></div>';
+      tList.forEach(function (s) {
+        var n = tCounts[s] || 0;
+        html += '<div class="sp-item ' + (currentTag === s ? 'sp-selected' : '') + '" data-pick="' + esc(s) + '">'
+          + '<span class="sp-name">' + esc(s) + (n ? '<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">' + formatCount(n) + '</span>' : '') + '</span>'
+          + '</div>';
       });
     }
     listEl.innerHTML = html;
@@ -401,13 +392,13 @@ function openZenFilterPanel(type) {
   
   renderZenList();
   
-  searchInput.addEventListener('input', e => renderZenList(e.target.value));
+  searchInput.addEventListener('input', function (e) { renderZenList(e.target.value); });
   
-  panel.addEventListener('click', e => {
-    const item = e.target.closest('.sp-item'); if(!item) return;
+  panel.addEventListener('click', function (e) {
+    var item = e.target.closest('.sp-item'); if (!item) return;
     e.stopPropagation();
     
-    const val = item.dataset.pick;
+    var val = item.dataset.pick;
     if (type === 'type') {
       currentType = val === '__all__' ? '全部' : val;
     } else if (type === 'source') {
@@ -423,22 +414,22 @@ function openZenFilterPanel(type) {
 }
 
 function handleImgFallback(e) {
-  const img = e.target;
-  if(!img || img.tagName !== 'IMG') return;
-  const path = img.dataset.imgPath;
-  if(!path || img.dataset.fallbackDone) return;
+  var img = e.target;
+  if (!img || img.tagName !== 'IMG') return;
+  var path = img.dataset.imgPath;
+  if (!path || img.dataset.fallbackDone) return;
   
   img.dataset.fallbackDone = '1';
-  fetchImageBlobUrl(path).then(url => {
+  fetchImageBlobUrl(path).then(function (url) {
     img.src = url;
     if (img.dataset.openImg) img.dataset.openImg = url;
-  }).catch(err => {
+  }).catch(function (err) {
     console.warn('图片加载失败', err);
     img.style.opacity = '.4';
     img.title = '图片加载失败（可能是 raw CDN 延迟或权限问题）';
   });
 }
 
-[listEl, document.getElementById('imgMasonry'), pendingImgsEl, document.getElementById('imgMgrGrid')].forEach(el => {
+[listEl, document.getElementById('imgMasonry'), pendingImgsEl, document.getElementById('imgMgrGrid')].forEach(function (el) {
   if (el) el.addEventListener('error', handleImgFallback, true);
 });

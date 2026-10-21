@@ -243,10 +243,10 @@ function applyLoadedData(o) {
     }
     db.settings = merged;
   }
+  if (o.tagColors && typeof o.tagColors === 'object') db.tagColors = o.tagColors;
 
   db._rev = Number(o._rev) || 0;
 
-  // 分片快照恢复（第 2 批真正用上，现在无副作用）
   db._shardSnapshots = o._shardSnapshots || {};
   db._trashSnapshot = o._trashSnapshot || '';
   db._metaSnapshot = o._metaSnapshot || '';
@@ -404,21 +404,31 @@ function collectTags() {
   return counts;
 }
 
+// ============ 核心：多标签筛选逻辑 ============
 function getFilteredItems() {
-  var cacheKey = currentType + '|' + currentSource + '|' + currentTag + '|' + keyword + '|' + (db._rev || 0);
+  var tagKey = currentTags && currentTags.size > 0 ? Array.from(currentTags).sort().join(',') : '';
+  var cacheKey = currentType + '|' + currentSource + '|' + tagKey + '|' + keyword + '|' + (db.settings.tagFilterLogic || 'and') + '|' + (db._rev || 0);
+  
   if (_filterCacheKey === cacheKey && _filterCacheResult) {
     return _filterCacheResult;
   }
 
   var terms = getSearchTerms();
+  var tagArr = currentTags ? Array.from(currentTags) : [];
+  var tagLogic = db.settings.tagFilterLogic || 'and';
+
   var arr = db.items.filter(function (i) {
     if (currentType !== '全部' && i.type !== currentType) return false;
     if (currentSource !== ALL_SOURCES && i.source !== currentSource) return false;
 
-    if (currentTag) {
-      var hasTag = (i.tags || []).indexOf(currentTag) >= 0 ||
-        (i.images || []).some(function (im) { return (im.tags || []).indexOf(currentTag) >= 0; });
-      if (!hasTag) return false;
+    if (tagArr.length > 0) {
+      var itemTags = new Set(i.tags || []);
+      (i.images || []).forEach(function (im) { (im.tags || []).forEach(function (t) { itemTags.add(t); }); });
+      if (tagLogic === 'or') {
+        if (!tagArr.some(function (t) { return itemTags.has(t); })) return false;
+      } else {
+        if (!tagArr.every(function (t) { return itemTags.has(t); })) return false;
+      }
     }
 
     if (terms.length) {

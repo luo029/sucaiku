@@ -4,7 +4,6 @@ var tagExpanded = false;
 var catExpanded = false;
 var srcExpanded = false;
 
-// 判断是否手机屏幕
 function _isMobileViewport() {
   return window.matchMedia('(max-width: 768px)').matches;
 }
@@ -31,7 +30,6 @@ function render() {
   if (catManager && !catManager.hidden) renderCatManager();
 }
 
-// ============ 侧边栏 ============
 function renderSidebar() {
   var catCounts = {};
   db.items.forEach(function (i) { catCounts[i.type] = (catCounts[i.type] || 0) + 1; });
@@ -129,19 +127,34 @@ function renderSidebar() {
   }
 }
 
-// ============ 标签 ============
+// ============ 标签侧栏 ============
 function renderTags() {
   var counts = collectTags();
   var allTags = Object.keys(counts).sort(function (a, b) {
     return counts[b] - counts[a] || a.localeCompare(b, 'zh');
   });
 
-  // currentTag 兼容处理
+  // 清理已经被删除的标签
+  if (currentTags) {
+    var toDelete = [];
+    currentTags.forEach(function (t) {
+      if (allTags.indexOf(t) < 0) toDelete.push(t);
+    });
+    toDelete.forEach(function (t) { currentTags.delete(t); });
+  }
   if (currentTag && allTags.indexOf(currentTag) < 0) currentTag = '';
 
   var nav = $('tagNav');
+  
+  // ★★★ 核心：渲染“全部标签”按钮 ★★★
+  var html = '<button class="nav-item nav-all ' + (currentTags.size === 0 ? 'active' : '') + '" data-tag="__all__" draggable="false">'
+    + '<svg class="nav-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>'
+    + '<span class="nav-name">全部标签</span><span class="nav-count">' + formatCount(db.items.length) + '</span>'
+    + '</button>';
+
   if (!allTags.length) {
-    nav.innerHTML = '<div class="nav-empty">还没有标签</div>';
+    html += '<div class="nav-empty" style="margin-top:8px;">还没有标签</div>';
+    nav.innerHTML = html;
     return;
   }
 
@@ -149,17 +162,14 @@ function renderTags() {
   var hasMore = allTags.length > tagLimit;
   var displayTags = (!tagExpanded && hasMore) ? allTags.slice(0, tagLimit) : allTags.slice();
 
-  if (!tagExpanded && currentTag && displayTags.indexOf(currentTag) < 0) {
-    displayTags[displayTags.length - 1] = currentTag;
-  }
+  // 这里不再强行插入 currentTag，因为可能选了多个
 
   var tagIcon = '<svg class="nav-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>';
   var pinIcon = '<svg class="nav-fixed-icon" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none"><line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>';
 
-  var html = displayTags.map(function (t) {
+  html += displayTags.map(function (t) {
     var isFixed = db.fixedTags.indexOf(t) >= 0;
-    // 支持多选：currentTags 里有就算选中
-    var isActive = currentTags && currentTags.has ? currentTags.has(t) : (currentTag === t);
+    var isActive = currentTags.has(t); // 多选状态
     return '<button class="nav-item ' + (isActive ? 'active' : '') + '" data-tag="' + esc(t) + '" draggable="false">'
       + tagIcon + '<span class="nav-name" title="' + esc(t) + '">' + esc(t) + '</span>'
       + (isFixed ? pinIcon : '') + '<span class="nav-count">' + formatCount(counts[t]) + '</span>'
@@ -182,7 +192,6 @@ function renderTags() {
   }
 }
 
-// ============ 分类筛选 ============
 function renderCatFilter() {
   var isEmpty = currentType === '全部';
   var emptyLabel = _isMobileViewport() ? '分类' : '全部分类';
@@ -223,7 +232,6 @@ function renderCatFilterList() {
   $('catFilterList').innerHTML = html;
 }
 
-// ============ 来源筛选 ============
 function renderSourceFilter() {
   var isEmpty = currentSource === ALL_SOURCES;
   var emptyLabel = _isMobileViewport() ? '来源' : '全部来源';
@@ -258,12 +266,11 @@ function renderSourceFilterList() {
   $('sourceFilterList').innerHTML = html;
 }
 
-// ============ 页头 ============
 function renderHeader() {
   var title = currentType === '全部' ? '全部素材' : currentType;
   if (currentSource !== ALL_SOURCES) title = currentSource + ' · ' + title;
 
-  // 多标签显示
+  // 支持多选展示
   var tagArr = currentTags && currentTags.size > 0 ? Array.from(currentTags) : (currentTag ? [currentTag] : []);
   if (tagArr.length > 0) {
     title = tagArr.map(function (t) { return '#' + t; }).join(' ') + ' · ' + title;
@@ -276,7 +283,6 @@ function renderHeader() {
   if (tagArr.length > 0) parts.push('标签 ' + tagArr.map(function (t) { return '#' + t; }).join(' '));
   if (currentType !== '全部') parts.push(currentType);
 
-  // 分片加载状态
   var loadedCount = db._loadedShardKeys ? db._loadedShardKeys.length : 0;
   var totalCount = db._allShardKeys ? db._allShardKeys.length : 0;
   if (totalCount > 0 && loadedCount < totalCount) {
@@ -290,7 +296,6 @@ function imgCatBadge(img) {
   return img && img.cat ? '<span class="ci-cat">' + esc(img.cat) + '</span>' : '';
 }
 
-// ============ 极简栏 ============
 function renderZenBar() {
   var typeTxt = currentType === '全部' ? '全部分类' : currentType;
   var srcTxt = currentSource === ALL_SOURCES ? '全部来源' : currentSource;
@@ -310,7 +315,6 @@ function renderZenBar() {
   zenBarEl.innerHTML = html;
 }
 
-// ============ 设置概览 ============
 function renderSettingsOverview() {
   if (!$('ovTotal')) return;
   var imgCount = 0;
@@ -332,7 +336,6 @@ function renderStyleOptions() {
   }).join('');
 }
 
-// ============ 列表 ============
 var _formatCache = new Map();
 function getCachedFormat(text, terms) {
   var key = text.length + ':' + (terms || []).join(',') + ':' + text.slice(0, 100);
@@ -460,7 +463,6 @@ function renderPagination(total, totalPages, start, pageCount) {
     + '</select>';
 }
 
-// ============ 选择器面板 ============
 function updateSourcePickerUI() {
   var v = sourceEl.value.trim();
   sourcePicker.classList.toggle('has-fixed', !!db.fixedSource && v === db.fixedSource);
@@ -654,7 +656,6 @@ function closeModal() {
   pendingConfirm = null;
 }
 
-// 窗口尺寸变化时更新筛选按钮文字
 var _lastIsMobile = _isMobileViewport();
 window.addEventListener('resize', function () {
   var now = _isMobileViewport();
