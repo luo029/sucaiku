@@ -141,7 +141,7 @@ mark.kw{background:rgba(250,204,21,.38);color:inherit;padding:1px 3px;border-rad
 .card.selected .check-circle svg{opacity:1;transform:scale(1)}
 .card.selectable{cursor:pointer}
 .card-imgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.card-imgs img{max-width:180px;max-height:180px;border-radius:8px;border:1px solid var(--line);object-fit:cover;cursor:zoom-in;display:block}
+.card-imgs img{max-width:180px;max-height:180px;border-radius:8px;border:1px solid var(--line);object-fit:cover;cursor:zoom-in;display:block;background-color: var(--line); /* ★ 懒加载占位色 */}
 .card-imgs .ci{position:relative;display:inline-block}
 .card-imgs .ci .ci-cat{position:absolute;bottom:4px;left:4px;font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.55);color:#fff}
 .empty{text-align:center;color:var(--text-3);padding:80px 20px;font-size:15px;letter-spacing:.5px}

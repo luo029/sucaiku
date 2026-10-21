@@ -1,7 +1,6 @@
 // js/bind-core.js · 完整文件
 // ★ 本次改动：
-//   修复了：关闭“滑动收起筛选”开关后，顶部按钮栏依然被隐藏的问题
-//   现在只要开关关闭，无论是弹窗还是顶部栏，都会稳稳固定住，不会乱动。
+//   修复了：在极简模式的面板内部滚动（例如查看分类列表）时，面板被误关闭的问题。
 
 addBtn.addEventListener('click', addOrUpdate);
 cancelBtn.addEventListener('click', cancelEdit);
@@ -128,12 +127,10 @@ document.addEventListener('click', function (e) {
 
 $('hitokotoRefresh').addEventListener('click', fetchHitokoto);
 
-// ★ 新增：极简模式下，向下滑动页面自动隐藏顶部筛选栏；向上滑动恢复
-// ★ 修复：如果开关关闭，顶部栏绝不隐藏，保持固定
+// ★ 极简模式下，向下滑动页面自动隐藏顶部筛选栏；向上滑动恢复
 var lastZenScroll = window.scrollY || 0;
 window.addEventListener('scroll', function() {
   if (!document.body.classList.contains('zen-mode')) return;
-  // 如果关掉了开关，那么顶部栏固定显示，不跟着滑走
   if (db.settings && db.settings.zenAutoClosePanel === false) {
     document.body.classList.remove('zen-hide-bar');
     return;
@@ -273,9 +270,10 @@ function openZenFilterPanel(type) {
     panel.style.left = left + 'px';
   }
 
-  // ★ 核心逻辑：同时监听 scroll, touchmove, wheel，只要滑动必定关闭（受设置开关控制）
-  function closePanelOnScroll() {
+  // ★ 修复：如果是在面板内部滑动（比如搜索列表），不要关闭面板
+  function closePanelOnScroll(e) {
     if (db.settings && db.settings.zenAutoClosePanel === false) return;
+    if (e && e.target && panel.contains(e.target)) return;
     if (panel && panel.parentNode) {
       panel.remove();
       window.removeEventListener('scroll', closePanelOnScroll);

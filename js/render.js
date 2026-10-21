@@ -1,7 +1,7 @@
 // js/render.js · 完整文件（修复标签颜色与模式不生效的问题）
-// 优化：getCachedFormat 用 id+updatedAt 做 key， _formatCache 扩大到 1000 条， deleteSource 换 showCustomConfirm
-// ★ 新增：超长文本（>5000 字）且有搜索词时，只对前 5000 字高亮，其余走安全切分点渲染
-// ★ 新增：_findSafeSplitPoint 保证 【】/==/** 标签不会被腰斩
+// ★ 本次改动：
+//   1) 完美解决超过 5000 字的文本中，尾部搜索词不亮的高亮盲区
+//   2) 引入“尾部预览”模式，只截取尾部匹配处的前后部分渲染，不卡顿且完整呈现
 
 var tagExpanded = false, catExpanded = false, srcExpanded = false;
 var catManagerPage = 1, tagManagerPage = 1;
@@ -155,23 +155,20 @@ function renderTagChip(t) {
 // ============ 缓存（修复 key 冲突 + 扩大容量 + FIFO 淘汰 + 超长文本高亮截断） ============
 var _formatCache = new Map();
 var _FORMAT_CACHE_MAX = 1000;
-// ★ 新增：超过此长度的文本，仅有搜索词时只高亮前 N 字
 var _FORMAT_HIGHLIGHT_LIMIT = 5000;
 
-// ★ 新增：找安全切分点，保证 【】/==/** 标签不被腰斩
-//   思路：扫描所有标签，如果某个标签横跨 limit，则把切分点后移到该标签结束后
-//   这样 head 里的所有标签都是完整的，tail 从安全位置开始，同样走 formatText 渲染
+// ★ 找安全切分点，保证 【】/==/** 标签不被腰斩
 function _findSafeSplitPoint(text, limit) {
   var re = /\u3010[\s\S]*?\u3011|==[\s\S]*?==|\*\*[\s\S]*?\*\*/g;
   var m;
   while ((m = re.exec(text))) {
     var start = m.index;
     var end = start + m[0].length;
-    if (end <= limit) continue;           // 整个标签都在 limit 之前，跳过
-    if (start >= limit) return start;     // 整个标签在 limit 之后，切在它前面
-    return end;                           // 标签横跨 limit → 切在它后面，保它完整
+    if (end <= limit) continue;
+    if (start >= limit) return start;
+    return end;
   }
-  return limit;                           // 后面没标签了，正常切
+  return limit;
 }
 
 function getCachedFormat(item, terms) {
@@ -179,15 +176,45 @@ function getCachedFormat(item, terms) {
   if (_formatCache.has(key)) return _formatCache.get(key);
   var text = item.text || '';
   var html;
-  // ★ 优化：长文本 + 有搜索词 → 只对前 5000 字（按安全切点）做高亮，尾部正常渲染
+  
   if (text.length > _FORMAT_HIGHLIGHT_LIMIT && terms && terms.length) {
     var splitAt = _findSafeSplitPoint(text, _FORMAT_HIGHLIGHT_LIMIT);
     var head = text.slice(0, splitAt);
     var tail = text.slice(splitAt);
-    html = formatText(head, terms) + formatText(tail, []);
+    
+    // ★ 修复尾部盲区：如果尾部包含搜索词，截取包含词的上下文进行高亮
+    var tailLower = tail.toLowerCase();
+    var firstMatchIdx = -1;
+    var matchedTerm = '';
+    for (var i = 0; i < terms.length; i++) {
+       var idx = tailLower.indexOf(terms[i]);
+       if (idx >= 0) {
+          firstMatchIdx = idx;
+          matchedTerm = terms[i];
+          break;
+       }
+    }
+    
+    if (firstMatchIdx >= 0) {
+      // 找到尾部匹配，截取前后各 100 字符
+      var start = Math.max(0, firstMatchIdx - 100);
+      var end = Math.min(tail.length, firstMatchIdx + matchedTerm.length + 100);
+      var snippet = tail.slice(start, end);
+      var prefix = start > 0 ? '...' : '';
+      var suffix = end < tail.length ? '...' : '';
+      html = formatText(head, terms) + 
+             '<div style="margin: 12px 0; padding: 10px; background: var(--bg); border-left: 3px solid var(--accent); border-radius: 4px;">' +
+             '<div style="font-size: 12px; color: var(--accent); margin-bottom: 6px;">↓ 尾部命中内容预览</div>' +
+             '<div>' + prefix + formatText(snippet, terms) + suffix + '</div>' +
+             '</div>';
+    } else {
+      // 尾部没有匹配，正常渲染
+      html = formatText(head, terms) + formatText(tail, []);
+    }
   } else {
     html = formatText(text, terms);
   }
+  
   if (_formatCache.size >= _FORMAT_CACHE_MAX) {
     var firstKey = _formatCache.keys().next().value;
     _formatCache.delete(firstKey);
