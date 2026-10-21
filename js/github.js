@@ -1,6 +1,14 @@
 // js/github.js · 完整文件
-// ★ 本次改动：appendLog 增加按天数（logMaxDays）清理过期日志
-//   其余逻辑保留
+// 修复内容：
+//  - P0-1：分片拆分后拉取只拉 part 1 → yearIndex 记录 parts，拉取端循环拉全
+//  - P0-2：分片缩小时旧 part 不清理 → push 后自动清理多余的旧 part 文件
+//  - P0-4：图片 blob 缓存不随物理删除失效 → 新增 clearImageBlobCache
+//  - P1-5：图片路径宽松匹配误关联 → imagePathMatches 严格匹配
+//  - P1-7：冲突策略只有 last-write → pull 时按 id + updatedAt 合并
+//          ★ 本次修正：兼容 remote / force-remote / forceRemote / cloud 等多种设置值
+//          ★ 本次修正：prompt 走合并后，用 toast 提示"检测到 N 条冲突，已按修改时间合并"
+//          ★ 本次修正：新增 local / force-local / forceLocal（本地优先）
+//  - P1-9：进度条 total 被改成 done → 保留真实 total，失败时进度条变红
 
 var STORE_VERSION = 4; var GH_INDEX_PATH = 'index.json'; var GH_TRASH_PATH = 'trash.json';
 var GH_LOG_PATH = 'push-log.json'; var GH_DEVICES_PATH = 'devices.json';
@@ -98,6 +106,24 @@ function _pathForTrash(cfg) { return cfg.dataDir + '/' + GH_TRASH_PATH; }
 function _pathForLog(cfg) { return cfg.dataDir + '/' + GH_LOG_PATH; }
 function _pathForDevices(cfg) { return cfg.dataDir + '/' + GH_DEVICES_PATH; }
 
+function _shardPathRegex(cfg, key) {
+  var prefix = cfg.dataDir + '/' + cfg.shardSubdir + '/' + SHARD_PREFIX + key;
+  var esc = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('^' + esc + '(?:-(\\d+))?\\.json$');
+}
+function _countPartsInShaMap(existingShaMap, cfg, key) {
+  var count = 0;
+  var re = _shardPathRegex(cfg, key);
+  Object.keys(existingShaMap || {}).forEach(function (p) {
+    var m = p.match(re);
+    if (m) {
+      var n = m[1] ? parseInt(m[1], 10) : 1;
+      if (n > count) count = n;
+    }
+  });
+  return count || 1;
+}
+
 function splitShardIfNeeded(key, items) {
   var limit = (Number(db.settings.shardMaxSizeKB) || 650) * 1024;
   if (!db.settings.shardSplitEnabled || items.length === 0) { return [items]; }
@@ -142,6 +168,33 @@ function imageSrc(im) {
   if (!/^(https?:|data:image\/|blob:)/i.test(url)) return '';
   return url;
 }
+
+function normalizeImagePath(p) {
+  if (!p) return '';
+  var s = String(p).trim();
+  var qIdx = s.indexOf('?');
+  if (qIdx >= 0) s = s.substring(0, qIdx);
+  s = s.replace(/^\/+|\/+$/g, '');
+  return s;
+}
+function imagePathMatches(a, b) {
+  var na = normalizeImagePath(a);
+  var nb = normalizeImagePath(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  var aParts = na.split('/');
+  var bParts = nb.split('/');
+  var aFn = aParts[aParts.length - 1];
+  var bFn = bParts[bParts.length - 1];
+  if (aFn !== bFn) return false;
+  var aDir = aParts.slice(0, -1).join('/');
+  var bDir = bParts.slice(0, -1).join('/');
+  if (aDir === bDir) return true;
+  if (!aDir || !bDir) return true;
+  if (aDir.endsWith('/' + bDir) || bDir.endsWith('/' + aDir)) return true;
+  return false;
+}
+
 var imgBlobCache = new Map(); var IMG_BLOB_CACHE_MAX = 300;
 function fetchImageBlobUrl(relPath) {
   if (imgBlobCache.has(relPath)) return Promise.resolve(imgBlobCache.get(relPath));
@@ -161,6 +214,18 @@ function fetchImageBlobUrl(relPath) {
     }
     imgBlobCache.set(relPath, objUrl);
     return objUrl;
+  });
+}
+function clearImageBlobCache(relPath) {
+  if (!relPath) return;
+  var norm = normalizeImagePath(relPath);
+  var keysToDelete = [];
+  imgBlobCache.forEach(function (_, k) {
+    if (normalizeImagePath(k) === norm) keysToDelete.push(k);
+  });
+  keysToDelete.forEach(function (k) {
+    try { URL.revokeObjectURL(imgBlobCache.get(k)); } catch (e) {}
+    imgBlobCache.delete(k);
   });
 }
 
@@ -183,13 +248,11 @@ function appendLog(entry) {
       summary: entry.summary || '', shards: entry.shards || [], itemCount: entry.itemCount || 0,
       duration: entry.duration || 0, details: entry.details || ''
     });
-    // ★ 新增：按天数清理过期日志（logMaxDays，0 表示不按天数清理）
     var maxDays = Number(db.settings.logMaxDays) || 30;
     if (maxDays > 0) {
       var cutoff = Date.now() - maxDays * 86400000;
       logs = logs.filter(function (l) { return (l.timestamp || 0) >= cutoff; });
     }
-    // 按条数清理
     var mode = db.settings.logCleanupMode; var maxCount = db.settings.logMaxCount;
     if (mode === 'count' && logs.length > maxCount) logs = logs.slice(0, maxCount);
     if (db.settings.logHardLimitEnabled && logs.length > db.settings.logHardLimitCount) logs = logs.slice(0, db.settings.logHardLimitCount);
@@ -210,10 +273,9 @@ function registerDevice(pushOrPull) {
 }
 function loadDevices() { try { return JSON.parse(localStorage.getItem('material-library.devices-cache') || '{}'); } catch (e) { return {}; } }
 
-// 进度条（简化安全版）
 var _syncProgress = { active: false, total: 0, done: 0, failed: 0, startAt: 0 };
 function _showSyncProgress(total) {
-  if (!db.settings.showSyncProgress || total <= 3) return;
+  if (!db.settings.showSyncProgress || total <= 1) return;
   _syncProgress = { active: true, total: total, done: 0, failed: 0, startAt: Date.now() };
   _renderSyncProgress();
 }
@@ -234,28 +296,49 @@ function _renderSyncProgress() {
   if (!el) {
     el = document.createElement('div');
     el.id = 'syncProgressPanel';
-    el.style.cssText = 'position:fixed; bottom:24px; right:24px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 18px; box-shadow:var(--sh-3); z-index:200; min-width:240px; transition:opacity .3s;';
+    el.style.cssText = 'position:fixed; bottom:24px; right:24px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 18px; box-shadow:var(--sh-3); z-index:9999; min-width:260px; transition:opacity .3s; backdrop-filter: blur(8px);';
     document.body.appendChild(el);
   }
+
   var pct = 0;
   if (_syncProgress.total > 0) pct = Math.round(_syncProgress.done / _syncProgress.total * 100);
   var elapsed = Math.round((Date.now() - _syncProgress.startAt) / 1000);
   var eta = 0;
   if (_syncProgress.done > 0) eta = Math.round(elapsed / _syncProgress.done * (_syncProgress.total - _syncProgress.done));
-  var p1 = '<div style="font-weight:600; font-size:14px; margin-bottom:8px;">🔄 正在同步</div>';
-  var p2 = '<div style="height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin-bottom:8px;"><div style="height:100%; width:' + pct + '%; background:var(--accent);"></div></div>';
-  var p3 = '<div style="font-size:12.5px; color:var(--text-2); display:flex; justify-content:space-between;"><span>' + _syncProgress.done + ' / ' + _syncProgress.total + '</span><span>' + pct + '%';
-  if (eta > 0) p3 += ' · 约 ' + eta + 's';
-  p3 += '</span></div>';
+
+  var hasFailed = _syncProgress.failed > 0;
+  var barBg = hasFailed
+    ? 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)'
+    : 'linear-gradient(90deg, var(--accent) 0%, #a855f7 100%)';
+  var barShadow = hasFailed
+    ? '0 0 10px rgba(239,68,68,0.45)'
+    : '0 0 10px rgba(99,102,241,0.4)';
+
+  var p1 = '<div style="font-weight:600; font-size:14px; margin-bottom:8px; display:flex; justify-content:space-between;"><span>🔄 正在同步</span><span style="color:' + (hasFailed ? 'var(--danger)' : 'var(--accent)') + ';">' + pct + '%</span></div>';
+  var p2 = '<div style="height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-bottom:8px; position:relative;">';
+  p2 += '<div style="position:absolute; top:0; left:0; bottom:0; width:' + pct + '%; background:' + barBg + '; border-radius:4px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow:' + barShadow + ';">';
+  p2 += '<div style="position:absolute; inset:0; background-image:linear-gradient(45deg,rgba(255,255,255,0.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,0.15) 50%,rgba(255,255,255,0.15) 75%,transparent 75%,transparent); background-size:1rem 1rem; animation: progress-stripes 1s linear infinite;"></div>';
+  p2 += '</div></div>';
+
+  var p3 = '<div style="font-size:12.5px; color:var(--text-2); display:flex; justify-content:space-between;"><span>' + _syncProgress.done + ' / ' + _syncProgress.total + ' 份</span>';
+  if (eta > 0 && !hasFailed) p3 += '<span>剩余约 ' + eta + 's</span>';
+  p3 += '</div>';
   var p4 = '';
-  if (_syncProgress.failed > 0) p4 = '<div style="font-size:12px; color:var(--danger); margin-top:4px;">失败 ' + _syncProgress.failed + ' 个</div>';
+  if (hasFailed) p4 = '<div style="font-size:12px; color:var(--danger); margin-top:6px; font-weight:600;">⚠️ 失败 ' + _syncProgress.failed + ' 个</div>';
+
+  if (!document.getElementById('syncProgressStyle')) {
+    var style = document.createElement('style');
+    style.id = 'syncProgressStyle';
+    style.innerHTML = '@keyframes progress-stripes { from { background-position: 1rem 0; } to { background-position: 0 0; } }';
+    document.head.appendChild(style);
+  }
+
   el.innerHTML = p1 + p2 + p3 + p4;
 }
 
-// 单个分片推送（去掉 async/await，用 Promise 链）
 function _pushOneShard(rc, cfg, key, items, existingShaMap) {
   var retryCount = Number(db.settings.pushRetryCount) || 3;
-  var retryDelay = (Number(db.settings.pushRetryDelaySec) || 10) * 1000;
+  var retryDelay = (Number(db.settings.pushRetryDelaySec) || 2) * 1000;
   var parts = splitShardIfNeeded(key, items);
   var chain = Promise.resolve();
   var allOk = true;
@@ -268,20 +351,20 @@ function _pushOneShard(rc, cfg, key, items, existingShaMap) {
       var b64 = utf8ToBase64(content);
       var existingSha = existingShaMap[path] || null;
       var attempt = 0;
-      
+
       function tryOnce() {
         return ghPutRaw(rc, path, b64, existingSha, 'sync ' + path).then(function () {
           return true;
         }).catch(function (e) {
           var isConflict = e.message && (e.message.indexOf('422') >= 0 || e.message.indexOf('409') >= 0);
           if (isConflict && !existingSha) {
-             return ghGetRaw(rc, path).then(function(file) {
-                 if (file && file.sha) {
-                     existingSha = file.sha;
-                     return ghPutRaw(rc, path, b64, existingSha, 'sync ' + path).then(function(){ return true; });
-                 }
-                 throw e;
-             });
+            return ghGetRaw(rc, path).then(function(file) {
+              if (file && file.sha) {
+                existingSha = file.sha;
+                return ghPutRaw(rc, path, b64, existingSha, 'sync ' + path).then(function(){ return true; });
+              }
+              throw e;
+            });
           }
           attempt++;
           if (attempt <= retryCount) {
@@ -293,10 +376,27 @@ function _pushOneShard(rc, cfg, key, items, existingShaMap) {
       return tryOnce().then(function (ok) { if (!ok) allOk = false; });
     });
   });
-  return chain.then(function () { return { ok: allOk, key: key }; });
+  return chain.then(function () {
+    if (!allOk) return { ok: false, key: key, parts: parts.length };
+    var partsLen = parts.length;
+    var re = _shardPathRegex(cfg, key);
+    var staleChain = Promise.resolve();
+    Object.keys(existingShaMap || {}).forEach(function (path) {
+      var m = path.match(re);
+      if (!m) return;
+      var partNum = m[1] ? parseInt(m[1], 10) : 1;
+      if (partNum > partsLen) {
+        staleChain = staleChain.then(function () {
+          return ghDeleteRaw(rc, path, existingShaMap[path], 'cleanup stale part ' + path).catch(function (e) {
+            console.warn('清理旧 part 失败', path, e);
+          });
+        });
+      }
+    });
+    return staleChain.then(function () { return { ok: true, key: key, parts: partsLen }; });
+  });
 }
 
-// 主 push
 function ghPush(silent, force) {
   silent = !!silent; force = !!force;
   var cfg = loadGH();
@@ -307,6 +407,7 @@ function ghPush(silent, force) {
   var rc = ghRepoConfig('data');
   var groups = groupItemsByShard(db.items);
   var currentKeys = Object.keys(groups).sort();
+  var shardPartsMap = {};
 
   if (!silent) ghSetStatus('推送中…');
 
@@ -317,7 +418,7 @@ function ghPush(silent, force) {
   });
   var toDelete = Object.keys(_shardSnapshots).filter(function (k) { return currentKeys.indexOf(k) < 0; });
 
-  _showSyncProgress(toPush.length + toDelete.length + 2);
+  _showSyncProgress(toPush.length + toDelete.length + 3);
 
   var pushedCount = 0; var failedShards = [];
   var yearIndexDirty = {};
@@ -326,7 +427,7 @@ function ghPush(silent, force) {
     if (!db.settings.gitTreeBatchEnabled) return {};
     return ghTreeAll(rc).catch(function (e) { console.warn('Tree API 失败，回退到逐个 GET', e); return {}; });
   }).then(function (existingShaMap) {
-    var concurrency = Math.max(1, Math.min(10, Number(db.settings.pushConcurrency) || 3));
+    var concurrency = 1;
     var idx = 0;
     function pushWorker() {
       if (idx >= toPush.length) return Promise.resolve();
@@ -336,13 +437,14 @@ function ghPush(silent, force) {
           _setSnap(k, JSON.stringify(groups[k]));
           pushedCount++;
           yearIndexDirty[getYearFromKey(k)] = true;
+          shardPartsMap[k] = result.parts || 1;
           _syncProgress.done++;
         } else {
           failedShards.push(k);
           _syncProgress.failed++;
         }
         _updateSyncProgress();
-        return pushWorker();
+        return new Promise(function(r) { setTimeout(r, 300); }).then(pushWorker);
       });
     }
     var workers = [];
@@ -353,35 +455,38 @@ function ghPush(silent, force) {
     toDelete.forEach(function (dk) {
       deleteChain = deleteChain.then(function () {
         var pathsToDelete = Object.keys(existingShaMap).filter(function(p) {
-            return p.indexOf('/data-' + dk) >= 0 && p.endsWith('.json');
+          return p.indexOf('/data-' + dk) >= 0 && p.endsWith('.json');
         });
         if (pathsToDelete.length === 0) {
-            _delSnap(dk); _syncProgress.done++; _updateSyncProgress(); 
-            return; 
+          _delSnap(dk); _syncProgress.done++; _updateSyncProgress();
+          return;
         }
         var pChain = Promise.resolve();
         pathsToDelete.forEach(function(dpath) {
-            var sha = existingShaMap[dpath];
-            pChain = pChain.then(function() {
-                return ghDeleteRaw(rc, dpath, sha, 'delete ' + dpath)
-                    .catch(function (e) { console.warn('删除分片失败', dpath, e); });
-            });
+          var sha = existingShaMap[dpath];
+          pChain = pChain.then(function() {
+            return ghDeleteRaw(rc, dpath, sha, 'delete ' + dpath)
+              .catch(function (e) { console.warn('删除分片失败', dpath, e); });
+          });
         });
         return pChain.then(function() {
-            _delSnap(dk); 
-            _syncProgress.done++; 
-            _updateSyncProgress();
+          _delSnap(dk);
+          _syncProgress.done++;
+          _updateSyncProgress();
         });
       });
     });
     return deleteChain.then(function () { return existingShaMap; });
   }).then(function (existingShaMap) {
     var trashJson = JSON.stringify(db.trash);
-    if (!force && _trashSnapshot === trashJson) return existingShaMap;
+    if (!force && _trashSnapshot === trashJson) {
+      _syncProgress.done++; _updateSyncProgress();
+      return existingShaMap;
+    }
     var tContent = JSON.stringify({ trash: db.trash, updatedAt: new Date().toISOString() }, null, 2);
     var tB64 = utf8ToBase64(tContent);
     var tSha = existingShaMap[_pathForTrash(cfg)] || null;
-    return ghPutRaw(rc, _pathForTrash(cfg), tB64, tSha, 'sync trash').then(function () { _setTrash(trashJson); }).catch(function (e) { console.warn('trash 推送失败', e); }).then(function () { return existingShaMap; });
+    return ghPutRaw(rc, _pathForTrash(cfg), tB64, tSha, 'sync trash').then(function () { _setTrash(trashJson); _syncProgress.done++; _updateSyncProgress(); }).catch(function (e) { console.warn('trash 推送失败', e); _syncProgress.done++; _updateSyncProgress(); }).then(function () { return existingShaMap; });
   }).then(function (existingShaMap) {
     var yearsToUpdate = Object.keys(yearIndexDirty);
     var currentYears = {};
@@ -394,7 +499,12 @@ function ghPush(silent, force) {
         var yearShards = {};
         currentKeys.forEach(function (ck) {
           if (getYearFromKey(ck) === year) {
-            yearShards[ck] = { count: groups[ck].length, size: JSON.stringify(groups[ck]).length, cats: _recalcShardCatMap(groups[ck]) };
+            yearShards[ck] = {
+              count: groups[ck].length,
+              size: JSON.stringify(groups[ck]).length,
+              cats: _recalcShardCatMap(groups[ck]),
+              parts: shardPartsMap[ck] || _countPartsInShaMap(existingShaMap, cfg, ck)
+            };
           }
         });
         var ypath = _pathForYearIndex(cfg, year);
@@ -417,23 +527,34 @@ function ghPush(silent, force) {
     });
     var meta = { cats: db.cats, colors: db.colors, sources: db.sources, fixedSource: db.fixedSource, fixedTags: db.fixedTags, imageCategories: db.imageCategories, settings: db.settings, tagColors: db.tagColors || {}, catVersion: db.catVersion || 0 };
     var metaSig = JSON.stringify(meta) + JSON.stringify(yearSummary);
-    if (!force && _metaSnapshot === metaSig) return;
+
+    if (!force && _metaSnapshot === metaSig) {
+      _syncProgress.done++; _updateSyncProgress();
+      return;
+    }
     return loadIndex(rc).then(function (oldIndex) {
       var oldRev = (oldIndex && oldIndex.data) ? (oldIndex.data._rev || 0) : 0;
       var newIndex = { _rev: oldRev + 1, version: STORE_VERSION, updatedAt: new Date().toISOString(), indexShards: yearSummary, meta: meta };
       var iContent = JSON.stringify(newIndex, null, 2);
       var iSha = existingShaMap[_pathForIndex(cfg)] || null;
-      return ghPutRaw(rc, _pathForIndex(cfg), utf8ToBase64(iContent), iSha, 'sync index').then(function () { _setMeta(metaSig); });
+      return ghPutRaw(rc, _pathForIndex(cfg), utf8ToBase64(iContent), iSha, 'sync index').then(function () { _setMeta(metaSig); _syncProgress.done++; _updateSyncProgress(); });
     });
   }).then(function () {
     registerDevice('push');
     appendLog({ action: 'push', status: failedShards.length === 0 ? 'success' : 'error', summary: pushedCount > 0 ? ('推送 ' + pushedCount + ' 个分片' + (failedShards.length ? '，失败 ' + failedShards.length : '')) : '无变化', shards: toPush, itemCount: db.items.length, duration: Date.now() - startTime });
     failedShards.forEach(function (k) { _dirtyShards.add(k); });
-    _hideSyncProgress();
-    if (!silent) {
-      if (failedShards.length === 0) { toast(pushedCount > 0 ? ('已同步 ' + pushedCount + ' 个分片') : '无变化'); ghSetStatus('推送成功'); }
-      else { toast('成功 ' + pushedCount + '，失败 ' + failedShards.length + '（下次自动重试）'); ghSetStatus('部分失败'); }
-    }
+
+    _syncProgress.failed = failedShards.length;
+    _updateSyncProgress();
+
+    setTimeout(function() {
+      _hideSyncProgress();
+      if (!silent) {
+        if (failedShards.length === 0) { toast(pushedCount > 0 ? ('已同步 ' + pushedCount + ' 个分片') : '无变化'); ghSetStatus('推送成功'); }
+        else { toast('成功 ' + pushedCount + '，失败 ' + failedShards.length + '（下次自动重试）'); ghSetStatus('部分失败'); }
+      }
+    }, 800);
+
     if (db.settings.snapshotEnabled && typeof maybeCreateSnapshot === 'function') {
       maybeCreateSnapshot().catch(function (e) { console.warn('快照失败', e); });
     }
@@ -468,7 +589,6 @@ function currentYears_helper(keys) {
   return m;
 }
 
-// pull（原样，未改）
 function ghPull(silent, pullMore) {
   silent = !!silent; pullMore = !!pullMore;
   var cfg = loadGH();
@@ -522,7 +642,7 @@ function ghPull(silent, pullMore) {
       }
       if (pullMore) { db._loadedShardKeys = (db._loadedShardKeys || []).concat(toLoad).sort(); db._allShardKeys = shardKeys; }
       else { db._allShardKeys = shardKeys; db._loadedShardKeys = toLoad; }
-      return fetchShardsBatch(rc, toLoad).then(function (dataMap) {
+      return fetchShardsBatch(rc, toLoad, allShards).then(function (dataMap) {
         var newItems = []; var newSnapshots = {};
         toLoad.forEach(function (k) {
           if (dataMap[k] && dataMap[k].items) { newItems = newItems.concat(dataMap[k].items); newSnapshots[k] = JSON.stringify(dataMap[k].items); }
@@ -530,7 +650,68 @@ function ghPull(silent, pullMore) {
         if (pullMore) {
           var currentIds = new Set(db.items.map(function (i) { return i.id; }));
           newItems.forEach(function (i) { if (!currentIds.has(i.id)) db.items.push(i); });
-        } else { db.items = newItems; }
+        } else {
+          // ============================================================
+          // ★ P1-7 修正：冲突处理
+          // ------------------------------------------------------------
+          // 兼容多种设置值：
+          //   remote / force-remote / forceRemote / cloud → 云端优先
+          //   local  / force-local  / forceLocal          → 本地优先
+          //   prompt / 其他                               → 合并（保留 updatedAt 较新的）+ toast 提示
+          // ============================================================
+          var conflictMode = db.settings.conflictAction || 'prompt';
+          var isRemoteFirst = (conflictMode === 'remote' || conflictMode === 'force-remote' || conflictMode === 'forceRemote' || conflictMode === 'cloud');
+          var isLocalFirst = (conflictMode === 'local' || conflictMode === 'force-local' || conflictMode === 'forceLocal');
+
+          if (isRemoteFirst) {
+            db.items = dedupeItems(newItems);
+            if (!silent) console.log('[ghPull] 冲突处理：云端优先');
+          } else if (isLocalFirst) {
+            var localMap2 = {};
+            db.items.forEach(function (it) { if (it && it.id) localMap2[it.id] = it; });
+            var remoteIds2 = new Set();
+            var merged2 = [];
+            newItems.forEach(function (remote) {
+              if (!remote || !remote.id) return;
+              remoteIds2.add(remote.id);
+              var local = localMap2[remote.id];
+              if (!local) { merged2.push(remote); }
+              else { merged2.push(local); }
+            });
+            db.items.forEach(function (local) {
+              if (local && local.id && !remoteIds2.has(local.id)) { merged2.push(local); }
+            });
+            db.items = dedupeItems(merged2);
+            if (!silent) console.log('[ghPull] 冲突处理：本地优先');
+          } else {
+            var trashedIds = new Set((db.trash || []).map(function (t) { return t.id; }));
+            var localMap = {};
+            db.items.forEach(function (it) { if (it && it.id) localMap[it.id] = it; });
+            var remoteIds = new Set();
+            var merged = [];
+            var keptLocal = 0, keptRemote = 0, conflicts = 0;
+            newItems.forEach(function (remote) {
+              if (!remote || !remote.id) return;
+              if (trashedIds.has(remote.id)) { keptLocal++; return; }
+              remoteIds.add(remote.id);
+              var local = localMap[remote.id];
+              if (!local) { merged.push(remote); keptRemote++; return; }
+              var lt = local.updatedAt || local.createdAt || 0;
+              var rt = remote.updatedAt || remote.createdAt || 0;
+              if (rt > lt) { merged.push(remote); keptRemote++; conflicts++; }
+              else if (lt > rt) { merged.push(local); keptLocal++; conflicts++; }
+              else { merged.push(remote); }
+            });
+            db.items.forEach(function (local) {
+              if (local && local.id && !remoteIds.has(local.id) && !trashedIds.has(local.id)) { merged.push(local); keptLocal++; }
+            });
+            db.items = dedupeItems(merged);
+            if (conflicts > 0) {
+              console.log('[ghPull] 冲突合并：本地保留 ' + keptLocal + '，远程采用 ' + keptRemote + '，冲突 ' + conflicts + ' 条');
+              if (!silent) toast('检测到 ' + conflicts + ' 条冲突，已按修改时间合并');
+            }
+          }
+        }
         if (!pullMore) {
           return ghGetRaw(rc, _pathForTrash(cfg)).catch(function () { return null; }).then(function (trashFile) {
             var trashItems = []; var trashSnap = '';
@@ -575,24 +756,43 @@ function dedupeItems(items) {
   });
   return Object.keys(map).map(function (k) { return map[k]; });
 }
-function fetchShardsBatch(rc, keys, concurrency) {
-  concurrency = concurrency || db.settings.pullConcurrency || FETCH_CONCURRENCY;
+
+function fetchShardsBatch(rc, keys, allShards) {
+  var concurrency = db.settings.pullConcurrency || FETCH_CONCURRENCY;
+  var cfg = loadGH();
   var results = {}; var idx = 0;
   function worker() {
     if (idx >= keys.length) return Promise.resolve();
     var k = keys[idx++];
-    var cfg = loadGH();
-    var path = _pathForShard(cfg, k, 1);
-    return ghGetRaw(rc, path).then(function (file) {
-      if (!file) { results[k] = null; return; }
-      try { results[k] = JSON.parse(base64ToUtf8(file.content.replace(/\n/g, ''))); } catch (e) { results[k] = null; }
-    }).catch(function () { results[k] = null; }).then(function () { return worker(); });
+    var partsInfo = allShards && allShards[k];
+    var partCount = Math.max(1, Math.min(20, parseInt(partsInfo && partsInfo.parts, 10) || 1));
+    var items = [];
+    var chain = Promise.resolve();
+    for (var p = 1; p <= partCount; p++) {
+      (function (part) {
+        chain = chain.then(function () {
+          return ghGetRaw(rc, _pathForShard(cfg, k, part)).then(function (file) {
+            if (!file) return;
+            try {
+              var data = JSON.parse(base64ToUtf8(file.content.replace(/\n/g, '')));
+              if (data && Array.isArray(data.items)) items.push.apply(items, data.items);
+            } catch (e) { console.warn('解析分片失败', k, 'part', part, e); }
+          }).catch(function (e) { console.warn('拉取分片失败', k, 'part', part, e); });
+        });
+      })(p);
+    }
+    return chain.then(function () {
+      if (items.length === 0) results[k] = null;
+      else results[k] = { date: k, items: items };
+      return worker();
+    });
   }
   var workers = [];
   var n = Math.min(concurrency, keys.length);
   for (var i = 0; i < n; i++) workers.push(worker());
   return Promise.all(workers).then(function () { return results; });
 }
+
 function migrateFromLegacy(rc, silent) {
   var cfg = loadGH();
   var legacyPath = cfg.dataPath || 'material-library.json';
@@ -736,6 +936,9 @@ window.ghGetRaw = ghGetRaw; window.ghPutRaw = ghPutRaw; window.ghDeleteRaw = ghD
 window.ghTreeAll = ghTreeAll;
 window.imageSrc = imageSrc; window.imageUrlFromPath = imageUrlFromPath;
 window.fetchImageBlobUrl = fetchImageBlobUrl;
+window.clearImageBlobCache = clearImageBlobCache;
+window.normalizeImagePath = normalizeImagePath;
+window.imagePathMatches = imagePathMatches;
 window.getShardKey = getShardKey; window.groupItemsByShard = groupItemsByShard;
 window.splitShardIfNeeded = splitShardIfNeeded;
 window.ghPush = ghPush; window.ghPull = ghPull;

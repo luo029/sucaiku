@@ -1,5 +1,6 @@
 // js/store.js · 完整文件（绝对稳定版）
-// 取消 Worker，回归纯本地快速扫描，附带防抖。绝不出错。
+// 修复内容：
+//  - P1-6：_applyMeta / applyLoadedData 对 tagColors / colors 做白名单校验，防止导入数据 CSS 注入
 
 var IDB_NAME = 'material-library-db';
 var IDB_STORE = 'kv';
@@ -15,6 +16,38 @@ function _localDateStr(ts) {
 }
 window._localDateStr = _localDateStr;
 
+// ★ P1-6：颜色白名单校验
+function sanitizeHexColor(v) {
+  if (typeof v !== 'string') return '';
+  var s = v.trim();
+  if (/^#[0-9a-f]{3}$/i.test(s)) return s;
+  if (/^#[0-9a-f]{6}$/i.test(s)) return s;
+  if (/^#[0-9a-f]{8}$/i.test(s)) return s;
+  if (/^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(?:\s*,\s*(?:\d+(?:\.\d+)?|\.\d+))?\s*\)$/i.test(s)) return s;
+  if (/^hsla?\(\s*\d+(?:\.\d+)?\s*,\s*\d+(?:\.\d+)?%\s*,\s*\d+(?:\.\d+)?%(?:\s*,\s*(?:\d+(?:\.\d+)?|\.\d+))?\s*\)$/i.test(s)) return s;
+  return '';
+}
+function sanitizeTagColors(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  var out = {};
+  Object.keys(obj).forEach(function (k) {
+    if (typeof k !== 'string' || !k.trim()) return;
+    var safe = sanitizeHexColor(obj[k]);
+    if (safe) out[k] = safe;
+  });
+  return out;
+}
+function sanitizeCatColors(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  var out = {};
+  Object.keys(obj).forEach(function (k) {
+    if (typeof k !== 'string' || !k.trim()) return;
+    var v = obj[k];
+    if (typeof v === 'number' && isFinite(v) && v >= 0) out[k] = v;
+  });
+  return out;
+}
+
 var _TRASH_CLEAN_KEY = 'material-library.last-trash-clean';
 var _lastTrashClean = 0;
 try { _lastTrashClean = Number(localStorage.getItem(_TRASH_CLEAN_KEY) || 0) || 0; } catch (e) {}
@@ -26,11 +59,11 @@ function _maybeCleanTrash() {
   _lastTrashClean = now;
   try { localStorage.setItem(_TRASH_CLEAN_KEY, String(now)); } catch (e) {}
   _trashCleanInProgress = true;
-  try { 
+  try {
     var beforeLen = db.trash.length;
-    cleanTrash(true); 
+    cleanTrash(true);
     if (db.trash.length !== beforeLen) {
-      save(); 
+      save();
     }
   } catch (e) { console.warn('回收站清理失败', e); }
   _trashCleanInProgress = false;
@@ -130,7 +163,8 @@ function _buildMeta() {
 function _applyMeta(m) {
   if (!m) return;
   if (Array.isArray(m.cats)) db.cats = m.cats.filter(function (c) { return typeof c === 'string' && c.trim() && c !== UNCAT && c !== IMG_TYPE; });
-  if (m.colors && typeof m.colors === 'object') db.colors = m.colors;
+  // ★ P1-6：颜色白名单校验
+  if (m.colors && typeof m.colors === 'object') db.colors = sanitizeCatColors(m.colors);
   if (Array.isArray(m.sources)) db.sources = m.sources.filter(function (s) { return typeof s === 'string' && s.trim(); });
   if (typeof m.fixedSource === 'string') db.fixedSource = m.fixedSource;
   if (Array.isArray(m.fixedTags)) db.fixedTags = m.fixedTags.filter(function (s) { return typeof s === 'string' && s.trim(); });
@@ -145,7 +179,8 @@ function _applyMeta(m) {
     if (m.settings.statsDims) for (k in m.settings.statsDims) if (m.settings.statsDims.hasOwnProperty(k)) merged.statsDims[k] = m.settings.statsDims[k];
     db.settings = merged;
   }
-  if (m.tagColors && typeof m.tagColors === 'object') db.tagColors = m.tagColors;
+  // ★ P1-6：标签颜色白名单校验
+  if (m.tagColors && typeof m.tagColors === 'object') db.tagColors = sanitizeTagColors(m.tagColors);
   if (m._shardSnapshots && typeof m._shardSnapshots === 'object') db._shardSnapshots = m._shardSnapshots;
   if (typeof m._trashSnapshot === 'string') db._trashSnapshot = m._trashSnapshot;
   if (typeof m._metaSnapshot === 'string') db._metaSnapshot = m._metaSnapshot;
@@ -294,7 +329,8 @@ async function loadStore() {
 function applyLoadedData(o) {
   if (Array.isArray(o.items)) db.items = o.items.filter(function (i) { return i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0)); });
   if (Array.isArray(o.cats)) db.cats = o.cats.filter(function (c) { return typeof c === 'string' && c.trim() && c !== UNCAT && c !== IMG_TYPE; });
-  if (o.colors && typeof o.colors === 'object') db.colors = o.colors;
+  // ★ P1-6：颜色白名单校验
+  if (o.colors && typeof o.colors === 'object') db.colors = sanitizeCatColors(o.colors);
   if (Array.isArray(o.sources)) db.sources = o.sources.filter(function (s) { return typeof s === 'string' && s.trim(); });
   if (typeof o.fixedSource === 'string') db.fixedSource = o.fixedSource;
   if (Array.isArray(o.fixedTags)) db.fixedTags = o.fixedTags.filter(function (s) { return typeof s === 'string' && s.trim(); });
@@ -309,7 +345,8 @@ function applyLoadedData(o) {
     if (o.settings.statsDims) for (k in o.settings.statsDims) if (o.settings.statsDims.hasOwnProperty(k)) merged.statsDims[k] = o.settings.statsDims[k];
     db.settings = merged;
   }
-  if (o.tagColors && typeof o.tagColors === 'object') db.tagColors = o.tagColors;
+  // ★ P1-6：标签颜色白名单校验
+  if (o.tagColors && typeof o.tagColors === 'object') db.tagColors = sanitizeTagColors(o.tagColors);
   if (typeof o.catVersion === 'number') db.catVersion = o.catVersion;
   db._rev = Number(o._rev) || 0;
   db._shardSnapshots = o._shardSnapshots || {};
@@ -497,7 +534,7 @@ function getFilteredItems() {
   var arr;
   if (idSet) { arr = []; idSet.forEach(function (id) { var it = _itemById.get(id); if (it) arr.push(it); }); }
   else arr = db.items.slice();
-  
+
   if (terms.length) {
     arr = arr.filter(function (i) {
       var imgHay = (i.images || []).map(function (im) { return (im.cat || '') + ' ' + (im.tags || []).join(' '); }).join(' ');
@@ -525,3 +562,7 @@ window.markIndexDirty = markIndexDirty; window.rebuildIndex = rebuildIndex;
 window._indexAddItem = _indexAddItem; window._indexRemoveItem = _indexRemoveItem; window._indexUpdateItem = _indexUpdateItem;
 window.__index = _index; window.__itemById = _itemById; window.__indexEnsure = _indexEnsure; window.__dirtyShards = _dirtyShards;
 window._maybeCleanTrash = _maybeCleanTrash;
+// ★ P1-6：暴露给 io.js 等模块使用
+window.sanitizeHexColor = sanitizeHexColor;
+window.sanitizeTagColors = sanitizeTagColors;
+window.sanitizeCatColors = sanitizeCatColors;

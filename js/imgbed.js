@@ -1,6 +1,7 @@
 /* js / imgbed.js · 图床管理：仓库图片列表 / 删除 / 清理 / 多维筛选 / 批量操作 */
-// ★ 改动：修复批量管理按钮图标与文字没有对齐的问题，优化了 SVG 的尺寸与 flex 居中对齐
-// ★ Bug A 配套修复：把 imgMgrFilteredFiles / imgMgrRenderedCount 暴露给 bind-views.js 使用
+// 修复内容：
+//  - P1-5：findRef / deleteRepoImage 用 imagePathMatches 严格匹配，避免 2024/01/abc.jpg 误关联 2023/01/abc.jpg
+//  - P0-4：物理删除图片后调用 clearImageBlobCache，已删的图不会继续显示
 
 (function() {
   var imgMgrCurrentCat = 'all';
@@ -29,10 +30,10 @@
     }
     $('imgManagerView').hidden = false;
     document.body.style.overflow = 'hidden';
-    
+
     var rc = ghRepoConfig('img');
     $('imgMgrRepoName').textContent = rc.owner + '/' + rc.repo;
-    
+
     ensureMgrUI();
 
     if (db.items.length === 0) {
@@ -48,14 +49,14 @@
 
     var oldStats = document.getElementById('imgMgrStatsPanel');
     if (oldStats) oldStats.remove();
-    
+
     var oldTabs = document.getElementById('imgMgrFilterTabs');
     if (oldTabs && oldTabs.parentElement) oldTabs.parentElement.remove();
 
     var toolbar = document.createElement('div');
     toolbar.id = 'imgMgrToolbar';
     toolbar.style.cssText = 'display:flex; justify-content:center; margin-bottom:24px;';
-    
+
     toolbar.innerHTML = ''
       + '<div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; background:var(--card); border:1px solid var(--line); padding:10px 20px; border-radius:14px; box-shadow:var(--sh-1); max-width:100%;">'
       + '  <div id="imgMgrPills" style="display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; padding:2px; max-width:500px;"></div>'
@@ -89,12 +90,12 @@
     var rc = ghRepoConfig('img');
     var grid = $('imgMgrGrid');
     var status = $('imgMgrStatus');
-    
+
     grid.innerHTML = '';
     status.innerHTML = '<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:8px;"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> 正在拉取仓库文件列表...';
 
     var url = 'https://api.github.com/repos/' + encodeURIComponent(rc.owner) + '/' + encodeURIComponent(rc.repo) + '/git/trees/' + encodeURIComponent(rc.branch) + '?recursive=1';
-    
+
     fetch(url, {
       headers: { Authorization: 'Bearer ' + rc.token, Accept: 'application/vnd.github+json' }
     }).then(function(res) {
@@ -108,7 +109,7 @@
     }).then(function(data) {
       if (!data) return;
       var prefix = rc.path ? rc.path + '/' : '';
-      var files = (data.tree || []).filter(function(f) { 
+      var files = (data.tree || []).filter(function(f) {
         return f.type === 'blob' && f.path.indexOf(prefix) === 0 && /\.(jpg|jpeg|png|webp|gif)$/i.test(f.path);
       });
 
@@ -131,20 +132,21 @@
 
       var usedPathsArr = Array.from(refMap.keys());
 
+      // ★ P1-5：严格路径匹配（同文件名 + 同目录或严格后缀）
       function findRef(relPath, filename) {
         if (refMap.has(relPath)) return refMap.get(relPath);
         var candidates = filenameMap.get(filename);
         if (candidates) {
           for (var i = 0; i < candidates.length; i++) {
             var ip = candidates[i];
-            if (ip === relPath || ip.endsWith(relPath) || relPath.endsWith(ip) || ip.indexOf(filename) >= 0) {
+            if (imagePathMatches(ip, relPath)) {
               return refMap.get(ip);
             }
           }
         }
         for (var j = 0; j < usedPathsArr.length; j++) {
           var ip2 = usedPathsArr[j];
-          if (ip2.endsWith(relPath) || relPath.endsWith(ip2)) {
+          if (imagePathMatches(ip2, relPath)) {
             return refMap.get(ip2);
           }
         }
@@ -154,12 +156,12 @@
       repoImagesCache = files.map(function(f) {
         var relPath = f.path.substring(prefix.length);
         var filename = f.path.split('/').pop();
-        
+
         var ref = findRef(relPath, filename);
         var isUsed = !!ref;
         var cat = (ref && ref.cat) || parseCatFromFilename(filename);
         var tags = ref ? Array.from(ref.tags) : [];
-        
+
         var parts = relPath.split('/');
         var yearMonth = '';
         if (parts.length >= 3) yearMonth = parts[0] + '年' + parts[1] + '月';
@@ -178,7 +180,7 @@
   function renderImgMgrUI() {
     var status = $('imgMgrStatus');
     var grid = $('imgMgrGrid');
-    
+
     var selectBtn = $('imgMgrSelectBtn');
     if (selectBtn) {
       selectBtn.style.display = 'inline-flex';
@@ -215,11 +217,11 @@
 
     var allCatsNow = [];
     repoImagesCache.forEach(function(f) { if (allCatsNow.indexOf(f.cat) < 0) allCatsNow.push(f.cat); });
-    
+
     if (imgMgrCurrentCat !== 'all' && allCatsNow.indexOf(imgMgrCurrentCat) < 0) {
       imgMgrCurrentCat = 'all';
     }
-    
+
     var allTimesNow = [];
     repoImagesCache.forEach(function(f) { if (f.yearMonth && allTimesNow.indexOf(f.yearMonth) < 0) allTimesNow.push(f.yearMonth); });
     if (imgMgrCurrentTime !== 'all' && allTimesNow.indexOf(imgMgrCurrentTime) < 0) {
@@ -242,10 +244,10 @@
     if (pillsEl) {
       var allCats = allCatsNow.sort();
       var html = '';
-      
+
       var isAllActive = imgMgrCurrentCat === 'all' && imgMgrCurrentFilter === 'all';
       html += '<button data-cat="all" data-filter="all" style="padding:6px 14px; border-radius:99px; font-size:13px; border:1px solid ' + (isAllActive?'var(--accent)':'transparent') + '; background:' + (isAllActive?'var(--accent-soft)':'transparent') + '; color:' + (isAllActive?'var(--accent)':'var(--text-2)') + '; cursor:pointer; white-space:nowrap; font-weight:' + (isAllActive?'600':'500') + '; transition:all .15s;">全部 <span style="opacity:0.6; margin-left:2px;">' + total + '</span></button>';
-      
+
       if (unusedCount > 0) {
         var isUnusedActive = imgMgrCurrentFilter === 'unused';
         html += '<button data-cat="all" data-filter="unused" style="padding:6px 14px; border-radius:99px; font-size:13px; border:1px solid ' + (isUnusedActive?'var(--danger)':'transparent') + '; background:' + (isUnusedActive?'var(--danger-soft)':'transparent') + '; color:' + (isUnusedActive?'var(--danger)':'var(--text-2)') + '; cursor:pointer; white-space:nowrap; font-weight:' + (isUnusedActive?'600':'500') + '; transition:all .15s;">未引用 <span style="opacity:0.6; margin-left:2px;">' + unusedCount + '</span></button>';
@@ -256,16 +258,16 @@
         var idx = db.imageCategories.indexOf(c);
         if (idx < 0) idx = 0;
         var palette = PALETTE[idx % PALETTE.length];
-        
+
         var isActive = imgMgrCurrentCat === c && imgMgrCurrentFilter !== 'unused';
         var bg = isActive ? palette.bg : 'transparent';
         var color = isActive ? palette.fg : 'var(--text-2)';
         var border = isActive ? palette.fg : 'transparent';
         var fontWeight = isActive ? '600' : '500';
-        
+
         html += '<button data-cat="' + esc(c) + '" data-filter="all" style="padding:6px 14px; border-radius:99px; font-size:13px; border:1px solid ' + border + '; background:' + bg + '; color:' + color + '; cursor:pointer; white-space:nowrap; font-weight:' + fontWeight + '; transition:all .15s;">' + esc(c) + ' <span style="opacity:0.6; margin-left:2px;">' + count + '</span></button>';
       });
-      
+
       pillsEl.innerHTML = html;
     }
 
@@ -297,7 +299,7 @@
     }
 
     grid.innerHTML = '';
-    
+
     var warningHtml = '';
     if (db.items.length === 0 && total > 0) {
       warningHtml = '<div style="grid-column: 1 / -1; text-align:center; color:var(--danger); padding:10px; font-size:13px; background:var(--danger-soft); border-radius:8px; margin-bottom:10px;">提示：当前本地素材库为空（可能是无痕模式或拉取失败），所以图片均显示为未引用。</div>';
@@ -311,31 +313,31 @@
   function renderImgMgrBatch() {
     var grid = $('imgMgrGrid');
     if (!grid) return;
-    
+
     var oldSentinel = document.getElementById('imgMgrSentinel');
     if (oldSentinel) oldSentinel.remove();
 
     var nextFiles = imgMgrFilteredFiles.slice(imgMgrRenderedCount, imgMgrRenderedCount + IMG_MGR_BATCH_SIZE);
-    
+
     requestAnimationFrame(function() {
       var html = nextFiles.map(function(f) {
         var url = imageUrlFromPath(f.relPath);
         var sizeStr = fmtSize(f.size);
-        var usedBadge = f.isUsed 
-          ? '<span class="mgr-badge used">已引用</span>' 
+        var usedBadge = f.isUsed
+          ? '<span class="mgr-badge used">已引用</span>'
           : '<span class="mgr-badge unused">未引用</span>';
 
         var idx = db.imageCategories.indexOf(f.cat);
         if (idx < 0) idx = 0;
         var palette = PALETTE[idx % PALETTE.length];
 
-        var tagsHtml = (f.tags && f.tags.length) 
+        var tagsHtml = (f.tags && f.tags.length)
           ? '<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; justify-content:center;">' + f.tags.map(function(t) { return ''
               + '<span class="tag-chip" style="font-size:10px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px; cursor:default;">'
               + '  #' + esc(t)
               + '  <span data-rm-tag="' + esc(t) + '" data-rel-path="' + esc(f.relPath) + '" style="cursor:pointer; opacity:0.6; font-size:12px; line-height:1; padding:0 2px; transition:opacity 0.15s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6" title="移除该标签">✕</span>'
               + '</span>';
-          }).join('') + '</div>' 
+          }).join('') + '</div>'
           : '';
 
         var isSelected = imgMgrSelectedIds.has(f.relPath);
@@ -360,7 +362,7 @@
           + '</div>'
           + '</div>';
       }).join('');
-      
+
       grid.insertAdjacentHTML('beforeend', html);
       imgMgrRenderedCount += nextFiles.length;
 
@@ -382,7 +384,7 @@
         imgMgrObserver.disconnect();
         imgMgrObserver.observe(sentinel);
       }
-      
+
       updateImgMgrBatchBar();
     });
   }
@@ -395,7 +397,7 @@
       onConfirm: function() {
         var rc = ghRepoConfig('img');
         var fullPath = rc.path + '/' + relPath;
-        
+
         var url = ghApiUrl(rc, fullPath);
         fetch(url, {
           method: 'DELETE',
@@ -403,20 +405,22 @@
           body: JSON.stringify({ message: 'delete ' + relPath, sha: sha, branch: rc.branch })
         }).then(function(res) {
           if (!res.ok) throw new Error('HTTP ' + res.status);
-          
+
+          // ★ P0-4：清空该图的 blob 缓存，避免已删的图继续显示
+          if (typeof clearImageBlobCache === 'function') clearImageBlobCache(relPath);
+
           repoImagesCache = repoImagesCache.filter(function(f) { return f.relPath !== relPath; });
-          
+
           var affectedIds = new Set();
           var removedImagesCount = 0;
-          
+
           db.items.forEach(function(item) {
             if (item.images) {
               var beforeLen = item.images.length;
               item.images = item.images.filter(function(im) {
                 if (!im.path) return true;
-                var ip = String(im.path).trim();
-                var rp = String(relPath).trim();
-                var isMatch = ip === rp || ip.endsWith(rp) || rp.endsWith(ip);
+                // ★ P1-5：严格路径匹配
+                var isMatch = imagePathMatches(im.path, relPath);
                 if (isMatch) {
                   removedImagesCount++;
                   return false;
@@ -428,7 +432,7 @@
               }
             }
           });
-          
+
           var removedItemsCount = 0;
           if (affectedIds.size > 0) {
             var beforeCount = db.items.length;
@@ -437,11 +441,11 @@
               return i.text || (i.images && i.images.length > 0);
             });
             removedItemsCount = beforeCount - db.items.length;
-            
+
             save();
             render();
           }
-          
+
           if (removedItemsCount > 0) {
             toast('图片已删，并清理了 ' + removedItemsCount + ' 条失去所有内容的空素材');
           } else if (removedImagesCount > 0) {
@@ -449,9 +453,9 @@
           } else {
             toast('已彻底删除物理图片');
           }
-          
+
           renderImgMgrUI();
-          
+
         }).catch(function(err) {
           console.error(err);
           toast('删除失败：' + err.message);
@@ -463,7 +467,7 @@
   function cleanAllUnusedImages() {
     var unused = repoImagesCache.filter(function(f) { return !f.isUsed; });
     if (!unused.length) return;
-    
+
     window.showCustomConfirm({
       title: '清理未引用图片',
       desc: '确定要一键清理这 ' + unused.length + ' 张未被引用的图片吗？\n\n这会直接向 GitHub 发送 ' + unused.length + ' 个删除请求，不可恢复！',
@@ -477,11 +481,16 @@
         var rc = ghRepoConfig('img');
         var success = 0;
         var fail = 0;
+        var deletedPaths = [];
 
         function loopDelete(index) {
           if (index >= unused.length) {
             btn.disabled = false;
             btn.innerHTML = originalText;
+            // ★ P0-4：清空已删图的 blob 缓存
+            if (typeof clearImageBlobCache === 'function') {
+              deletedPaths.forEach(function(p) { clearImageBlobCache(p); });
+            }
             toast('清理完成：成功 ' + success + ' 张，失败 ' + fail + ' 张');
             loadRepoImages();
             return;
@@ -490,13 +499,13 @@
           var f = unused[index];
           var fullPath = rc.path + '/' + f.relPath;
           var url = ghApiUrl(rc, fullPath);
-          
+
           fetch(url, {
             method: 'DELETE',
             headers: { Authorization: 'Bearer ' + rc.token, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: 'delete unused ' + f.relPath, sha: f.sha, branch: rc.branch })
           }).then(function(res) {
-            if (res.ok) success++;
+            if (res.ok) { success++; deletedPaths.push(f.relPath); }
             else fail++;
           }).catch(function(e) {
             fail++;
@@ -504,7 +513,7 @@
             setTimeout(function() { loopDelete(index + 1); }, 300);
           });
         }
-        
+
         loopDelete(0);
       }
     });
@@ -513,7 +522,7 @@
   function updateImgMgrBatchBar() {
     var bar = $('imgMgrBatchBar');
     if (!bar) return;
-    
+
     if (imgMgrSelectMode) {
       bar.classList.add('show');
       $('imgMgrBatchNum').textContent = imgMgrSelectedIds.size;
@@ -525,13 +534,13 @@
   function toggleSelectImgMgr(relPath) {
     if (imgMgrSelectedIds.has(relPath)) imgMgrSelectedIds.delete(relPath);
     else imgMgrSelectedIds.add(relPath);
-    
+
     var card = document.querySelector('.mgr-card[data-rel-path="' + relPath + '"]');
     if (card) {
       card.classList.toggle('selected', imgMgrSelectedIds.has(relPath));
       card.style.borderColor = imgMgrSelectedIds.has(relPath) ? 'var(--accent)' : '';
       card.style.boxShadow = imgMgrSelectedIds.has(relPath) ? '0 0 0 2px var(--accent-soft)' : '';
-      
+
       var check = card.querySelector('.mgr-select-check');
       if (check) {
         check.style.background = imgMgrSelectedIds.has(relPath) ? 'var(--accent)' : 'rgba(0,0,0,0.4)';
@@ -548,7 +557,6 @@
     renderImgMgrUI();
   }
 
-  // 暴露给全局使用的函数
   window.openImgManager = openImgManager;
   window.loadRepoImages = loadRepoImages;
   window.deleteRepoImage = deleteRepoImage;
@@ -559,7 +567,6 @@
   window.toggleSelectImgMgr = toggleSelectImgMgr;
   window.exitImgMgrSelectMode = exitImgMgrSelectMode;
 
-  // ★ Bug A 配套修复：把 IIFE 私有变量暴露给外部（bind-views.js 的"全选本页"要用）
   window.getImgMgrFilteredFiles = function () { return imgMgrFilteredFiles; };
   window.getImgMgrRenderedCount = function () { return imgMgrRenderedCount; };
 

@@ -1,5 +1,6 @@
 // js/review.js · 完整文件
-// ★ 修复：准奏/留中/焚毁时立即从队列移除，撤销时插回。彻底杜绝“撤销过快导致剩余数量+1”的 Bug。
+// 修复内容：
+//  - P1-8：撤销时检查 item.id 是否已在 reviewQueue，避免重复插入；savedIndex clamp 到有效范围
 
 (function() {
   var reviewHTML = ''
@@ -466,6 +467,9 @@
     var item = undoData.item;
     var index = undoData.index;
     var action = undoData.action;
+    // ★ P1-8：记录该 item 是否已经在队列中，避免重复插入
+    var alreadyInQueue = reviewQueue.indexOf(item.id) >= 0;
+
     if (action === 'delete') {
       var tIdx = db.trash.findIndex(function (i) { return i.id === item.id; });
       if (tIdx >= 0) db.trash.splice(tIdx, 1);
@@ -480,12 +484,13 @@
       } else { db.items.push(item); markItemDirty(item); _indexAddItem(item); }
     }
     if (typeof save === 'function') save();
-    
-    // ★ 修复：插回原位，而不是直接 unshift
-    if (index >= 0 && index <= reviewQueue.length) {
-      reviewQueue.splice(index, 0, item.id);
-    } else {
-      reviewQueue.unshift(item.id);
+
+    // ★ P1-8：插回原位，但加保护：
+    //   1) 如果 item 已经在队列里，不重复插
+    //   2) index clamp 到 [0, reviewQueue.length]
+    if (!alreadyInQueue) {
+      var clamped = Math.max(0, Math.min(reviewQueue.length, (typeof index === 'number' && index >= 0) ? index : 0));
+      reviewQueue.splice(clamped, 0, item.id);
     }
     reviewCurrentId = item.id;
     document.getElementById('rvUndoBtn').style.display = 'none';
@@ -512,7 +517,6 @@
 
   function reviewNext() {
     if (pendingNextTimer) { clearTimeout(pendingNextTimer); pendingNextTimer = null; }
-    // 队列已经在点按钮时移除了，这里直接跳转
     reviewCurrentId = reviewQueue.length > 0 ? reviewQueue[0] : null;
     loadReviewItem();
   }
@@ -524,7 +528,7 @@
     var newText = document.getElementById('reviewText').value.trim();
     var hasText = newText.length > 0;
     var hasImgs = item.images && item.images.length > 0;
-    
+
     if (!hasText && !hasImgs) {
       if (rvStyle.preventAccident) { if (window.toast) toast('内容已被清空，请点击【焚毁】来销毁，或按 Ctrl+Z 撤销'); return false; }
       else return true;
@@ -551,7 +555,7 @@
     playSound('page');
     battleStats.skipped++;
     var savedIndex = reviewQueue.indexOf(reviewCurrentId);
-    if (savedIndex >= 0) reviewQueue.splice(savedIndex, 1); // 立即移除
+    if (savedIndex >= 0) reviewQueue.splice(savedIndex, 1);
     triggerUndoToast('已留中', 'skip', savedIndex);
     reviewNext();
   });
@@ -566,7 +570,7 @@
     moveToTrash([reviewCurrentId]);
     if (typeof save === 'function') save();
     var savedIndex = reviewQueue.indexOf(reviewCurrentId);
-    if (savedIndex >= 0) reviewQueue.splice(savedIndex, 1); // 立即移除
+    if (savedIndex >= 0) reviewQueue.splice(savedIndex, 1);
     triggerUndoToast('已焚毁', 'delete', savedIndex);
     reviewNext();
   });
@@ -582,7 +586,7 @@
     showCornerStamp();
     battleStats.approved++;
     var savedIndex = reviewQueue.indexOf(reviewCurrentId);
-    if (savedIndex >= 0) reviewQueue.splice(savedIndex, 1); // 立即移除
+    if (savedIndex >= 0) reviewQueue.splice(savedIndex, 1);
     triggerUndoToast('已准奏', 'approve', savedIndex);
     pendingNextTimer = setTimeout(function () { pendingNextTimer = null; reviewNext(); }, 600);
   });

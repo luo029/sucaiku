@@ -1,0 +1,103 @@
+/* css/custom-select.css · 全局自定义下拉框美化 */
+.custom-select-wrap {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+.custom-select-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 12px;
+  background-color: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: all 0.15s;
+  user-select: none;
+}
+.custom-select-display:hover { border-color: var(--line-2); }
+.custom-select-wrap.open .custom-select-display {
+  border-color: var(--accent);
+  background: var(--card);
+  box-shadow: 0 0 0 3px rgba(99,102,241,.1);
+}
+.custom-select-display .cs-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.custom-select-display::after {
+  content: '';
+  width: 12px; height: 12px;
+  background: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238c8f9e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat center;
+  flex-shrink: 0; margin-left: 8px;
+  transition: transform 0.2s;
+}
+.custom-select-wrap.open .custom-select-display::after { transform: rotate(180deg); }
+
+/* 重点修改：面板变为 fixed 悬浮，脱离父容器限制 */
+.custom-select-panel {
+  position: fixed;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  box-shadow: var(--sh-3);
+  z-index: 9999; /* 高于一切弹窗 */
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  animation: dropdownIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.custom-select-panel[hidden] { display: none; }
+
+.custom-select-item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.1s;
+  word-break: break-all;
+  margin-bottom: 2px;
+  line-height: 1.5;
+  flex: none;
+}
+.custom-select-item:last-child {
+  margin-bottom: 0;
+}
+.custom-select-item:hover { 
+  background: var(--line); 
+  color: var(--text); 
+}
+.custom-select-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* 针对原本有限制宽度的场景进行自适应 */
+#type + .custom-select-wrap { width: 100%; max-width: 132px; }
+#defaultTypeSelect + .custom-select-wrap,
+#defaultPageSizeSelect + .custom-select-wrap,
+#manualRangeDays + .custom-select-wrap,
+#lazyLoadBatchSize + .custom-select-wrap,
+#focusImgDefaultCat + .custom-select-wrap { width: 100%; }
+
+.pagination .custom-select-wrap { width: auto; min-width: 100px; flex: none; }
+
+/* 美化下拉面板的滚动条 */
+.custom-select-panel::-webkit-scrollbar { width: 6px; }
+.custom-select-panel::-webkit-scrollbar-track { background: transparent; }
+.custom-select-panel::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }

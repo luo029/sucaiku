@@ -1,5 +1,6 @@
 // js/bind-core.js · 完整文件
 // ★ Bug B 修复：改用 document.body 捕获式委托，覆盖 review.js 动态插入的 #reviewImgs
+// ★ 修复：极简模式筛选面板（zenPanel）关闭时的内存泄漏，以及对 closest 的防御性判断
 
 addBtn.addEventListener('click', addOrUpdate);
 cancelBtn.addEventListener('click', cancelEdit);
@@ -120,8 +121,12 @@ document.addEventListener('click', function (e) {
   if (!tagPanel.hidden && !tagPicker.contains(e.target)) closeTagPanel();
   if ($('sourceFilterPanel') && !$('sourceFilterPanel').hidden && !$('sourceFilterWrap').contains(e.target)) $('sourceFilterPanel').hidden = true;
   if ($('catFilterPanel') && !$('catFilterPanel').hidden && !$('catFilterWrap').contains(e.target)) $('catFilterPanel').hidden = true;
+  
   var zenPanel = document.getElementById('zenFilterPanel');
-  if (zenPanel && !zenPanel.contains(e.target) && !e.target.closest('.zen-filter-btn')) zenPanel.remove();
+  if (zenPanel && !zenPanel.contains(e.target) && !(e.target.closest && e.target.closest('.zen-filter-btn'))) {
+    if (zenPanel._cleanup) zenPanel._cleanup();
+    zenPanel.remove();
+  }
 });
 
 $('hitokotoRefresh').addEventListener('click', fetchHitokoto);
@@ -248,6 +253,7 @@ function openZenFilterPanel(type) {
   var panel = document.getElementById('zenFilterPanel');
   if (panel) {
     if (panel.dataset.type === type && !panel.hidden) { panel.hidden = true; return; }
+    if (panel._cleanup) panel._cleanup();
     panel.remove();
   }
   panel = document.createElement('div');
@@ -272,12 +278,17 @@ function openZenFilterPanel(type) {
     if (db.settings && db.settings.zenAutoClosePanel === false) return;
     if (e && e.target && panel.contains(e.target)) return;
     if (panel && panel.parentNode) {
+      if (panel._cleanup) panel._cleanup();
       panel.remove();
-      window.removeEventListener('scroll', closePanelOnScroll);
-      window.removeEventListener('touchmove', closePanelOnScroll);
-      window.removeEventListener('wheel', closePanelOnScroll);
     }
   }
+
+  panel._cleanup = function () {
+    window.removeEventListener('scroll', closePanelOnScroll);
+    window.removeEventListener('touchmove', closePanelOnScroll);
+    window.removeEventListener('wheel', closePanelOnScroll);
+  };
+
   window.addEventListener('scroll', closePanelOnScroll, { passive: true });
   window.addEventListener('touchmove', closePanelOnScroll, { passive: true });
   window.addEventListener('wheel', closePanelOnScroll, { passive: true });
@@ -331,10 +342,8 @@ function openZenFilterPanel(type) {
   searchInput.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       e.stopPropagation();
+      if (panel._cleanup) panel._cleanup();
       panel.remove();
-      window.removeEventListener('scroll', closePanelOnScroll);
-      window.removeEventListener('touchmove', closePanelOnScroll);
-      window.removeEventListener('wheel', closePanelOnScroll);
     }
   });
 
@@ -348,9 +357,7 @@ function openZenFilterPanel(type) {
     currentPage = 1;
     renderList(); renderHeader();
     panel.hidden = true;
-    window.removeEventListener('scroll', closePanelOnScroll);
-    window.removeEventListener('touchmove', closePanelOnScroll);
-    window.removeEventListener('wheel', closePanelOnScroll);
+    if (panel._cleanup) panel._cleanup();
   });
 }
 
@@ -381,11 +388,6 @@ function handleImgFallback(e) {
   });
 }
 
-// ★ Bug B 修复：改用 document.body 捕获式委托。
-//   原因：review.js 是后加载的，它通过 insertAdjacentHTML 动态插入 #reviewImgs，
-//   原来那种"逐个 getElementById + addEventListener"的方式拿不到 reviewImgs，
-//   导致批阅界面的图片无法走 API 重试兜底（其他页面都正常）。
-//   改为 body 捕获后，所有 <img>（含动态插入的）都能覆盖。
 document.body.addEventListener('error', function (e) {
   if (e.target && e.target.tagName === 'IMG') handleImgFallback(e);
 }, true);

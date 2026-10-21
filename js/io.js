@@ -1,7 +1,7 @@
 // js/io.js · 完整文件
-// 【改动】1) 导入后 markIndexDirty + markAllShardsDirty  2) 导出提醒落地  3) 保持其他逻辑
+// 修复内容：
+//  - P1-6：handleImportFile 支持导入 tagColors，并做白名单校验，防止 CSS 注入
 
-// ============ 极简模式 ============
 function setZen(on) {
   zenMode = on;
   document.body.classList.toggle('zen-mode', on);
@@ -10,7 +10,6 @@ function setZen(on) {
   renderList(); scrollTop();
 }
 
-// ============ 专注模式 ============
 function setFocus(on) {
   focusMode = on;
   document.body.classList.toggle('focus-mode', on);
@@ -18,7 +17,6 @@ function setFocus(on) {
   renderList(); scrollTop();
 }
 
-// ============ 导出 ============
 function openExportModal(preset) {
   var filtered = getFilteredItems();
   var counts = {};
@@ -113,12 +111,10 @@ function doExport() {
     download(new Blob([outTxt], { type: 'text/plain;charset=utf-8' }), fname4);
     toast('已导出 TXT');
   }
-  // ★ 记录导出时间，用于提醒
   try { localStorage.setItem('material-library.last-export', String(Date.now())); } catch (e) {}
   closeExportModal();
 }
 
-// ★ 导出提醒检查
 function checkExportReminder() {
   var last = 0;
   try { last = Number(localStorage.getItem('material-library.last-export') || 0); } catch (e) {}
@@ -129,13 +125,12 @@ function checkExportReminder() {
   }
 }
 
-// ============ 导入 ============
 function handleImportFile(file) {
   var reader = new FileReader();
   reader.onload = function () {
     try {
       var data = JSON.parse(reader.result);
-      var incomingItems = [], incomingCats = [], incomingColors = {}, incomingSources = [], incomingTrash = [], incomingFixedTags = [], incomingImgCats = [];
+      var incomingItems = [], incomingCats = [], incomingColors = {}, incomingSources = [], incomingTrash = [], incomingFixedTags = [], incomingImgCats = [], incomingTagColors = {};
       if (Array.isArray(data)) incomingItems = data;
       else if (data && Array.isArray(data.items)) {
         incomingItems = data.items;
@@ -145,6 +140,8 @@ function handleImportFile(file) {
         incomingTrash = Array.isArray(data.trash) ? data.trash : [];
         incomingFixedTags = Array.isArray(data.fixedTags) ? data.fixedTags : [];
         incomingImgCats = Array.isArray(data.imageCategories) ? data.imageCategories : [];
+        // ★ P1-6：支持导入 tagColors（原来不导入）
+        incomingTagColors = (data.tagColors && typeof data.tagColors === 'object') ? data.tagColors : {};
       } else throw new Error('bad');
 
       var added = 0, skipped = 0, monthsTouched = {};
@@ -181,15 +178,19 @@ function handleImportFile(file) {
       incomingFixedTags.forEach(function (s) { if (typeof s === 'string' && s.trim() && db.fixedTags.indexOf(s) < 0) db.fixedTags.push(s); });
       incomingImgCats.forEach(function (s) { if (typeof s === 'string' && s.trim() && db.imageCategories.indexOf(s) < 0) db.imageCategories.push(s); });
 
+      // ★ P1-6：tagColors 校验后合并
+      var safeTagColors = (typeof window.sanitizeTagColors === 'function') ? window.sanitizeTagColors(incomingTagColors) : {};
+      if (!db.tagColors) db.tagColors = {};
+      Object.keys(safeTagColors).forEach(function (k) { db.tagColors[k] = safeTagColors[k]; });
+
       var used = new Set(Object.values(db.colors));
       Object.keys(incomingColors).forEach(function (c) {
         if (db.cats.indexOf(c) >= 0 && !(c in db.colors)) {
           var idx = incomingColors[c];
-          if (typeof idx === 'number' && !used.has(idx)) { db.colors[c] = idx; used.add(idx); }
+          if (typeof idx === 'number' && isFinite(idx) && idx >= 0 && !used.has(idx)) { db.colors[c] = idx; used.add(idx); }
         }
       });
 
-      // ★ 导入完成后：重建索引 + 标记所有分片脏
       markNeedNormalize();
       normalize();
       markIndexDirty();
@@ -221,12 +222,10 @@ function showImportResultModal(added, skipped, months) {
   mask.addEventListener('click', function (e) { if (e.target === mask) close(); });
 }
 
-// ============ 侧边栏 ============
 function openSidebar() { $('sidebar').classList.add('open'); $('sidebarOverlay').classList.add('show'); document.body.style.overflow = 'hidden'; }
 function closeSidebar() { $('sidebar').classList.remove('open'); $('sidebarOverlay').classList.remove('show'); document.body.style.overflow = ''; }
 function closeSidebarIfMobile() { if (window.innerWidth <= 960) closeSidebar(); }
 
-// ============ 全局暴露 ============
 window.setZen = setZen; window.setFocus = setFocus;
 window.openExportModal = openExportModal; window.closeExportModal = closeExportModal;
 window.doExport = doExport; window.handleImportFile = handleImportFile;

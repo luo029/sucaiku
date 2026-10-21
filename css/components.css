@@ -144,14 +144,14 @@ mark.kw{background:rgba(250,204,21,.38);color:inherit;padding:1px 3px;border-rad
 .card-imgs img{
   max-width:180px;
   max-height:180px;
-  min-width:100px; /* ★ 新增占位 */
-  min-height:100px; /* ★ 新增占位 */
+  min-width:100px;
+  min-height:100px;
   border-radius:8px;
   border:1px solid var(--line);
   object-fit:cover;
   cursor:zoom-in;
   display:block;
-  background-color: var(--line); /* ★ 懒加载占位色 */
+  background-color: var(--line);
 }
 .card-imgs .ci{position:relative;display:inline-block}
 .card-imgs .ci .ci-cat{position:absolute;bottom:4px;left:4px;font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.55);color:#fff}
@@ -254,7 +254,6 @@ mark.kw{background:rgba(250,204,21,.38);color:inherit;padding:1px 3px;border-rad
 }
 
 /* ================= 弹窗 ================= */
-/* ★ 修复：将层级从 100 提升至 200，防止被图床管理界面（150）遮挡 */
 .modal-mask{position:fixed;inset:0;background:rgba(15,16,24,.65);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:200;touch-action:none;overscroll-behavior:contain}
 .modal-mask.show{opacity:1;pointer-events:auto}
 .modal{background:var(--card);border-radius:20px;padding:28px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(15,16,24,.4);transform:translateY(20px) scale(.95);transition:all .3s cubic-bezier(.2,.8,.2,1.1);border:1px solid var(--line);overscroll-behavior:contain}
@@ -330,9 +329,12 @@ body.layout-strip .card-imgs {
   margin-top: 6px;
   gap: 6px;
 }
+/* ★ P1-10：加 min-width/min-height: 0，覆盖基础 100px 占位，让紧凑模式真正生效 */
 body.layout-strip .card-imgs img {
   max-width: 60px;
   max-height: 60px;
+  min-width: 0;
+  min-height: 0;
   border-radius: 6px;
 }
 body.layout-strip .card .ops {

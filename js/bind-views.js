@@ -1,5 +1,7 @@
 // js/bind-views.js · 完整文件
-// ★ 修复：图床批量修改卡顿。去掉了深拷贝，使用 copyIndexItem 并统一刷新索引。
+// 修复内容：
+//  - P1-5：imgMgrBatchEditConfirm / imgMgrBatchDelBtn / imgMgrGrid 的 data-rm-tag 分支用 imagePathMatches 严格匹配
+//  - P0-4：imgMgrBatchDelBtn 批量删除成功后清理 blob 缓存
 
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
@@ -53,7 +55,7 @@ safeBind('randomContent', 'click', function (e) { var img = e.target.closest('[d
 
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
-  
+
   var openMasks = document.querySelectorAll('.modal-mask.show');
   if (openMasks.length > 0) {
     var lastMask = openMasks[openMasks.length - 1];
@@ -63,7 +65,7 @@ document.addEventListener('keydown', function (e) {
   }
 
   if (typeof closeImgView === 'function' && $('imgView') && !$('imgView').hidden) { closeImgView(); return; }
-  
+
   if ($('imgManagerView') && !$('imgManagerView').hidden) { if (imgMgrSelectMode) exitImgMgrSelectMode(); else { $('imgManagerView').hidden = true; document.body.style.overflow = ''; } return; }
 
   if (focusMode) { setFocus(false); return; }
@@ -154,7 +156,7 @@ safeBind('trashList', 'click', function (e) { var r = e.target.closest('[data-re
 safeBind('menuImgManagerBtn', 'click', function () { $('menu').classList.remove('show'); openImgManager(); });
 safeBind('imgMgrCloseBtn', 'click', function () { if (imgMgrSelectMode) exitImgMgrSelectMode(); $('imgManagerView').hidden = true; document.body.style.overflow = ''; });
 safeBind('imgMgrRefreshBtn', 'click', loadRepoImages);
-safeBind('imgMgrSelectBtn', 'click', function () { imgMgrSelectMode = !imgMgrSelectMode; imgMgrSelectedIds.clear(); renderImgMgrUI(); }); 
+safeBind('imgMgrSelectBtn', 'click', function () { imgMgrSelectMode = !imgMgrSelectMode; imgMgrSelectedIds.clear(); renderImgMgrUI(); });
 safeBind('imgMgrBatchExit', 'click', function () { exitImgMgrSelectMode(); });
 
 safeBind('imgMgrSelectAllBtn', 'click', function () {
@@ -198,11 +200,11 @@ safeBind('imgMgrBatchEditConfirm', 'click', function () {
   if (isCat) {
     var newCat = $('imgMgrBatchCatGrid').dataset.selected; if (!newCat) return toast('请选择分类');
     repoImagesCache.forEach(function (f) { if (imgMgrSelectedIds.has(f.relPath)) f.cat = newCat; });
-    db.items.forEach(function (item) { if (item.images) item.images.forEach(function (im) { if (!im.path) return; var ip = String(im.path).trim(); imgMgrSelectedIds.forEach(function (relPath) { var rp = String(relPath).trim(); var fn = relPath.split('/').pop(); if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.indexOf(fn) >= 0) { im.cat = newCat; markItemDirty(item); updatedCount++; } }); }); });
+    db.items.forEach(function (item) { if (item.images) item.images.forEach(function (im) { if (!im.path) return; imgMgrSelectedIds.forEach(function (relPath) { if (imagePathMatches(im.path, relPath)) { im.cat = newCat; markItemDirty(item); updatedCount++; } }); }); });
   } else {
     var newTags = Array.from(selectedBatchTags);
     repoImagesCache.forEach(function (f) { if (imgMgrSelectedIds.has(f.relPath)) f.tags = newTags.slice(); });
-    db.items.forEach(function (item) { if (item.images) item.images.forEach(function (im) { if (!im.path) return; var ip = String(im.path).trim(); imgMgrSelectedIds.forEach(function (relPath) { var rp = String(relPath).trim(); var fn = relPath.split('/').pop(); if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.indexOf(fn) >= 0) { im.tags = newTags.slice(); markItemDirty(item); updatedCount++; } }); }); });
+    db.items.forEach(function (item) { if (item.images) item.images.forEach(function (im) { if (!im.path) return; imgMgrSelectedIds.forEach(function (relPath) { if (imagePathMatches(im.path, relPath)) { im.tags = newTags.slice(); markItemDirty(item); updatedCount++; } }); }); });
   }
   if (updatedCount > 0) markIndexDirty();
   save(); $('imgMgrBatchEditMask').classList.remove('show'); exitImgMgrSelectMode();
@@ -217,8 +219,12 @@ safeBind('imgMgrBatchDelBtn', 'click', function () {
     try {
       var idx = 0; async function worker() { while (idx < toDelete.length) { var i = idx++; await deleteOne(toDelete[i]); await new Promise(function (r) { setTimeout(r, 200); }); } }
       await Promise.all(Array.from({ length: Math.min(3, toDelete.length) }, function () { return worker(); }));
+      // ★ P0-4：清理已删图的 blob 缓存
+      if (typeof clearImageBlobCache === 'function') {
+        toDelete.forEach(function (f) { clearImageBlobCache(f.relPath); });
+      }
       var affected = new Set();
-      db.items.forEach(function (item) { if (item.images) { var before = item.images.length; item.images = item.images.filter(function (im) { if (!im.path) return true; var ip = String(im.path).trim(); return !toDelete.some(function (f) { var rp = String(f.relPath).trim(); return ip === rp || ip.endsWith(rp) || rp.endsWith(ip); }); }); if (item.images.length !== before) { affected.add(item.id); markItemDirty(item); _indexUpdateItem(item, item); } } });
+      db.items.forEach(function (item) { if (item.images) { var before = item.images.length; item.images = item.images.filter(function (im) { if (!im.path) return true; return !toDelete.some(function (f) { return imagePathMatches(im.path, f.relPath); }); }); if (item.images.length !== before) { affected.add(item.id); markItemDirty(item); _indexUpdateItem(item, item); } } });
       if (affected.size > 0) { db.items = db.items.filter(function (i) { if (!affected.has(i.id)) return true; return i.text || (i.images && i.images.length > 0); }); markIndexDirty(); save(); render(); }
       toast('清理完成：成功 ' + success + '，失败 ' + fail);
     } finally { btn.disabled = false; btn.innerHTML = origText; exitImgMgrSelectMode(); }
@@ -226,7 +232,7 @@ safeBind('imgMgrBatchDelBtn', 'click', function () {
 });
 safeBind('imgMgrGrid', 'click', function (e) {
   var rmTagBtn = e.target.closest('[data-rm-tag]');
-  if (rmTagBtn) { e.stopPropagation(); var relPath = rmTagBtn.dataset.relPath; var tag = rmTagBtn.dataset.rmTag; var imgItem = repoImagesCache.find(function (x) { return x.relPath === relPath; }); if (imgItem) imgItem.tags = (imgItem.tags || []).filter(function (t) { return t !== tag; }); db.items.forEach(function (item) { if (item.images) item.images.forEach(function (im) { if (!im.path) return; var ip = String(im.path).trim(); var rp = String(relPath).trim(); var fn = relPath.split('/').pop(); if (ip === rp || ip.endsWith(rp) || rp.endsWith(ip) || ip.indexOf(fn) >= 0) { if (im.tags) im.tags = im.tags.filter(function (t) { return t !== tag; }); markItemDirty(item); _indexUpdateItem(item, item); } }); }); save(); renderImgMgrUI(); return; }
+  if (rmTagBtn) { e.stopPropagation(); var relPath = rmTagBtn.dataset.relPath; var tag = rmTagBtn.dataset.rmTag; var imgItem = repoImagesCache.find(function (x) { return x.relPath === relPath; }); if (imgItem) imgItem.tags = (imgItem.tags || []).filter(function (t) { return t !== tag; }); db.items.forEach(function (item) { if (item.images) item.images.forEach(function (im) { if (!im.path) return; if (imagePathMatches(im.path, relPath)) { if (im.tags) im.tags = im.tags.filter(function (t) { return t !== tag; }); markItemDirty(item); _indexUpdateItem(item, item); } }); }); save(); renderImgMgrUI(); return; }
   if (imgMgrSelectMode) { var card = e.target.closest('.mgr-card'); if (card && card.dataset.relPath) toggleSelectImgMgr(card.dataset.relPath); return; }
   var delBtn = e.target.closest('[data-del-img-mgr]'); if (delBtn) { e.stopPropagation(); deleteRepoImage(delBtn.dataset.delImgMgr, delBtn.dataset.sha); return; }
   var img = e.target.closest('[data-open-img]'); if (img) window.open(img.dataset.openImg, '_blank', 'noopener');
