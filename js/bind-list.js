@@ -89,21 +89,7 @@ $('pagination').addEventListener('change', function (e) {
   }
 });
 
-catListEl.addEventListener('change', function (e) {
-  var inp = e.target.closest('.cat-name'); if (!inp) return;
-  renameCat(Number(inp.dataset.idx), inp.value);
-});
-catListEl.addEventListener('keydown', function (e) {
-  if (e.target.classList.contains('cat-name') && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
-});
-catListEl.addEventListener('click', function (e) {
-  var btn = e.target.closest('[data-cat-del]'); if (!btn) return;
-  delCat(Number(btn.dataset.catDel));
-});
-$('addCatBtn').addEventListener('click', function () { addCat(newCatInput.value); });
-newCatInput.addEventListener('keydown', function (e) {
-  if (e.key === 'Enter') { e.preventDefault(); addCat(newCatInput.value); }
-});
+// ★ 移除之前的 catListEl 事件，改为绑定在弹窗内的元素 (已在 bind-views.js 处理)
 
 $('selectBtn').addEventListener('click', function () {
   selectMode = !selectMode;
@@ -228,8 +214,7 @@ if (batchSourceConfirmEl) {
 }
 
 // ============================================================
-// ★ 新增：卡片右键 / 长按快捷菜单 (替换为自定义弹窗)
-//    受 db.settings.enableContextMenu 控制
+// ★ 右键菜单 (使用带建议的自定义 Prompt)
 // ============================================================
 (function () {
   if (!document.getElementById('ctxMenuStyle')) {
@@ -301,8 +286,9 @@ if (batchSourceConfirmEl) {
         if (!cats.length) { toast('还没有分类'); return; }
         window.showCustomPrompt({
           title: '移动到分类',
-          desc: '输入分类名（可选：' + cats.join(' / ') + '）：',
+          desc: '输入分类名，或点击下方建议：',
           value: item.type,
+          suggestions: cats,
           onConfirm: function(target) {
             if (target && target.trim() && cats.indexOf(target.trim()) >= 0 && target.trim() !== item.type) {
               item.type = target.trim();

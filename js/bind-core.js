@@ -264,14 +264,13 @@ $('tagNav').addEventListener('click', function (e) {
   scrollTop();
 });
 
+// 点击分类管理，打开弹窗
 $('manageCatBtn').addEventListener('click', function () {
-  catManager.hidden = !catManager.hidden;
-  if (!catManager.hidden) {
-    renderCatManager(); newCatInput.focus(); closeSidebarIfMobile();
-    setTimeout(function () { catManager.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
-  }
+  renderCatManager();
+  $('catManageMask').classList.add('show');
+  closeSidebarIfMobile();
 });
-$('closeCatManagerBtn').addEventListener('click', function () { catManager.hidden = true; });
+
 $('manageTagBtn').addEventListener('click', function () {
   renderTagManager(); $('tagManageMask').classList.add('show'); closeSidebarIfMobile();
 });
@@ -473,9 +472,8 @@ document.addEventListener('keydown', function (e) {
   var t = e.target;
   var isTyping = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 
-  // —— Ctrl+S / Cmd+S：强制立即推送（即使在输入框里也生效）——
+  // —— Ctrl+S / Cmd+S：强制立即推送 ——
   if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-    // 仅在输入框外或者有意触发时生效（我们保留输入框里也生效，方便）
     e.preventDefault();
     var cfg = loadGH();
     if (!ghReady(cfg)) { toast('请先在设置中配置 GitHub'); return; }
@@ -487,7 +485,6 @@ document.addEventListener('keydown', function (e) {
     return;
   }
 
-  // —— 其他快捷键：输入中 / 弹窗打开 / 特殊模式下一律忽略 ——
   if (isTyping) return;
   if (document.querySelector('.modal-mask.show')) return;
   if (document.body.classList.contains('focus-mode')) return;
@@ -501,7 +498,6 @@ document.addEventListener('keydown', function (e) {
     return;
   }
 
-  // —— 单键快捷键：搜索 / 新建 ——
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 
   var searchKey = String(db.settings.shortcutSearch || '/').toLowerCase();
@@ -509,7 +505,7 @@ document.addEventListener('keydown', function (e) {
   var pressed = String(e.key || '').toLowerCase();
 
   if (pressed === searchKey) {
-    if (searchKey === '/') e.preventDefault(); // Firefox 快捷查找
+    if (searchKey === '/') e.preventDefault(); 
     if (searchEl) {
       scrollTop();
       setTimeout(function () { searchEl.focus(); searchEl.select(); }, 60);
@@ -522,9 +518,6 @@ document.addEventListener('keydown', function (e) {
     if (inputEl) {
       scrollTop();
       setTimeout(function () { inputEl.focus(); }, 80);
-      if (typeof toast === 'function' && !document.body.classList.contains('focus-mode')) {
-        // 轻柔提示，不打扰
-      }
     }
     return;
   }

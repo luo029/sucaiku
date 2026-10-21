@@ -1,4 +1,9 @@
 // js/modals.js - 所有弹窗与隐藏元素
+setTimeout(function() {
+  var oldCatMgr = document.getElementById('catManager');
+  if (oldCatMgr) oldCatMgr.remove();
+}, 100);
+
 var modalsHtml = ''
 
   // ============ 批量操作栏 ============
@@ -126,7 +131,6 @@ var modalsHtml = ''
   + '<div style="display:flex; gap:10px;"><div style="flex:1;"><div style="font-size:12px; text-align:center; margin-bottom:6px;">分类</div><input type="number" id="catLimitInput" min="1" max="30" value="3" style="width:100%; text-align:center; padding:8px; border:none; background:var(--bg);"></div><div style="flex:1;"><div style="font-size:12px; text-align:center; margin-bottom:6px;">来源</div><input type="number" id="srcLimitInput" min="1" max="30" value="3" style="width:100%; text-align:center; padding:8px; border:none; background:var(--bg);"></div><div style="flex:1;"><div style="font-size:12px; text-align:center; margin-bottom:6px;">标签</div><input type="number" id="tagLimitInput" min="1" max="30" value="3" style="width:100%; text-align:center; padding:8px; border:none; background:var(--bg);"></div></div>'
   + '</div></div>'
 
-  // ============ ★ 新增：快捷操作与交互（修改标题与描述） ============
   + '<div class="st-card" data-group="general"><div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div class="st-card-title">快捷操作与交互体验</div><div class="st-card-desc">定制专属快捷键、右键菜单与标签折叠，打造顺滑操作流</div></div></div><div class="st-card-body">'
   + '<label class="st-toggle"><div><div class="st-toggle-title">开启全局快捷键</div><div class="st-toggle-desc">/ 搜索 · N 新建 · Ctrl+S 推送 · Alt+Enter 盲盒</div></div><input type="checkbox" id="enableShortcuts" checked></label>'
   + '<div class="st-grid-2" style="margin-bottom:16px;"><div class="st-field"><label>搜索快捷键</label><input type="text" id="shortcutSearch" maxlength="1" value="/" placeholder="/"><div class="st-hint">单个字符，默认 /</div></div><div class="st-field"><label>新建快捷键</label><input type="text" id="shortcutNew" maxlength="1" value="n" placeholder="n"><div class="st-hint">单个字符，默认 N</div></div></div>'
@@ -282,6 +286,17 @@ var modalsHtml = ''
   + '<div class="modal-actions" style="margin-top:16px;"><button class="btn" id="settingCloseBtn" style="width:100%;">关闭</button></div>'
   + '</div></div>'
 
+  // ============ ★ 新增：分类管理弹窗（带分页） ============
+  + '<div class="modal-mask" id="catManageMask"><div class="modal wide">'
+  + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">'
+  + '<h3 class="modal-title" style="margin:0;">分类管理</h3>'
+  + '<div style="font-size:12px; color:var(--text-3);">点击名字可直接修改</div>'
+  + '</div>'
+  + '<div class="health-list" id="catManageList" style="max-height:50vh; overflow-y:auto;"></div>'
+  + '<div id="catManagePagination" style="display:flex; justify-content:center; align-items:center; gap:12px; margin-top:16px; font-size:13px; color:var(--text-2);"></div>'
+  + '<div class="modal-actions" style="justify-content:flex-end; margin-top:16px;"><button class="btn" id="catManageCloseBtn">关闭</button></div>'
+  + '</div></div>'
+
   // ============ 日志可视化界面 ============
   + '<div class="modal-mask" id="logMask"><div class="modal wide" style="max-width:680px;">'
   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
@@ -338,7 +353,8 @@ var modalsHtml = ''
   + '<button class="btn tiny danger" id="tagBatchDeleteBtn">批量删除</button>'
   + '<button class="btn tiny" id="tagBatchCancelBtn">取消</button>'
   + '</div>'
-  + '<div class="health-list" id="tagManageList"></div>'
+  + '<div class="health-list" id="tagManageList" style="max-height:50vh; overflow-y:auto;"></div>'
+  + '<div id="tagManagePagination" style="display:flex; justify-content:center; align-items:center; gap:12px; margin-top:16px; font-size:13px; color:var(--text-2);"></div>'
   + '<div class="modal-actions" style="justify-content:flex-end;"><button class="btn" id="tagManageCloseBtn">关闭</button></div>'
   + '</div></div>'
 
@@ -386,6 +402,7 @@ var modalsHtml = ''
   + '<div class="modal"><div class="modal-icon export-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>'
   + '<h3 class="modal-title" id="cpTitle">修改</h3><p class="modal-desc" id="cpDesc">请输入：</p>'
   + '<div class="export-field"><input class="modal-input" id="cpInput" autocomplete="off"></div>'
+  + '<div id="cpSuggestions" style="display:none; flex-wrap:wrap; gap:6px; margin-bottom:16px; max-height:120px; overflow-y:auto; padding:4px; background:var(--bg); border-radius:8px;"></div>'
   + '<div class="modal-actions"><button class="btn" id="cpCancel">取消</button><button class="primary" id="cpConfirm">确定</button></div>'
   + '</div></div>'
 

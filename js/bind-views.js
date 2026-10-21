@@ -14,6 +14,17 @@ window.showCustomPrompt = function(options) {
   $('cpInput').value = options.value || '';
   $('cpInput').placeholder = options.placeholder || '';
   
+  var sugBox = $('cpSuggestions');
+  if (options.suggestions && options.suggestions.length) {
+    sugBox.style.display = 'flex';
+    sugBox.innerHTML = options.suggestions.map(function(s) {
+      return '<span class="tag-suggestion-chip" data-val="' + esc(s) + '">' + esc(s) + '</span>';
+    }).join('');
+  } else {
+    sugBox.style.display = 'none';
+    sugBox.innerHTML = '';
+  }
+  
   mask.classList.add('show');
   setTimeout(function() { $('cpInput').focus(); $('cpInput').select(); }, 50);
   
@@ -35,6 +46,17 @@ window.showCustomPrompt = function(options) {
     if (e.key === 'Escape') newCancel.click();
   };
   mask.onclick = function(e) { if (e.target === mask) newCancel.click(); };
+  
+  // 绑定建议标签点击
+  if (options.suggestions && options.suggestions.length) {
+    sugBox.onclick = function(e) {
+      var chip = e.target.closest('.tag-suggestion-chip');
+      if (chip) {
+        $('cpInput').value = chip.dataset.val;
+        $('cpInput').focus();
+      }
+    };
+  }
 };
 
 // ============ 视图切换 ============
@@ -101,6 +123,25 @@ safeBind('modalConfirm', 'click', function () {
 });
 safeBind('modalMask', 'click', function (e) {
   if (e.target === $('modalMask')) closeModal();
+});
+
+// ★ 分类管理弹窗事件
+safeBind('catManageCloseBtn', 'click', function() { $('catManageMask').classList.remove('show'); });
+safeBind('catManageMask', 'click', function(e) { if (e.target === $('catManageMask')) $('catManageMask').classList.remove('show'); });
+safeBind('addCatBtnModal', 'click', function() { addCat($('newCatInputModal').value); });
+safeBind('newCatInputModal', 'keydown', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); addCat($('newCatInputModal').value); }
+});
+safeBind('catManageList', 'change', function(e) {
+  var inp = e.target.closest('.cat-name'); if (!inp) return;
+  renameCat(Number(inp.dataset.idx), inp.value);
+});
+safeBind('catManageList', 'keydown', function(e) {
+  if (e.target.classList.contains('cat-name') && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+});
+safeBind('catManageList', 'click', function(e) {
+  var btn = e.target.closest('[data-cat-del]'); if (!btn) return;
+  delCat(Number(btn.dataset.catDel));
 });
 
 // ============ 随机盲盒 ============

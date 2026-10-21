@@ -1,12 +1,17 @@
 // js/render.js
 var tagExpanded = false; var catExpanded = false; var srcExpanded = false;
+var catManagerPage = 1; var tagManagerPage = 1;
+var CAT_PAGE_SIZE = 10; var TAG_PAGE_SIZE = 20;
+
 function _isMobileViewport() { return window.matchMedia('(max-width: 768px)').matches; }
 
 function render() {
   draggedItemId = null; normalize();
   if (currentSource !== ALL_SOURCES && db.sources.indexOf(currentSource) < 0) currentSource = ALL_SOURCES;
   var allTypes = new Set(['全部', IMG_TYPE].concat(db.cats)); if (db.items.some(function (i) { return i.type === UNCAT; })) allTypes.add(UNCAT); if (!allTypes.has(currentType)) currentType = '全部';
-  renderSidebar(); renderTags(); renderSourceFilter(); renderHeader(); renderList(); renderCatFilter(); refreshTypeSelect(); updateSourcePickerUI(); updateTagPickerUI(); if (catManager && !catManager.hidden) renderCatManager();
+  renderSidebar(); renderTags(); renderSourceFilter(); renderHeader(); renderList(); renderCatFilter(); refreshTypeSelect(); updateSourcePickerUI(); updateTagPickerUI(); 
+  if ($('catManageMask') && $('catManageMask').classList.contains('show')) renderCatManager();
+  if ($('tagManageMask') && $('tagManageMask').classList.contains('show')) renderTagManagerWithBatch();
 }
 
 function renderSidebar() {
@@ -57,7 +62,6 @@ function renderHeader() {
   var tagArr = currentTags && currentTags.size > 0 ? Array.from(currentTags) : (currentTag ? [currentTag] : []);
   var maxTags = db.settings.maxTagsInHeader || 3;
   
-  // ★ 标签折叠
   if (tagArr.length > 0) {
     if (tagArr.length > maxTags) {
       var displayTags = tagArr.slice(0, maxTags).map(function(t){ return '#'+t; }).join(' ');
@@ -124,7 +128,6 @@ function renderPagination(total, totalPages, start, pageCount) {
   
   html = '<div class="page-info">第 <b>' + (start + 1) + '</b>-<b>' + end + '</b> 条，共 <b>' + total + '</b> 条</div><div class="page-nav">' + nav + '</div><select class="page-size" id="pageSizeSelect"><option value="12" ' + (pageSize === 12 ? 'selected' : '') + '>12 条/页</option><option value="24" ' + (pageSize === 24 ? 'selected' : '') + '>24 条/页</option><option value="48" ' + (pageSize === 48 ? 'selected' : '') + '>48 条/页</option><option value="100" ' + (pageSize === 100 ? 'selected' : '') + '>100 条/页</option></select>';
   
-  // ★ 新增：加载更多历史分片按钮
   if (db._allShardKeys && db._loadedShardKeys && db._loadedShardKeys.length < db._allShardKeys.length) {
     html += '<div style="width:100%; text-align:center; margin-top:16px; border-top:1px dashed var(--line); padding-top:16px;"><button class="btn" id="loadMoreShardsBtn" style="padding:8px 24px; border-radius:20px; background:var(--accent-soft); color:var(--accent); border-color:transparent; font-weight:600;">⬇️ 加载更早的历史素材 (剩余 ' + (db._allShardKeys.length - db._loadedShardKeys.length) + ' 个分片)</button></div>';
   }
@@ -162,7 +165,44 @@ function renderTagPanelList(query) {
 function setFixedSource(source) { if (db.fixedSource === source) { db.fixedSource = ''; toast('已取消固定来源'); } else { db.fixedSource = source; toast('已固定来源「' + source + '」'); } save(); renderSourcePanelList(spSearch.value); renderSidebar(); renderSourceFilter(); updateSourcePickerUI(); }
 function toggleFixedTag(tag) { var i = db.fixedTags.indexOf(tag); if (i >= 0) { db.fixedTags.splice(i, 1); toast('已取消固定标签'); } else { db.fixedTags.push(tag); toast('已固定标签「' + tag + '」'); } save(); renderTagPanelList(tpSearch.value); renderTags(); updateTagPickerUI(); }
 function deleteSource(sourceName) { if (!confirm('确定要删除来源「' + sourceName + '」吗？\n该来源下的所有素材将变为无来源，此操作不可撤销。')) return; db.sources = db.sources.filter(function (s) { return s !== sourceName; }); if (db.fixedSource === sourceName) db.fixedSource = ''; db.items.forEach(function (i) { if (i.source === sourceName) i.source = ''; }); if (currentSource === sourceName) currentSource = ALL_SOURCES; save(); render(); toast('已删除来源'); }
-function renderCatManager() { if (!db.cats.length) { catListEl.innerHTML = '<div class="cat-empty">还没有分类，在下面输入框添加吧</div>'; return; } catListEl.innerHTML = db.cats.map(function (c, idx) { var col = catColor(c); var n = getSidebarStats().catCounts[c] || 0; return '<div class="cat-row"><span class="dot" style="background:' + col.fg + '"></span><input class="cat-name" data-idx="' + idx + '" value="' + esc(c) + '" maxlength="12"><span class="cat-n">' + formatCount(n) + '</span><button class="btn tiny danger" data-cat-del="' + idx + '">删除</button></div>'; }).join(''); }
+
+// ★ 修改：带分页的分类管理
+function renderCatManager() { 
+  var listEl = $('catManageList');
+  var pagEl = $('catManagePagination');
+  if (!listEl) return;
+  
+  if (!db.cats.length) { 
+    listEl.innerHTML = '<div class="cat-empty" style="text-align:center; padding:40px; color:var(--text-3);">还没有分类，去添加一个吧</div>'; 
+    if (pagEl) pagEl.innerHTML = '';
+    return; 
+  } 
+  
+  var totalPages = Math.ceil(db.cats.length / CAT_PAGE_SIZE);
+  if (catManagerPage > totalPages) catManagerPage = totalPages;
+  if (catManagerPage < 1) catManagerPage = 1;
+  
+  var start = (catManagerPage - 1) * CAT_PAGE_SIZE;
+  var slice = db.cats.slice(start, start + CAT_PAGE_SIZE);
+  
+  listEl.innerHTML = slice.map(function (c) { 
+    var idx = db.cats.indexOf(c);
+    var col = catColor(c); 
+    var n = getSidebarStats().catCounts[c] || 0; 
+    return '<div class="cat-row"><span class="dot" style="background:' + col.fg + '"></span><input class="cat-name" data-idx="' + idx + '" value="' + esc(c) + '" maxlength="12"><span class="cat-n">' + formatCount(n) + '</span><button class="btn tiny danger" data-cat-del="' + idx + '">删除</button></div>'; 
+  }).join(''); 
+  
+  if (pagEl) {
+    if (totalPages <= 1) {
+      pagEl.innerHTML = '';
+    } else {
+      pagEl.innerHTML = '<button class="btn tiny" id="catPagePrev" ' + (catManagerPage === 1 ? 'disabled' : '') + '>上一页</button>' +
+        '<span>第 <b>' + catManagerPage + '</b> / ' + totalPages + ' 页</span>' +
+        '<button class="btn tiny" id="catPageNext" ' + (catManagerPage === totalPages ? 'disabled' : '') + '>下一页</button>';
+    }
+  }
+}
+
 function refreshTypeSelect(keep) { var cur = keep !== undefined ? keep : typeEl.value; var opts = db.cats.slice(); if (cur === IMG_TYPE) opts.unshift(IMG_TYPE); if (!opts.length) opts = [UNCAT]; if (cur === UNCAT && opts.indexOf(UNCAT) < 0) opts.push(UNCAT); else if (cur && opts.indexOf(cur) < 0) opts.unshift(cur); typeEl.innerHTML = opts.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join(''); if (cur && opts.indexOf(cur) >= 0) typeEl.value = cur; }
 function getPageItems() { var filtered = getFilteredItems(); var start = (currentPage - 1) * pageSize; return filtered.slice(start, start + pageSize); }
 function updateBatchBar(pageItems) { batchBar.classList.toggle('show', selectMode); $('selectBtn').classList.toggle('active', selectMode); if (!selectMode) return; $('batchNum').textContent = selectedIds.size; if (!pageItems.length) { $('selectAllBtn').textContent = '全选本页'; return; } var allSel = pageItems.every(function (i) { return selectedIds.has(i.id); }); $('selectAllBtn').textContent = allSel ? '取消全选本页' : '全选本页'; }
