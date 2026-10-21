@@ -1,5 +1,5 @@
 // js/snapshots.js · 完整文件
-// ★ 优化 H：_recordSnapshotChange 加 5 秒节流，批量操作（移动分类、加标签）不再卡
+// ★ 修复：restoreSnapshot 使用了 try...finally，确保 suppressPush 永远会被重置
 
 function _fmtLocalDate(ts) {
   if (typeof window._localDateStr === 'function') return window._localDateStr(ts);
@@ -32,7 +32,6 @@ function _shouldCreateSnapshot() {
   return false;
 }
 
-// ★ 优化 H：节流 —— 5 秒内只写一次 localStorage
 var _lastChangeRecordAt = 0;
 function _recordSnapshotChange() {
   var now = Date.now();
@@ -266,27 +265,30 @@ async function restoreSnapshot(path) {
   if (!payload || !Array.isArray(payload.items)) throw new Error('快照格式错误');
 
   suppressPush = true;
-  applyLoadedData({
-    items: payload.items,
-    cats: payload.cats || DEFAULT_CATS,
-    colors: payload.colors || {},
-    sources: payload.sources || [],
-    fixedSource: payload.fixedSource || '',
-    fixedTags: payload.fixedTags || [],
-    imageCategories: payload.imageCategories || DEFAULT_IMG_CATS,
-    tagColors: payload.tagColors || {},
-    trash: payload.trash || [],
-    _rev: payload.rev || 0,
-    catVersion: payload.catVersion || 0
-  });
-  db.items.forEach(function (i) { i.images = normalizeImages(i.images); });
-  markNeedNormalize(); normalize();
-  markIndexDirty(); markAllShardsDirty();
-  await saveImmediate();
-  suppressPush = false;
-  render();
-  appendLog({ action: 'snapshot', status: 'success', summary: '从快照恢复：' + path, itemCount: db.items.length });
-  toast('✅ 已恢复到快照（' + new Date(payload.createdAt).toLocaleString() + '）');
+  try {
+    applyLoadedData({
+      items: payload.items,
+      cats: payload.cats || DEFAULT_CATS,
+      colors: payload.colors || {},
+      sources: payload.sources || [],
+      fixedSource: payload.fixedSource || '',
+      fixedTags: payload.fixedTags || [],
+      imageCategories: payload.imageCategories || DEFAULT_IMG_CATS,
+      tagColors: payload.tagColors || {},
+      trash: payload.trash || [],
+      _rev: payload.rev || 0,
+      catVersion: payload.catVersion || 0
+    });
+    db.items.forEach(function (i) { i.images = normalizeImages(i.images); });
+    markNeedNormalize(); normalize();
+    markIndexDirty(); markAllShardsDirty();
+    await saveImmediate();
+    render();
+    appendLog({ action: 'snapshot', status: 'success', summary: '从快照恢复：' + path, itemCount: db.items.length });
+    toast('✅ 已恢复到快照（' + new Date(payload.createdAt).toLocaleString() + '）');
+  } finally {
+    suppressPush = false;
+  }
 }
 
 async function openSnapshotListView() {

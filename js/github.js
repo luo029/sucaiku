@@ -1,14 +1,5 @@
 // js/github.js · 完整文件
-// 修复内容：
-//  - P0-1：分片拆分后拉取只拉 part 1 → yearIndex 记录 parts，拉取端循环拉全
-//  - P0-2：分片缩小时旧 part 不清理 → push 后自动清理多余的旧 part 文件
-//  - P0-4：图片 blob 缓存不随物理删除失效 → 新增 clearImageBlobCache
-//  - P1-5：图片路径宽松匹配误关联 → imagePathMatches 严格匹配
-//  - P1-7：冲突策略只有 last-write → pull 时按 id + updatedAt 合并
-//          ★ 本次修正：兼容 remote / force-remote / forceRemote / cloud 等多种设置值
-//          ★ 本次修正：prompt 走合并后，用 toast 提示"检测到 N 条冲突，已按修改时间合并"
-//          ★ 本次修正：新增 local / force-local / forceLocal（本地优先）
-//  - P1-9：进度条 total 被改成 done → 保留真实 total，失败时进度条变红
+// ★ 修复：ghPush 的 toDelete 增加了 canDeleteShards 防御，彻底杜绝误删云端未加载分片的风险
 
 var STORE_VERSION = 4; var GH_INDEX_PATH = 'index.json'; var GH_TRASH_PATH = 'trash.json';
 var GH_LOG_PATH = 'push-log.json'; var GH_DEVICES_PATH = 'devices.json';
@@ -416,7 +407,8 @@ function ghPush(silent, force) {
     var json = JSON.stringify(groups[k]);
     if (force || _shardSnapshots[k] !== json) toPush.push(k);
   });
-  var toDelete = Object.keys(_shardSnapshots).filter(function (k) { return currentKeys.indexOf(k) < 0; });
+  var canDeleteShards = db._allShardKeys && db._loadedShardKeys && db._loadedShardKeys.length >= db._allShardKeys.length;
+  var toDelete = canDeleteShards ? Object.keys(_shardSnapshots).filter(function (k) { return currentKeys.indexOf(k) < 0; }) : [];
 
   _showSyncProgress(toPush.length + toDelete.length + 3);
 
@@ -651,14 +643,6 @@ function ghPull(silent, pullMore) {
           var currentIds = new Set(db.items.map(function (i) { return i.id; }));
           newItems.forEach(function (i) { if (!currentIds.has(i.id)) db.items.push(i); });
         } else {
-          // ============================================================
-          // ★ P1-7 修正：冲突处理
-          // ------------------------------------------------------------
-          // 兼容多种设置值：
-          //   remote / force-remote / forceRemote / cloud → 云端优先
-          //   local  / force-local  / forceLocal          → 本地优先
-          //   prompt / 其他                               → 合并（保留 updatedAt 较新的）+ toast 提示
-          // ============================================================
           var conflictMode = db.settings.conflictAction || 'prompt';
           var isRemoteFirst = (conflictMode === 'remote' || conflictMode === 'force-remote' || conflictMode === 'forceRemote' || conflictMode === 'cloud');
           var isLocalFirst = (conflictMode === 'local' || conflictMode === 'force-local' || conflictMode === 'forceLocal');

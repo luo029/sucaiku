@@ -1,6 +1,5 @@
 // js/review.js · 完整文件
-// 修复内容：
-//  - P1-8：撤销时检查 item.id 是否已在 reviewQueue，避免重复插入；savedIndex clamp 到有效范围
+// ★ 修复：批阅界面新建分类时，补充 catVersion++ 以触发多端同步
 
 (function() {
   var reviewHTML = ''
@@ -467,7 +466,6 @@
     var item = undoData.item;
     var index = undoData.index;
     var action = undoData.action;
-    // ★ P1-8：记录该 item 是否已经在队列中，避免重复插入
     var alreadyInQueue = reviewQueue.indexOf(item.id) >= 0;
 
     if (action === 'delete') {
@@ -485,9 +483,6 @@
     }
     if (typeof save === 'function') save();
 
-    // ★ P1-8：插回原位，但加保护：
-    //   1) 如果 item 已经在队列里，不重复插
-    //   2) index clamp 到 [0, reviewQueue.length]
     if (!alreadyInQueue) {
       var clamped = Math.max(0, Math.min(reviewQueue.length, (typeof index === 'number' && index >= 0) ? index : 0));
       reviewQueue.splice(clamped, 0, item.id);
@@ -728,7 +723,10 @@
   function applyValue(type, val, shouldPin) {
     if (type === 'cat') {
       currentCat = val;
-      if (db.cats.indexOf(val) < 0) db.cats.push(val);
+      if (db.cats.indexOf(val) < 0) {
+        db.cats.push(val);
+        db.catVersion = (db.catVersion || 0) + 1;
+      }
       if (shouldPin) db.settings.reviewFixedCat = val;
     } else if (type === 'tag') {
       if (currentTags.has(val)) { if (!shouldPin) currentTags.delete(val); } else currentTags.add(val);
