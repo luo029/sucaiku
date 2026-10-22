@@ -1,5 +1,9 @@
-// js/items.js · 完整文件
-// ★ 本次改动：addOrUpdate 成功后调用 clearOrphanImage 清理孤儿图片记录；其余逻辑保留
+// js/items.js · 完整文件（性能与正确性修复版）
+// 本次改动：
+//  1) renameTag / delTag / renameCat / delCat 去掉逐条 _indexUpdateItem(i, i)，改用 markIndexDirty()
+//     修复：改分类名/标签名后，旧分类或旧标签的统计数字残留、筛选串数据的问题
+//  2) moveToTrash / restoreFromTrash / purgeTrashItem 通知存储层"回收站变了"，配合新版 store.js 单独写盘
+//  3) addOrUpdate 成功后调用 clearOrphanImage 清理孤儿图片记录（保留原逻辑）
 
 var zenQueue = []; var isProcessingInbox = false;
 
@@ -11,6 +15,7 @@ function moveToTrash(ids) {
     return true;
   });
   for (var m = moved.length - 1; m >= 0; m--) db.trash.push(moved[m]);
+  if (typeof markTrashDirty === 'function') markTrashDirty();
   return moved.length;
 }
 function restoreFromTrash(id) {
@@ -19,9 +24,14 @@ function restoreFromTrash(id) {
   var item = db.trash.splice(idx, 1)[0]; delete item.deletedAt;
   if (db.items.some(function (x) { return x.id === item.id; })) item.id = uid();
   db.items.push(item); markItemDirty(item); _indexAddItem(item);
+  if (typeof markTrashDirty === 'function') markTrashDirty();
   save(); render(); renderTrash(); toast('已恢复');
 }
-function purgeTrashItem(id) { db.trash = db.trash.filter(function (i) { return i.id !== id; }); save(); renderTrash(); }
+function purgeTrashItem(id) {
+  db.trash = db.trash.filter(function (i) { return i.id !== id; });
+  if (typeof markTrashDirty === 'function') markTrashDirty();
+  save(); renderTrash();
+}
 function renderTrash() {
   var list = $('trashList'), days = Math.max(1, Math.min(365, Number(db.settings.trashTtlDays) || 30));
   $('trashDesc').textContent = '删除的素材会保留 ' + days + ' 天，可随时恢复。';
@@ -51,12 +61,14 @@ function renameTag(oldName, newName) {
   var existed = db.items.some(function (i) { return (i.tags || []).indexOf(newName) >= 0; });
   db.items.forEach(function (i) {
     if (!Array.isArray(i.tags)) i.tags = [];
-    if (i.tags.indexOf(oldName) >= 0) { i.tags = Array.from(new Set(i.tags.map(function (t) { return t === oldName ? newName : t; }))); i.updatedAt = Date.now(); markItemDirty(i); _indexUpdateItem(i, i); }
+    if (i.tags.indexOf(oldName) >= 0) { i.tags = Array.from(new Set(i.tags.map(function (t) { return t === oldName ? newName : t; }))); i.updatedAt = Date.now(); markItemDirty(i); }
   });
   var fi = db.fixedTags.indexOf(oldName); if (fi >= 0) db.fixedTags[fi] = newName;
   db.fixedTags = Array.from(new Set(db.fixedTags));
   if (currentTag === oldName) currentTag = newName;
   if (currentTags && currentTags.has && currentTags.has(oldName)) { currentTags.delete(oldName); currentTags.add(newName); }
+  // ★ 修复：批量改完后统一重建索引，避免旧标签残留
+  markIndexDirty();
   save(); render(); renderTagManager();
   toast(existed ? '已合并到「' + newName + '」' : '已重命名标签');
 }
@@ -66,11 +78,13 @@ function delTag(name) {
     title: '删除标签', desc: '确定要删除标签「' + name + '」吗？\n' + n + ' 条素材会移除该标签。', isDanger: true,
     onConfirm: function () {
       db.items.forEach(function (i) {
-        if (Array.isArray(i.tags) && i.tags.indexOf(name) >= 0) { i.tags = i.tags.filter(function (t) { return t !== name; }); i.updatedAt = Date.now(); markItemDirty(i); _indexUpdateItem(i, i); }
+        if (Array.isArray(i.tags) && i.tags.indexOf(name) >= 0) { i.tags = i.tags.filter(function (t) { return t !== name; }); i.updatedAt = Date.now(); markItemDirty(i); }
       });
       db.fixedTags = db.fixedTags.filter(function (t) { return t !== name; });
       if (currentTag === name) currentTag = '';
       if (currentTags && currentTags.has) currentTags.delete(name);
+      // ★ 修复：批量删完统一重建索引
+      markIndexDirty();
       save(); render(); renderTagManager(); toast('已删除标签');
     }
   });
@@ -195,10 +209,12 @@ function renameCat(idx, newName) {
     isDanger: false,
     onConfirm: function () {
       db.cats[idx] = newName;
-      affected.forEach(function (i) { i.type = newName; i.updatedAt = Date.now(); markItemDirty(i); _indexUpdateItem(i, i); });
+      affected.forEach(function (i) { i.type = newName; i.updatedAt = Date.now(); markItemDirty(i); });
       if (db.colors[oldName] !== undefined) { db.colors[newName] = db.colors[oldName]; delete db.colors[oldName]; }
       if (currentType === oldName) currentType = newName;
       db.catVersion = (db.catVersion || 0) + 1;
+      // ★ 修复：批量改完统一重建索引，避免旧分类残留
+      markIndexDirty();
       save(); render(); toast('已重命名');
     }
   });
@@ -214,11 +230,13 @@ function delCat(idx) {
     isDanger: true,
     onConfirm: function () {
       db.cats.splice(idx, 1);
-      affected.forEach(function (i) { i.type = UNCAT; i.updatedAt = Date.now(); markItemDirty(i); _indexUpdateItem(i, i); });
+      affected.forEach(function (i) { i.type = UNCAT; i.updatedAt = Date.now(); markItemDirty(i); });
       delete db.colors[name];
       if (currentType === name) currentType = '全部';
       ensureColors();
       db.catVersion = (db.catVersion || 0) + 1;
+      // ★ 修复：批量改完统一重建索引
+      markIndexDirty();
       save(); render(); toast('已删除分类');
     }
   });

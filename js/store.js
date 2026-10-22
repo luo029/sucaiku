@@ -1,11 +1,17 @@
-// js/store.js · 完整文件（绝对稳定版）
-// 修复内容：
-//  - P1-6：_applyMeta / applyLoadedData 对 tagColors / colors 做白名单校验，防止导入数据 CSS 注入
+// js/store.js · 完整文件（性能优化版）
+// 本次改动：
+//  1) meta 瘦身：trash 单独存一个 key，sync-snap（分片快照/回收站快照/元数据快照）合并存一个 key
+//     日常保存只写小 meta + 脏分片，不再每次都把几 MB 的快照字符串全量写盘
+//  2) collectTags 直接复用索引统计结果，不再每次全量遍历
+//  3) normalize 比较图片数组不再用 JSON.stringify
+//  4) 颜色白名单校验保留
 
 var IDB_NAME = 'material-library-db';
 var IDB_STORE = 'kv';
 var IDB_META_KEY = 'meta';
 var IDB_SHARD_PREFIX = 'shard:';
+var IDB_TRASH_KEY = 'trash';
+var IDB_SNAP_KEY = 'sync-snap';
 var IDB_LEGACY_KEY = 'main';
 var IDB_SCHEMA = 2;
 var _idb = null;
@@ -16,7 +22,7 @@ function _localDateStr(ts) {
 }
 window._localDateStr = _localDateStr;
 
-// ★ P1-6：颜色白名单校验
+// ★ 颜色白名单校验
 function sanitizeHexColor(v) {
   if (typeof v !== 'string') return '';
   var s = v.trim();
@@ -106,6 +112,9 @@ function _groupItemsByShard(items) {
 
 var _dirtyShards = new Set();
 var _metaDirty = false;
+var _trashDirty = false;
+var _syncDirty = false;
+
 function markItemDirty(item) { if (!item) return; _dirtyShards.add(_shardKeyOfItem(item)); }
 function markItemsDirty(items) { if (!items) return; for (var i = 0; i < items.length; i++) markItemDirty(items[i]); }
 function markShardDirty(key) { if (typeof key === 'string' && key) _dirtyShards.add(key); }
@@ -113,6 +122,18 @@ function markAllShardsDirty() {
   var groups = _groupItemsByShard(db.items);
   Object.keys(groups).forEach(function (k) { _dirtyShards.add(k); });
   _metaDirty = true;
+}
+
+// ★ 新增：回收站 / 同步快照 单独标脏
+function markTrashDirty() {
+  _trashDirty = true;
+  _pendingSave = true;
+  if (typeof _scheduleSaveIDB === 'function') _scheduleSaveIDB();
+}
+function markSyncDirty() {
+  _syncDirty = true;
+  _pendingSave = true;
+  if (typeof _scheduleSaveIDB === 'function') _scheduleSaveIDB();
 }
 
 function _idbTx(mode) { return openIDB().then(function (d) { return d.transaction(IDB_STORE, mode); }); }
@@ -148,28 +169,39 @@ function idbDeleteMany(keys) {
   });
 }
 
+// ★ meta 瘦身：只放轻量元数据，不含 trash 和大快照
 function _buildMeta() {
   return {
     _schema: IDB_SCHEMA, _rev: db._rev,
     cats: db.cats, colors: db.colors, sources: db.sources,
     fixedSource: db.fixedSource, fixedTags: db.fixedTags,
     imageCategories: db.imageCategories, settings: db.settings, tagColors: db.tagColors,
-    trash: db.trash, _shardSnapshots: db._shardSnapshots,
-    _trashSnapshot: db._trashSnapshot, _metaSnapshot: db._metaSnapshot,
     _loadedShardKeys: db._loadedShardKeys, _allShardKeys: db._allShardKeys,
     catVersion: db.catVersion || 0
   };
 }
+function _buildSyncSnap() {
+  return {
+    _shardSnapshots: db._shardSnapshots || {},
+    _trashSnapshot: db._trashSnapshot || '',
+    _metaSnapshot: db._metaSnapshot || ''
+  };
+}
+function _applySyncSnap(s) {
+  if (!s || typeof s !== 'object') return;
+  if (s._shardSnapshots && typeof s._shardSnapshots === 'object') db._shardSnapshots = s._shardSnapshots;
+  if (typeof s._trashSnapshot === 'string') db._trashSnapshot = s._trashSnapshot;
+  if (typeof s._metaSnapshot === 'string') db._metaSnapshot = s._metaSnapshot;
+}
+
 function _applyMeta(m) {
   if (!m) return;
   if (Array.isArray(m.cats)) db.cats = m.cats.filter(function (c) { return typeof c === 'string' && c.trim() && c !== UNCAT && c !== IMG_TYPE; });
-  // ★ P1-6：颜色白名单校验
   if (m.colors && typeof m.colors === 'object') db.colors = sanitizeCatColors(m.colors);
   if (Array.isArray(m.sources)) db.sources = m.sources.filter(function (s) { return typeof s === 'string' && s.trim(); });
   if (typeof m.fixedSource === 'string') db.fixedSource = m.fixedSource;
   if (Array.isArray(m.fixedTags)) db.fixedTags = m.fixedTags.filter(function (s) { return typeof s === 'string' && s.trim(); });
   if (Array.isArray(m.imageCategories) && m.imageCategories.length) db.imageCategories = m.imageCategories.filter(function (s) { return typeof s === 'string' && s.trim(); });
-  if (Array.isArray(m.trash)) db.trash = m.trash.filter(function (i) { return i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0)); });
   if (m.settings && typeof m.settings === 'object') {
     var merged = {}; var k;
     for (k in db.settings) if (db.settings.hasOwnProperty(k)) merged[k] = db.settings[k];
@@ -179,15 +211,20 @@ function _applyMeta(m) {
     if (m.settings.statsDims) for (k in m.settings.statsDims) if (m.settings.statsDims.hasOwnProperty(k)) merged.statsDims[k] = m.settings.statsDims[k];
     db.settings = merged;
   }
-  // ★ P1-6：标签颜色白名单校验
   if (m.tagColors && typeof m.tagColors === 'object') db.tagColors = sanitizeTagColors(m.tagColors);
-  if (m._shardSnapshots && typeof m._shardSnapshots === 'object') db._shardSnapshots = m._shardSnapshots;
-  if (typeof m._trashSnapshot === 'string') db._trashSnapshot = m._trashSnapshot;
-  if (typeof m._metaSnapshot === 'string') db._metaSnapshot = m._metaSnapshot;
   if (Array.isArray(m._loadedShardKeys)) db._loadedShardKeys = m._loadedShardKeys.slice();
   if (Array.isArray(m._allShardKeys)) db._allShardKeys = m._allShardKeys.slice();
   if (typeof m.catVersion === 'number') db.catVersion = m.catVersion;
   db._rev = Number(m._rev) || 0;
+
+  // ★ 兼容旧版 meta：旧数据把 trash / 快照混在 meta 里，这里读出来并标脏，下次保存自动迁移到新 key
+  if (Array.isArray(m.trash)) {
+    db.trash = m.trash.filter(function (i) { return i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0)); });
+    _trashDirty = true;
+  }
+  if (m._shardSnapshots && typeof m._shardSnapshots === 'object') { db._shardSnapshots = m._shardSnapshots; _syncDirty = true; }
+  if (typeof m._trashSnapshot === 'string') { db._trashSnapshot = m._trashSnapshot; _syncDirty = true; }
+  if (typeof m._metaSnapshot === 'string') { db._metaSnapshot = m._metaSnapshot; _syncDirty = true; }
 }
 
 var suppressPush = false;
@@ -233,12 +270,18 @@ function _scheduleSaveIDB() {
 function _doSaveIDB(forceAll) {
   var dirtyShards = Array.from(_dirtyShards);
   var metaDirty = _metaDirty;
+  var trashDirty = _trashDirty;
+  var syncDirty = _syncDirty;
   _dirtyShards.clear();
   _metaDirty = false;
-  if (!forceAll && !metaDirty && dirtyShards.length === 0) { _pendingSave = false; return Promise.resolve(); }
+  _trashDirty = false;
+  _syncDirty = false;
+  if (!forceAll && !metaDirty && !trashDirty && !syncDirty && dirtyShards.length === 0) { _pendingSave = false; return Promise.resolve(); }
   var groups = _groupItemsByShard(db.items);
   var entries = [];
   if (metaDirty || forceAll) entries.push({ key: IDB_META_KEY, value: _buildMeta() });
+  if (trashDirty || forceAll) entries.push({ key: IDB_TRASH_KEY, value: db.trash });
+  if (syncDirty || forceAll) entries.push({ key: IDB_SNAP_KEY, value: _buildSyncSnap() });
   if (forceAll) {
     Object.keys(groups).forEach(function (k) { entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] }); });
   } else {
@@ -251,6 +294,8 @@ function _doSaveIDB(forceAll) {
   }).catch(function (e) {
     dirtyShards.forEach(function (k) { _dirtyShards.add(k); });
     if (metaDirty) _metaDirty = true;
+    if (trashDirty) _trashDirty = true;
+    if (syncDirty) _syncDirty = true;
     console.error('分层保存失败', e);
     try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); _pendingSave = false; toast('已降级保存到 localStorage'); }
     catch (e2) { toast('保存失败！请立即导出备份'); }
@@ -277,13 +322,21 @@ window.addEventListener('pagehide', _flushPendingToLocalStorage);
 
 async function loadStore() {
   var d = await openIDB();
-  var meta = null, allKeys = [];
+  var meta = null, allKeys = [], trashData = undefined, snapData = undefined;
   await new Promise(function (resolve, reject) {
     var tx = d.transaction(IDB_STORE, 'readonly');
     var store = tx.objectStore(IDB_STORE);
     var metaReq = store.get(IDB_META_KEY);
+    var trashReq = store.get(IDB_TRASH_KEY);
+    var snapReq = store.get(IDB_SNAP_KEY);
     var keysReq = store.getAllKeys();
-    tx.oncomplete = function () { meta = metaReq.result; allKeys = keysReq.result || []; resolve(); };
+    tx.oncomplete = function () {
+      meta = metaReq.result;
+      trashData = trashReq.result;
+      snapData = snapReq.result;
+      allKeys = keysReq.result || [];
+      resolve();
+    };
     tx.onerror = function () { reject(tx.error); };
   });
   if (meta && meta._schema === IDB_SCHEMA) {
@@ -300,6 +353,10 @@ async function loadStore() {
       });
     }
     _applyMeta(meta);
+    if (Array.isArray(trashData)) {
+      db.trash = trashData.filter(function (i) { return i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0)); });
+    }
+    _applySyncSnap(snapData);
     db.items = items.filter(function (i) { return i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0)); });
   } else {
     var legacyData = null;
@@ -324,17 +381,23 @@ async function loadStore() {
     i.images = normalizeImages(i.images);
   });
   markIndexDirty(); _indexEnsure();
+  // ★ 旧版 meta 里混着的 trash / 快照，读出来后会标脏，这里补一次写盘完成迁移
+  if (_trashDirty || _syncDirty) {
+    _doSaveIDB(false).catch(function () {});
+  }
 }
 
 function applyLoadedData(o) {
   if (Array.isArray(o.items)) db.items = o.items.filter(function (i) { return i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0)); });
   if (Array.isArray(o.cats)) db.cats = o.cats.filter(function (c) { return typeof c === 'string' && c.trim() && c !== UNCAT && c !== IMG_TYPE; });
-  // ★ P1-6：颜色白名单校验
   if (o.colors && typeof o.colors === 'object') db.colors = sanitizeCatColors(o.colors);
   if (Array.isArray(o.sources)) db.sources = o.sources.filter(function (s) { return typeof s === 'string' && s.trim(); });
   if (typeof o.fixedSource === 'string') db.fixedSource = o.fixedSource;
   if (Array.isArray(o.fixedTags)) db.fixedTags = o.fixedTags.filter(function (s) { return typeof s === 'string' && s.trim(); });
-  if (Array.isArray(o.trash)) db.trash = o.trash.filter(function (i) { return i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0)); });
+  if (Array.isArray(o.trash)) {
+    db.trash = o.trash.filter(function (i) { return i && typeof i.text === 'string' && (i.text || (Array.isArray(i.images) && i.images.length > 0)); });
+    _trashDirty = true;
+  }
   if (Array.isArray(o.imageCategories) && o.imageCategories.length) db.imageCategories = o.imageCategories.filter(function (s) { return typeof s === 'string' && s.trim(); });
   if (o.settings && typeof o.settings === 'object') {
     var merged = {}; var k;
@@ -345,7 +408,6 @@ function applyLoadedData(o) {
     if (o.settings.statsDims) for (k in o.settings.statsDims) if (o.settings.statsDims.hasOwnProperty(k)) merged.statsDims[k] = o.settings.statsDims[k];
     db.settings = merged;
   }
-  // ★ P1-6：标签颜色白名单校验
   if (o.tagColors && typeof o.tagColors === 'object') db.tagColors = sanitizeTagColors(o.tagColors);
   if (typeof o.catVersion === 'number') db.catVersion = o.catVersion;
   db._rev = Number(o._rev) || 0;
@@ -354,6 +416,7 @@ function applyLoadedData(o) {
   db._metaSnapshot = o._metaSnapshot || '';
   if (Array.isArray(o._loadedShardKeys)) db._loadedShardKeys = o._loadedShardKeys.slice();
   if (Array.isArray(o._allShardKeys)) db._allShardKeys = o._allShardKeys.slice();
+  _syncDirty = true;
   markNeedNormalize(); markIndexDirty(); markAllShardsDirty();
 }
 
@@ -382,7 +445,10 @@ function cleanTrash(noSave) {
     db.trash.sort(function (a, b) { return (b.deletedAt || 0) - (a.deletedAt || 0); });
     db.trash = db.trash.slice(0, threshold);
   }
-  if (db.trash.length !== before && !noSave) save();
+  if (db.trash.length !== before) {
+    _trashDirty = true;
+    if (!noSave) save();
+  }
 }
 
 function ensureColors() {
@@ -395,6 +461,21 @@ function ensureColors() {
     if (!(c in db.colors)) { var i = 0; while (used.has(i)) i++; db.colors[c] = i; used.add(i); dirty = true; }
   });
   return dirty;
+}
+
+// ★ 图片数组比较不再用 JSON.stringify
+function _imagesArrayChanged(ni, oldArr) {
+  if (ni.length !== oldArr.length) return true;
+  for (var k = 0; k < ni.length; k++) {
+    var a = ni[k], b = oldArr[k];
+    if (!b) return true;
+    if (a.path !== (b.path || '') || a.url !== (b.url || '') || a.cat !== (b.cat || '其他')) return true;
+    if ((a.size || 0) !== (b.size || 0) || (a.origSize || 0) !== (b.origSize || 0)) return true;
+    var at = a.tags || [], bt = b.tags || [];
+    if (at.length !== bt.length) return true;
+    for (var j = 0; j < at.length; j++) { if (at[j] !== bt[j]) return true; }
+  }
+  return false;
 }
 
 function normalize() {
@@ -412,7 +493,7 @@ function normalize() {
       if (t.length !== i.tags.length) { i.tags = t; dirty = true; markItemDirty(i); }
     }
     var ni = normalizeImages(i.images);
-    if (JSON.stringify(ni) !== JSON.stringify(i.images || [])) { i.images = ni; dirty = true; markItemDirty(i); }
+    if (_imagesArrayChanged(ni, i.images || [])) { i.images = ni; dirty = true; markItemDirty(i); }
   });
   if (dirty) db.cats = Array.from(catSet);
   if (db.fixedSource && db.sources.indexOf(db.fixedSource) < 0) { db.fixedSource = ''; dirty = true; }
@@ -440,16 +521,6 @@ function catColor(name) {
   if (idx < PALETTE.length) return PALETTE[idx];
   var hue = Math.round((idx * 137.508) % 360);
   return { bg: 'hsl(' + hue + ', 70%, 95%)', fg: 'hsl(' + hue + ', 60%, 40%)' };
-}
-
-function collectTags() {
-  var counts = {};
-  db.items.forEach(function (i) {
-    var tSet = new Set(i.tags || []);
-    (i.images || []).forEach(function (im) { (im.tags || []).forEach(function (t) { tSet.add(t); }); });
-    tSet.forEach(function (t) { counts[t] = (counts[t] || 0) + 1; });
-  });
-  return counts;
 }
 
 var _index = { cat: new Map(), source: new Map(), tag: new Map() };
@@ -498,6 +569,11 @@ function getSidebarStats() {
   _index.tag.forEach(function (set, tag) { tc[tag] = set.size; });
   _statsCache = { rev: db._rev, catCounts: cc, sourceCounts: sc, tagCounts: tc };
   return _statsCache;
+}
+
+// ★ collectTags 直接复用索引统计结果，不再每次全量遍历
+function collectTags() {
+  return getSidebarStats().tagCounts;
 }
 
 function getFilteredItems() {
@@ -562,7 +638,10 @@ window.markIndexDirty = markIndexDirty; window.rebuildIndex = rebuildIndex;
 window._indexAddItem = _indexAddItem; window._indexRemoveItem = _indexRemoveItem; window._indexUpdateItem = _indexUpdateItem;
 window.__index = _index; window.__itemById = _itemById; window.__indexEnsure = _indexEnsure; window.__dirtyShards = _dirtyShards;
 window._maybeCleanTrash = _maybeCleanTrash;
-// ★ P1-6：暴露给 io.js 等模块使用
+// ★ 回收站 / 同步快照 标脏接口（供 items.js、github.js 调用）
+window.markTrashDirty = markTrashDirty;
+window.markSyncDirty = markSyncDirty;
+// ★ 暴露给 io.js 等模块使用
 window.sanitizeHexColor = sanitizeHexColor;
 window.sanitizeTagColors = sanitizeTagColors;
 window.sanitizeCatColors = sanitizeCatColors;

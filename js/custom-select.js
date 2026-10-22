@@ -1,7 +1,6 @@
 // js/custom-select.js
-// 修复内容：
-//  - P0-3：滚动监听会把正在操作的下拉面板关掉 → 面板内部滚动不关闭，只有外部滚动才关闭
-//  - 顺手：MutationObserver 加 120ms 防抖，避免 DOM 频繁变动时反复全量扫描 select
+// 本次改动：MutationObserver 只在新节点确实含 <select> 时才触发扫描，
+//          列表刷新（大量 div 替换）不再反复扫全文档
 
 (function() {
   function initCustomSelect(select) {
@@ -112,13 +111,23 @@
     document.querySelectorAll('.custom-select-wrap').forEach(function(w) { w.classList.remove('open'); });
   }
 
+  // ★ 只有当新加入的节点里确实含 <select> 时才触发扫描
   var _scanTimer = null;
   var globalObserver = new MutationObserver(function(mutations) {
-    var hasAddedNodes = false;
+    var maybeHasSelect = false;
     for (var i = 0; i < mutations.length; i++) {
-      if (mutations[i].addedNodes.length > 0) { hasAddedNodes = true; break; }
+      var added = mutations[i].addedNodes;
+      for (var j = 0; j < added.length; j++) {
+        var n = added[j];
+        if (n.nodeType !== 1) continue;
+        if (n.tagName === 'SELECT' || (n.querySelector && n.querySelector('select'))) {
+          maybeHasSelect = true;
+          break;
+        }
+      }
+      if (maybeHasSelect) break;
     }
-    if (!hasAddedNodes) return;
+    if (!maybeHasSelect) return;
     if (_scanTimer) clearTimeout(_scanTimer);
     _scanTimer = setTimeout(function() { _scanTimer = null; scanSelects(); }, 120);
   });

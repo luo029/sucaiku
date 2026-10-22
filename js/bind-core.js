@@ -1,6 +1,6 @@
 // js/bind-core.js · 完整文件
-// ★ Bug B 修复：改用 document.body 捕获式委托，覆盖 review.js 动态插入的 #reviewImgs
-// ★ 修复：极简模式筛选面板（zenPanel）关闭时的内存泄漏，以及对 closest 的防御性判断
+// ★ 本次改动：删掉搜索输入防抖回调里多余的 clearFilterCache()
+//   getFilteredItems() 的 cacheKey 已包含 keyword，关键词变了 key 自然会变，不需要手动清
 
 addBtn.addEventListener('click', addOrUpdate);
 cancelBtn.addEventListener('click', cancelEdit);
@@ -152,7 +152,8 @@ searchEl.addEventListener('input', function () {
   clearTimeout(searchDebounceTimer);
   var delay = Math.max(80, Math.min(500, Number(db.settings.searchDebounceMs) || 180));
   searchDebounceTimer = setTimeout(function () {
-    keyword = searchEl.value; currentPage = 1; clearFilterCache(); renderList(); renderHeader();
+    // ★ 无需 clearFilterCache()，getFilteredItems 的 cacheKey 已包含 keyword
+    keyword = searchEl.value; currentPage = 1; renderList(); renderHeader();
   }, delay);
 });
 
@@ -410,11 +411,49 @@ document.addEventListener('click', function (e) {
   });
 });
 
+// ★ 核心重写：匹配所有快捷键
+function matchShortcut(e, shortcutStr) {
+  if (!shortcutStr) return false;
+  shortcutStr = shortcutStr.toLowerCase().trim();
+  var parts = shortcutStr.split('+');
+  var key = parts.pop();
+  
+  var needCtrl = parts.indexOf('ctrl') >= 0;
+  var needAlt = parts.indexOf('alt') >= 0;
+  var needShift = parts.indexOf('shift') >= 0;
+  var needMeta = parts.indexOf('meta') >= 0 || parts.indexOf('cmd') >= 0;
+  
+  var hasCtrl = e.ctrlKey || e.metaKey;
+  
+  if (needCtrl && !hasCtrl) return false;
+  if (!needCtrl && hasCtrl && key !== 'control') return false;
+  
+  if (needAlt !== e.altKey) return false;
+  if (needShift !== e.shiftKey) return false;
+  if (needMeta && !e.metaKey) return false;
+  
+  if (key === 'enter' && e.key === 'Enter') return true;
+  if (key === 'esc' && e.key === 'Escape') return true;
+  if (key === 'escape' && e.key === 'Escape') return true;
+  if (key === 'space' && e.code === 'Space') return true;
+  if (key === 'delete' && (e.key === 'Delete' || e.key === 'Backspace')) return true;
+  if (key === 'right' && e.key === 'ArrowRight') return true;
+  if (key === 'left' && e.key === 'ArrowLeft') return true;
+  if (key === 'up' && e.key === 'ArrowUp') return true;
+  if (key === 'down' && e.key === 'ArrowDown') return true;
+  
+  return e.key.toLowerCase() === key;
+}
+
 document.addEventListener('keydown', function (e) {
+  // 只要总开关关掉，所有快捷键（包括 Ctrl+S）全部不拦截，回归浏览器默认
   if (!db.settings || !db.settings.enableShortcuts) return;
+
   var t = e.target;
   var isTyping = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
-  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+  
+  // 推送快捷键 (Ctrl+S)
+  if (matchShortcut(e, db.settings.shortcutPush || 'ctrl+s')) {
     e.preventDefault();
     var cfg = loadGH();
     if (!ghReady(cfg)) { toast('请先在设置中配置 GitHub'); return; }
@@ -423,26 +462,29 @@ document.addEventListener('keydown', function (e) {
     Promise.resolve(ghPush(false)).then(function (ok) { if (ok) toast('✅ 已推送云端'); });
     return;
   }
+
   if (isTyping) return;
   if (document.querySelector('.modal-mask.show')) return;
   if (document.body.classList.contains('focus-mode')) return;
   if (document.body.classList.contains('zen-mode')) return;
   if (document.body.classList.contains('guest-mode')) return;
-  if (e.altKey && e.key === 'Enter') {
+
+  // 盲盒快捷键 (Alt+Enter)
+  if (matchShortcut(e, db.settings.shortcutRandom || 'alt+enter')) {
     e.preventDefault();
     if ($('menuRandomBtn')) $('menuRandomBtn').click();
     return;
   }
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
-  var searchKey = String(db.settings.shortcutSearch || '/').toLowerCase();
-  var newKey = String(db.settings.shortcutNew || 'n').toLowerCase();
-  var pressed = String(e.key || '').toLowerCase();
-  if (pressed === searchKey) {
-    if (searchKey === '/') e.preventDefault();
+
+  // 搜索快捷键 (/)
+  if (matchShortcut(e, db.settings.shortcutSearch || '/')) {
+    if (db.settings.shortcutSearch === '/') e.preventDefault();
     if (searchEl) { scrollTop(); setTimeout(function () { searchEl.focus(); searchEl.select(); }, 60); }
     return;
   }
-  if (pressed === newKey) {
+
+  // 新建快捷键 (N)
+  if (matchShortcut(e, db.settings.shortcutNew || 'n')) {
     e.preventDefault();
     if (inputEl) { scrollTop(); setTimeout(function () { inputEl.focus(); }, 80); }
     return;

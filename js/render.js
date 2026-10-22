@@ -1,5 +1,6 @@
 // js/render.js · 完整文件
 // ★ 性能优化：长文本搜索高亮截断，防止 DOM 节点过多卡顿。
+// ★ 本次修复：deleteSource 删除来源后统一 markIndexDirty()，避免旧来源统计残留。
 
 var tagExpanded = false, catExpanded = false, srcExpanded = false;
 var catManagerPage = 1, tagManagerPage = 1;
@@ -332,7 +333,15 @@ function deleteSource(sourceName) {
     onConfirm: function () {
       db.sources = db.sources.filter(function (s) { return s !== sourceName; });
       if (db.fixedSource === sourceName) db.fixedSource = '';
-      db.items.forEach(function (i) { if (i.source === sourceName) { i.source = ''; i.updatedAt = Date.now(); markItemDirty(i); _indexUpdateItem(i, i); } });
+      db.items.forEach(function (i) {
+        if (i.source === sourceName) {
+          i.source = '';
+          i.updatedAt = Date.now();
+          markItemDirty(i);
+        }
+      });
+      // ★ 修复：批量改完后统一重建索引，避免旧来源统计残留
+      markIndexDirty();
       if (currentSource === sourceName) currentSource = ALL_SOURCES;
       save(); render(); toast('已删除来源');
     }

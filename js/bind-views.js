@@ -1,5 +1,8 @@
 // js/bind-views.js · 完整文件
-// ★ 修复：批量删图时，不再调用 _indexUpdateItem(item, item)，改用 markIndexDirty()
+// ★ 本次改动：
+//  1) 新增 applyPushModeUI()，打开设置时同步"推送模式"按钮的高亮状态（不需要改 core.js）
+//  2) 新增 pushMode 点击绑定，写入 db.settings.pushMode
+//  3) 其余绑定保持原样
 
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
@@ -37,6 +40,14 @@ window.showCustomConfirm = function (options) {
   newCancel.addEventListener('click', function () { mask.classList.remove('show'); });
   mask.onclick = function (e) { if (e.target === mask) mask.classList.remove('show'); };
 };
+
+// ★ 新增：同步"推送模式"按钮高亮
+function applyPushModeUI() {
+  var el = $('pushMode');
+  if (!el) return;
+  var mode = (db.settings && db.settings.pushMode) || 'stable';
+  el.querySelectorAll('button').forEach(function (b) { b.classList.toggle('active', b.dataset.mode === mode); });
+}
 
 safeBind('batchExportBtn', 'click', function () { if (!selectedIds.size) { toast('请先选择素材'); return; } openExportModal('__selected__'); });
 safeBind('layoutBtn', 'click', function () { if (layoutMode === 'sidebar') setLayout('compact'); else setLayout('sidebar'); });
@@ -258,7 +269,7 @@ safeBind('settingTabs', 'click', function (e) {
   if (target === 'logs') renderLogView(); if (target === 'devices') renderDeviceList(); if (target === 'sync') refreshStorageInfo(); if (target === 'data' && typeof renderSnapshotsList === 'function') renderSnapshotsList();
 });
 function resetSettingsTabs() { var tabs = document.querySelectorAll('#settingTabs .st-tab'); tabs.forEach(function (b) { b.classList.toggle('active', b.dataset.target === 'general'); }); document.querySelectorAll('.st-scroll .st-card').forEach(function (card) { card.style.display = (card.dataset.group === 'general') ? 'block' : 'none'; }); }
-function openSettings() { renderStyleOptions(); applySettingsToUI(); fillGHForm(); updateTinyUsageUI(); renderSettingsOverview(); resetSettingsTabs(); var sc = document.querySelector('.st-scroll'); if (sc) sc.scrollTop = 0; $('settingMask').classList.add('show'); if (typeof window.updateImgNamingPreview === 'function') setTimeout(function () { window.updateImgNamingPreview(); }, 50); }
+function openSettings() { renderStyleOptions(); applySettingsToUI(); applyPushModeUI(); fillGHForm(); updateTinyUsageUI(); renderSettingsOverview(); resetSettingsTabs(); var sc = document.querySelector('.st-scroll'); if (sc) sc.scrollTop = 0; $('settingMask').classList.add('show'); if (typeof window.updateImgNamingPreview === 'function') setTimeout(function () { window.updateImgNamingPreview(); }, 50); }
 safeBind('menuSettingBtn', 'click', openSettings); safeBind('gearBtn', 'click', openSettings);
 
 safeBind('runSelfTestBtn', 'click', function () {
@@ -321,6 +332,13 @@ safeBind('shortcutNew', 'change', function (e) { var v = (e.target.value || '').
 safeBind('shortcutNew', 'input', function (e) { if (e.target.value.length > 1) e.target.value = e.target.value.charAt(0); });
 safeBind('enableContextMenu', 'change', function (e) { db.settings.enableContextMenu = e.target.checked; saveSettings(); toast(e.target.checked ? '已开启右键/长按菜单' : '已关闭右键/长按菜单'); });
 safeBind('maxTagsInHeader', 'change', function (e) { var v = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 3)); e.target.value = v; db.settings.maxTagsInHeader = v; saveSettings(); renderHeader(); toast('标签折叠阈值已设为 ' + v + ' 个'); });
+
+// ★ 新增：推送模式切换
+safeBind('pushMode', 'click', function (e) {
+  var b = e.target.closest('button[data-mode]'); if (!b) return;
+  db.settings.pushMode = b.dataset.mode; saveSettings(); applyPushModeUI();
+  toast(b.dataset.mode === 'accelerate' ? '已切换为加速模式（最多 2 路并发，遇限流会自动等待）' : '已切换为稳定模式（串行推送，绝不触发限流）');
+});
 
 safeBind('shardMaxSizeKB', 'change', function (e) { var v = Math.max(200, Math.min(2000, parseInt(e.target.value, 10) || 650)); e.target.value = v; db.settings.shardMaxSizeKB = v; saveSettings(); });
 safeBind('shardSplitEnabled', 'change', function (e) { db.settings.shardSplitEnabled = e.target.checked; saveSettings(); });
