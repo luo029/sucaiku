@@ -1,5 +1,7 @@
-// js/readest.js · 完整独立文件
+// js/readest.js · 完整独立文件（终极美化修复版）
 // 专门负责 Readest 笔记导入的所有逻辑：按钮绑定、Markdown 解析、对比弹窗 UI。
+// 
+// ★ 本次修复：去除了笔记前面自作主张加的 '> ' 前缀，修复多出 '>' 的问题，并清理多余空行。
 
 (function() {
   // 绑定按钮事件
@@ -23,15 +25,78 @@
 })();
 
 // ==========================================
+// 核心 Diff 算法（LCS 最长公共子序列）
+// 用于逐字对比新旧笔记，生成带颜色高亮的 HTML
+// ==========================================
+function generateDiffHtml(oldStr, newStr) {
+  // 如果文本太长，为了防止卡顿，放弃逐字对比，直接显示纯文本
+  if (oldStr.length > 2000 || newStr.length > 2000) {
+    return { oldHtml: esc(oldStr), newHtml: esc(newStr) };
+  }
+
+  var matrix = [];
+  var i, j;
+  for (i = 0; i <= oldStr.length; i++) matrix[i] = [0];
+  for (j = 0; j <= newStr.length; j++) matrix[0][j] = 0;
+
+  for (i = 1; i <= oldStr.length; i++) {
+    for (j = 1; j <= newStr.length; j++) {
+      if (oldStr[i - 1] === newStr[j - 1]) {
+        matrix[i][j] = matrix[i - 1][j - 1] + 1;
+      } else {
+        matrix[i][j] = Math.max(matrix[i - 1][j], matrix[i][j - 1]);
+      }
+    }
+  }
+
+  var oldRes = [], newRes = [];
+  var x = oldStr.length, y = newStr.length;
+
+  while (x > 0 && y > 0) {
+    if (oldStr[x - 1] === newStr[y - 1]) {
+      oldRes.unshift(esc(oldStr[x - 1]));
+      newRes.unshift(esc(newStr[y - 1]));
+      x--; y--;
+    } else if (matrix[x - 1][y] >= matrix[x][y - 1]) {
+      oldRes.unshift('<span style="background:#fee2e2;color:#b91c1c;text-decoration:line-through;padding:0 2px;border-radius:2px;margin:0 1px;">' + esc(oldStr[x - 1]) + '</span>');
+      x--;
+    } else {
+      newRes.unshift('<span style="background:#dcfce7;color:#15803d;text-decoration:none;padding:0 2px;border-radius:2px;margin:0 1px;font-weight:600;">' + esc(newStr[y - 1]) + '</span>');
+      y--;
+    }
+  }
+  while (x > 0) {
+    oldRes.unshift('<span style="background:#fee2e2;color:#b91c1c;text-decoration:line-through;padding:0 2px;border-radius:2px;margin:0 1px;">' + esc(oldStr[x - 1]) + '</span>');
+    x--;
+  }
+  while (y > 0) {
+    newRes.unshift('<span style="background:#dcfce7;color:#15803d;text-decoration:none;padding:0 2px;border-radius:2px;margin:0 1px;font-weight:600;">' + esc(newStr[y - 1]) + '</span>');
+    y--;
+  }
+
+  return {
+    oldHtml: oldRes.join(''),
+    newHtml: newRes.join('')
+  };
+}
+
+// ==========================================
 // Readest Markdown 解析逻辑
 // ==========================================
 function importReadestMarkdown(file) {
   var reader = new FileReader();
+  
+  // 增加等待提示
+  if (typeof toast === 'function') toast('🔍 正在解析并比对笔记...');
+
   reader.onload = function (e) {
     var text = e.target.result;
     var lines = text.split('\n');
     
-    var bookName = '未知书籍';
+    // ★ 优化 1：智能识别书名
+    var defaultBookName = file.name.replace(/\.md$/i, '').replace(/^《|》$/g, '').replace(/读后感|笔记|摘录/g, '').trim();
+    var bookName = defaultBookName || '未知书籍';
+    
     var newItemsData = [];     // 待新增
     var updateCandidates = []; // 待对比更新的
 
@@ -42,7 +107,6 @@ function importReadestMarkdown(file) {
 
     // 结算当前这一组
     function flush() {
-      // 如果没有原文划线（比如只是文件表头），直接丢弃这组数据！
       if (currentQuote.length === 0) {
         currentQuote = [];
         currentNotes = [];
@@ -52,7 +116,8 @@ function importReadestMarkdown(file) {
       }
 
       var quoteText = currentQuote.join('\n').trim();
-      var noteText = currentNotes.join('\n').trim();
+      // ★ 修复：清理掉由于解析导致的过多空行
+      var noteText = currentNotes.join('\n').replace(/\n{3,}/g, '\n\n').trim();
       
       // 组装最终文本：原文 + 分割线 + 笔记
       var finalText = quoteText;
@@ -69,7 +134,6 @@ function importReadestMarkdown(file) {
         });
       }
       
-      // 清空，准备迎接下一组
       currentQuote = [];
       currentNotes = [];
       currentTags = new Set();
@@ -79,61 +143,56 @@ function importReadestMarkdown(file) {
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
       
-      // 1. 遇到分割线，结算上一段
       if (line === '---' || line === '* * *' || line === '***') {
         flush();
         continue;
       }
       
-      if (!line) continue; // 空行不影响合并
+      if (!line) continue;
 
-      // 2. 匹配书名 (# 书名)
+      // 如果 Markdown 里有 # 书名，以这个为准
       if (line.startsWith('# ')) {
         flush();
         bookName = line.substring(2).trim();
       } 
-      // 3. 匹配章节 (### 章节名) - 直接忽略
       else if (line.startsWith('### ')) {
         flush();
       }
-      // 4. 匹配高亮原文 (> 划线内容)
       else if (line.startsWith('> ')) {
         currentQuote.push(line.substring(2).trim());
       }
-      // 5. 匹配时间 (*时间： xxx*)
       else if (line.indexOf('*时间：') === 0 || line.indexOf('*时间:') === 0) {
         var timeStr = line.replace(/^\*时间[：:]\s*/, '').replace(/\*$/, '').trim();
         var safeTimeStr = timeStr.replace(/\//g, '-').replace(' ', 'T');
         var parsedTime = new Date(safeTimeStr).getTime();
         if (!isNaN(parsedTime)) currentTimestamp = parsedTime;
       }
-      // 6. 其他普通文本（笔记/标签）
       else {
-        // 如果当前还没读到 > 划线，说明这些是文件表头说明，直接无视。
         if (currentQuote.length === 0) continue;
 
-        // 砍掉前缀
         var cleanLine = line;
-        if (cleanLine.indexOf('**笔记**:') === 0) cleanLine = cleanLine.replace('**笔记**:', '').trim();
-        else if (cleanLine.indexOf('**上下文**:') === 0) cleanLine = cleanLine.replace('**上下文**:', '').trim();
+        // ★ 修复：去掉自作聪明的 '> '，干干净净提取
+        if (cleanLine.indexOf('**笔记**:') === 0) {
+          cleanLine = cleanLine.replace('**笔记**:', '').trim();
+        } else if (cleanLine.indexOf('**上下文**:') === 0) {
+          cleanLine = '【上下文】' + cleanLine.replace('**上下文**:', '').trim();
+        }
 
-        // 提取标签 (匹配中英文数字和底线)
         var tagMatches = cleanLine.match(/#([a-zA-Z0-9_\u4e00-\u9fa5]+)/g);
         if (tagMatches) {
           tagMatches.forEach(function(t) {
-            currentTags.add(t.substring(1)); // 去掉 # 号
+            currentTags.add(t.substring(1));
           });
-          // 从正文删掉标签
           cleanLine = cleanLine.replace(/#([a-zA-Z0-9_\u4e00-\u9fa5]+)/g, '').trim();
         }
 
         if (cleanLine) currentNotes.push(cleanLine);
       }
     }
-    flush(); // 处理末尾
+    flush();
 
     if (newItemsData.length === 0) {
-      toast('未在文件中解析到有效的高亮或笔记');
+      if (typeof toast === 'function') toast('未在文件中解析到有效的高亮或笔记');
       return;
     }
 
@@ -147,19 +206,19 @@ function importReadestMarkdown(file) {
     var addedCount = 0;
     var skippedCount = 0;
 
-    // 如果待导入的素材在回收站里，直接从回收站抹除，并作为新素材加回来
+    // 检查回收站
     var incomingQuotes = new Set(newItemsData.map(function(d) { return d.quoteText; }));
     var trashRemoved = false;
     db.trash = db.trash.filter(function(tItem) {
       var originQuote = tItem.text.split('\n\n---\n\n')[0].trim();
       if (incomingQuotes.has(originQuote)) {
         trashRemoved = true;
-        return false; // 从回收站彻底删除
+        return false;
       }
       return true;
     });
     if (trashRemoved && typeof markTrashDirty === 'function') {
-      markTrashDirty(); // 更新存储
+      markTrashDirty();
     }
 
     var existingMap = new Map();
@@ -234,31 +293,31 @@ function showMarkdownResult(added, skipped, bookName, inboxCat) {
   });
 }
 
-// 全新设计的卡片式对比弹窗
+// ==========================================
+// 全新设计的卡片式对比弹窗（带字级 Diff）
+// ==========================================
 function openNoteDiffModal(candidates, added, skipped, bookName, inboxCat) {
-  // 先移除可能存在的旧弹窗（如果有）
   var oldMask = document.getElementById('noteDiffMask');
   if (oldMask) oldMask.remove();
 
-  // 动态构建全新设计的弹窗 HTML
-  var modalHtml = '<div class="modal-mask" id="noteDiffMask" style="z-index: 250;">' +
-    '<div class="modal" style="max-width: 680px; width: 95%; border-radius: 16px;">' +
-      '<div style="margin-bottom: 16px;">' +
-        '<h3 class="modal-title" style="margin:0 0 8px 0; display:flex; align-items:center; gap:8px;">' +
-          '<span style="font-size:20px;">📝</span> 发现笔记更新' +
+  var modalHtml = '<div class="modal-mask" id="noteDiffMask" style="z-index: 250; backdrop-filter: blur(4px);">' +
+    '<div class="modal" style="max-width: 720px; width: 95%; border-radius: 16px; padding: 24px; box-shadow: 0 24px 64px rgba(0,0,0,0.2);">' +
+      '<div style="margin-bottom: 20px;">' +
+        '<h3 class="modal-title" style="margin:0 0 8px 0; display:flex; align-items:center; gap:8px; font-size: 20px;">' +
+          '<span style="font-size:22px;">📝</span> 发现笔记更新' +
         '</h3>' +
-        '<p class="modal-desc" style="margin:0; font-size:14px;">划线原文未变动，但笔记内容被修改了。请确认是否覆盖旧笔记：</p>' +
+        '<p class="modal-desc" style="margin:0; font-size:14px; color:var(--text-3);">划线原文未变动，但笔记内容被修改了。请确认是否覆盖旧笔记（<span style="color:#b91c1c;text-decoration:line-through;">红色为删除</span>，<span style="color:#15803d;">绿色为新增</span>）：</p>' +
       '</div>' +
-      '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:0 4px;">' +
-        '<label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13.5px; font-weight:500; color:var(--text-2);">' +
+      '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:0 4px; background:var(--bg); border-radius:8px; padding:10px 14px;">' +
+        '<label style="cursor:pointer; display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; color:var(--text-2);">' +
           '<input type="checkbox" id="noteDiffSelectAll" checked style="width:16px; height:16px; accent-color:var(--accent); margin:0;"> 全选所有更新' +
         '</label>' +
-        '<span style="font-size:12.5px; color:var(--text-3); background:var(--bg); padding:2px 10px; border-radius:99px;" id="noteDiffCount"></span>' +
+        '<span style="font-size:12.5px; color:var(--text-3);" id="noteDiffCount"></span>' +
       '</div>' +
-      '<div id="noteDiffList" style="max-height: 50vh; overflow-y: auto; display:flex; flex-direction:column; gap:12px; padding-right:4px; margin-bottom: 20px;"></div>' +
+      '<div id="noteDiffList" style="max-height: 52vh; overflow-y: auto; display:flex; flex-direction:column; gap:16px; padding-right:4px; margin-bottom: 24px;"></div>' +
       '<div class="modal-actions" style="margin-top:0;">' +
-        '<button class="btn" id="noteDiffCancel">放弃更新</button>' +
-        '<button class="primary" id="noteDiffConfirm">应用勾选</button>' +
+        '<button class="btn" id="noteDiffCancel" style="flex:1;">放弃更新</button>' +
+        '<button class="primary" id="noteDiffConfirm" style="flex:2;">应用勾选</button>' +
       '</div>' +
     '</div>' +
   '</div>';
@@ -278,28 +337,34 @@ function openNoteDiffModal(candidates, added, skipped, bookName, inboxCat) {
     var oldNote = oldParts.length > 1 ? oldParts[1].trim() : '（无笔记）';
     var newParts = c.newText.split('\n\n---\n\n');
     var newNote = newParts.length > 1 ? newParts[1].trim() : '（无笔记）';
-    var quoteText = oldParts[0].slice(0, 60) + (oldParts[0].length > 60 ? '...' : '');
+    
+    // 生成 Diff HTML
+    var diff = generateDiffHtml(oldNote, newNote);
 
-    return '<div style="background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.02); transition:all .2s;">' +
-      '<div style="display:flex; gap:10px; padding:12px 14px; background:var(--bg); border-bottom:1px solid var(--line); align-items:flex-start;">' +
+    return '<div style="background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.04); transition:all .2s;">' +
+      // 划线部分
+      '<div style="display:flex; gap:10px; padding:12px 16px; background:var(--bg); border-bottom:1px solid var(--line); align-items:flex-start;">' +
         '<input type="checkbox" class="note-diff-cb" data-idx="' + idx + '" checked style="margin-top:2px; width:16px; height:16px; accent-color:var(--accent); cursor:pointer; flex:none;">' +
-        '<div style="flex:1; min-width:0; font-size:13px; color:var(--text-2); line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">' +
-          '<span style="color:var(--text-3); font-weight:600; margin-right:4px;">原文划线：</span>' +
-          esc(quoteText) +
+        '<div style="flex:1; min-width:0; font-size:13px; color:var(--text-3); line-height:1.6; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">' +
+          '<span style="font-weight:600; margin-right:4px;">划线：</span>' +
+          esc(oldParts[0]) +
         '</div>' +
       '</div>' +
+      // 对比部分
       '<div style="display:flex; gap:1px; background:var(--line); flex-wrap:wrap;">' +
-        '<div style="flex:1; min-width:200px; background:var(--card); padding:12px 14px;">' +
-          '<div style="display:flex; align-items:center; gap:4px; margin-bottom:8px; font-size:12px; color:var(--danger); font-weight:600;">' +
-            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>旧版笔记' +
+        // 旧版
+        '<div style="flex:1; min-width:240px; background:#fffafb; padding:14px 16px; border-left:3px solid #ef4444;">' +
+          '<div style="display:flex; align-items:center; gap:6px; margin-bottom:10px; font-size:12.5px; color:#b91c1c; font-weight:700;">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg>旧版内容' +
           '</div>' +
-          '<div style="font-size:13.5px; color:var(--text-2); line-height:1.6; word-break:break-word; white-space:pre-wrap;">' + esc(oldNote) + '</div>' +
+          '<div style="font-size:13.5px; color:#333; line-height:1.7; word-break:break-word; white-space:pre-wrap;">' + diff.oldHtml + '</div>' +
         '</div>' +
-        '<div style="flex:1; min-width:200px; background:#f0fdf4; padding:12px 14px;">' +
-          '<div style="display:flex; align-items:center; gap:4px; margin-bottom:8px; font-size:12px; color:#10b981; font-weight:600;">' +
-            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>新版笔记' +
+        // 新版
+        '<div style="flex:1; min-width:240px; background:#f0fdf4; padding:14px 16px; border-left:3px solid #10b981;">' +
+          '<div style="display:flex; align-items:center; gap:6px; margin-bottom:10px; font-size:12.5px; color:#047857; font-weight:700;">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>新版内容' +
           '</div>' +
-          '<div style="font-size:13.5px; color:#047857; line-height:1.6; word-break:break-word; white-space:pre-wrap;">' + esc(newNote) + '</div>' +
+          '<div style="font-size:13.5px; color:#064e3b; line-height:1.7; word-break:break-word; white-space:pre-wrap;">' + diff.newHtml + '</div>' +
         '</div>' +
       '</div>' +
     '</div>';
