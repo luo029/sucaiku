@@ -1,5 +1,9 @@
 // js/init.js · 完整文件
-// ★ 本次改动：访客模式云端拉取失败时，提示文案更清楚（区分访客/主人两种情况），方便排查。
+// ★ 本次改动：优化了 handleOwnerSync 的自动拉取逻辑。
+//   原逻辑：每次刷新如果开启了自动拉取，无条件调用 ghPull，导致每次都弹进度条。
+//   新逻辑：先获取云端 index.json 的 SHA 值。如果 SHA 和本地记录的一致，
+//   说明云端没变，直接跳过拉取（零延迟、不弹进度条）；
+//   只有云端更新了，才执行 ghPull 拉取数据。
 
 var PUBLIC_OWNER = 'luo029';
 var PUBLIC_REPO = 'sucaiuk_data';
@@ -223,18 +227,37 @@ function handleOwnerSync(cfg) {
           if (ok) { console.log('[init] ✅ 首次推送成功'); toast('✅ 云端分片初始化完成'); }
           else { console.warn('[init] ❌ 首次推送失败'); toast('❌ 云端分片初始化失败，请检查网络或配置'); }
         });
-      } else { console.log('[init] 云端和本地都是空的'); }
+      } else {
+        console.log('[init] 云端和本地都是空的');
+      }
     } else {
+      // ★ 核心修改：比对云端 index.json 的 SHA 和本地存储的 SHA
+      //   如果一致，说明没有其他设备修改数据，直接跳过拉取
+      var cloudSha = f.sha;
+      var localSha = localStorage.getItem('material-library.last-index-sha');
+      
       var shouldPull = cfg.autoSync || db.items.length === 0;
+      
       if (shouldPull) {
-        console.log('[init] 云端有分片，开始拉取...');
+        if (localSha && localSha === cloudSha && db.items.length > 0) {
+          console.log('[init] 云端版本未变化，直接使用本地数据，跳过拉取。');
+          // 即使跳过，也更新一下 _lastKnownSha 供后台巡检用
+          if (window._lastKnownSha !== undefined) window._lastKnownSha = cloudSha;
+          return;
+        }
+
+        console.log('[init] 云端数据有更新或本地为空，开始拉取...');
         ghPull(true).then(function (ok) {
           if (ok) {
             console.log('[init] ✅ 自动拉取成功，共 ' + db.items.length + ' 条素材');
+            // 拉取成功后，记录最新的云端 SHA
+            try { localStorage.setItem('material-library.last-index-sha', cloudSha); } catch(e){}
             setTimeout(function () { try { checkOrphanImages(); } catch (e) {} }, 1000);
           } else { console.warn('[init] ❌ 自动拉取失败'); }
         });
-      } else { console.log('[init] 云端有分片，本地有数据，未开启自动拉取，跳过'); }
+      } else {
+        console.log('[init] 云端有分片，本地有数据，未开启自动拉取，跳过');
+      }
     }
   }).catch(function (e) {
     console.warn('[init] 检查云端状态失败:', e);
