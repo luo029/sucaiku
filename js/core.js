@@ -1,8 +1,7 @@
 // js/core.js · 完整文件
 // ★ 本次改动：
-//  1) DEFAULT_SETTINGS 新增 imgUploadMode / imgUploadSmallMax / imgUploadSmallConcurrency / imgUploadSmallDelay / imgUploadLargeConcurrency / imgUploadLargeDelay
-//  2) applySettingsToUI 同步新控件
-//  3) loadSettings 校验新控件范围
+//   1) 删除"图片上传速度"幽灵配置（modals.js 里没有对应控件，属于白写的死代码）
+//   2) DEFAULT_SETTINGS 补上 pushMode: 'stable'，让推送模式开关首次打开也有明确默认值
 
 var UNCAT = '未分类'; var IMG_TYPE = '图片'; var ALL_SOURCES = '__all__';
 var DEFAULT_CATS = ['句子', '段落', '梗', '情话', '吐槽', '点子'];
@@ -26,12 +25,6 @@ var DEFAULT_SETTINGS = {
   cardSpacing: 'standard', listStyle: 'card', zenFontSize: 'normal', uiStyle: 'modern',
   zenAutoClosePanel: true,
   zenRenderMode: 'paged', zenPageSize: 60,
-  imgUploadMode: 'smart',
-  imgUploadSmallMax: 2,
-  imgUploadSmallConcurrency: 1,
-  imgUploadSmallDelay: 0,
-  imgUploadLargeConcurrency: 1,
-  imgUploadLargeDelay: 500,
   focusModeCat: '收件箱', saveShortcut: 'ctrl-enter', enableMarkdown: true,
   copyWithoutMarks: true, copyKeepBlankLines: true, focusImgAutoUpload: true, focusImgDefaultCat: '其他',
   imgNamingTemplate: '{cat}-{timestamp}-{rand}',
@@ -43,6 +36,7 @@ var DEFAULT_SETTINGS = {
   autoPush: true, pushDelayMs: 2000, pushConcurrency: 3, pushBatchDelay: 500,
   conflictAction: 'prompt', maxShardSizeKB: 800, forceConfirm: true, snapshotBeforePush: true,
   shardMaxSizeKB: 650, shardSplitEnabled: true, gitTreeBatchEnabled: true,
+  pushMode: 'stable',
   pushRetryCount: 3, pushRetryDelaySec: 10, syncStatusIcon: true, showSyncProgress: true,
   snapshotEnabled: true, snapshotDailyKeep: 3, snapshotWeeklyKeep: 4, snapshotMonthlyKeep: 3,
   snapshotManualKeep: 10, snapshotMaxAgeDays: 180, snapshotChangeThreshold: 100, snapshotForceDays: 7,
@@ -273,15 +267,6 @@ function applySettingsToUI() {
   if ($('zenPageSizeInput')) $('zenPageSizeInput').value = Number(s.zenPageSize) || 60;
   if ($('zenPageSizeWrap')) $('zenPageSizeWrap').style.display = ((s.zenRenderMode || 'paged') === 'paged') ? 'block' : 'none';
 
-  // ★ 图片上传速度
-  setSegmentedActive('imgUploadMode', 'data-mode', s.imgUploadMode || 'smart');
-  if ($('imgUploadSmallMax')) $('imgUploadSmallMax').value = Number(s.imgUploadSmallMax) || 2;
-  if ($('imgUploadSmallConcurrency')) $('imgUploadSmallConcurrency').value = Number(s.imgUploadSmallConcurrency) || 1;
-  if ($('imgUploadSmallDelay')) $('imgUploadSmallDelay').value = Number(s.imgUploadSmallDelay) || 0;
-  if ($('imgUploadLargeConcurrency')) $('imgUploadLargeConcurrency').value = Number(s.imgUploadLargeConcurrency) || 1;
-  if ($('imgUploadLargeDelay')) $('imgUploadLargeDelay').value = Number(s.imgUploadLargeDelay) || 500;
-  if ($('imgUploadCustomWrap')) $('imgUploadCustomWrap').style.display = ((s.imgUploadMode || 'smart') === 'custom') ? 'block' : 'none';
-
   setSegmentedActive('compressMode', 'data-mode', s.compressMode || 'local');
   setSegmentedActive('loadMode', 'data-mode', s.loadMode || 'smart');
   setSegmentedActive('historyLoadMode', 'data-mode', s.historyLoadMode || 'auto');
@@ -352,12 +337,6 @@ function loadSettings() {
   if (['last-write', 'merge'].indexOf(db.settings.catConflictMode) < 0) db.settings.catConflictMode = 'last-write';
   if (['all', 'paged'].indexOf(db.settings.zenRenderMode) < 0) db.settings.zenRenderMode = 'paged';
   db.settings.zenPageSize = Math.max(20, Math.min(500, Number(db.settings.zenPageSize) || 60));
-  if (['smart', 'conservative', 'custom'].indexOf(db.settings.imgUploadMode) < 0) db.settings.imgUploadMode = 'smart';
-  db.settings.imgUploadSmallMax = Math.max(1, Math.min(20, Number(db.settings.imgUploadSmallMax) || 2));
-  db.settings.imgUploadSmallConcurrency = Math.max(1, Math.min(5, Number(db.settings.imgUploadSmallConcurrency) || 1));
-  db.settings.imgUploadSmallDelay = Math.max(0, Math.min(3000, Number(db.settings.imgUploadSmallDelay) || 0));
-  db.settings.imgUploadLargeConcurrency = Math.max(1, Math.min(5, Number(db.settings.imgUploadLargeConcurrency) || 1));
-  db.settings.imgUploadLargeDelay = Math.max(0, Math.min(3000, Number(db.settings.imgUploadLargeDelay) || 500));
   if (typeof db.settings.imgNamingTemplate !== 'string' || !db.settings.imgNamingTemplate.trim()) db.settings.imgNamingTemplate = DEFAULT_SETTINGS.imgNamingTemplate;
   if (typeof db.settings.dataDir !== 'string') db.settings.dataDir = DEFAULT_SETTINGS.dataDir; if (typeof db.settings.shardSubdir !== 'string') db.settings.shardSubdir = DEFAULT_SETTINGS.shardSubdir;
   if (typeof db.settings.snapshotPath !== 'string' || !db.settings.snapshotPath) db.settings.snapshotPath = 'snapshots/';

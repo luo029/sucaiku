@@ -1,7 +1,6 @@
 // js/store.js · 完整文件
-// ★ 本次改动：loadStore 末尾增加 localStorage 兜底对比。
-//   如果 pagehide 时写入的 localStorage 数据 _rev 比 IndexedDB 更新（说明强制关闭时 IndexedDB 没写完），
-//   则采用 localStorage 的数据，并回写 IndexedDB，避免最后一点改动丢失。
+// ★ 本次改动：openIDB 里数据库版本号从写死的 1 改成 IDB_SCHEMA（当前=2），
+//   以后给本地数据库加新结构时不用再改代码。
 
 var IDB_NAME = 'material-library-db';
 var IDB_STORE = 'kv';
@@ -76,7 +75,7 @@ function openIDB() {
   if (_idb) return Promise.resolve(_idb);
   return new Promise(function (resolve, reject) {
     if (!window.indexedDB) { reject(new Error('IndexedDB not supported')); return; }
-    var req = indexedDB.open(IDB_NAME, 1);
+    var req = indexedDB.open(IDB_NAME, IDB_SCHEMA);
     req.onupgradeneeded = function (e) {
       var d = e.target.result;
       if (!d.objectStoreNames.contains(IDB_STORE)) d.createObjectStore(IDB_STORE);

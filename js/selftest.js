@@ -1,5 +1,6 @@
 // js/selftest.js · 完整文件
-// ★ 本次改动：DOM-设置 检测列表补上 zenRenderMode / zenPageSizeInput / zenPageSizeWrap 三个极简模式新控件
+// ★ 本次改动：IndexedDB 可读测试里，open 不再写死版本号 1，
+//   避免跟 store.js 的 IDB_SCHEMA(2) 冲突导致误报失败。
 
 (function () {
   var results = { passed: 0, failed: 0, warned: 0, items: [] };
@@ -173,10 +174,10 @@
     test('回归验证', 'B1 增量索引函数存在', function () { return typeof window._indexAddItem === 'function' && typeof window._indexUpdateItem === 'function' && typeof window._indexRemoveItem === 'function' || '缺函数'; });
     test('回归验证', 'B1 分层写盘：__dirtyShards 存在', function () { return window.__dirtyShards instanceof Set || '未初始化'; });
     test('回归验证', 'B1 自检模块暴露', function () { return typeof window.runSelfTest === 'function' || '未暴露'; });
-    test('回归验证', 'DEFAULT_SETTINGS 关键字段存在', function () { if (!window.coreHelpers || !window.coreHelpers.DEFAULT_SETTINGS) return 'coreHelpers 未暴露'; var d = window.coreHelpers.DEFAULT_SETTINGS; var keys = ['saveShortcut', 'enableMarkdown', 'autoPush', 'snapshotEnabled', 'enableShortcuts']; for (var i = 0; i < keys.length; i++) if (!(keys[i] in d)) return '缺 ' + keys[i]; return true; });
+    test('回归验证', 'DEFAULT_SETTINGS 关键字段存在', function () { if (!window.coreHelpers || !window.coreHelpers.DEFAULT_SETTINGS) return 'coreHelpers 未暴露'; var d = window.coreHelpers.DEFAULT_SETTINGS; var keys = ['saveShortcut', 'enableMarkdown', 'autoPush', 'snapshotEnabled', 'enableShortcuts', 'pushMode']; for (var i = 0; i < keys.length; i++) if (!(keys[i] in d)) return '缺 ' + keys[i]; return true; });
     test('存储', 'IndexedDB 可用', function () { return window.indexedDB ? true : '不可用'; });
     test('存储', 'localStorage 可写', function () { try { localStorage.setItem('__selftest__', '1'); localStorage.removeItem('__selftest__'); return true; } catch (e) { return '不可写：' + e.message; } });
-    test('存储', 'IndexedDB 可读', function () { return new Promise(function (resolve) { try { var req = indexedDB.open('material-library-db', 1); req.onsuccess = function () { resolve(true); }; req.onerror = function () { resolve('打开失败'); }; } catch (e) { resolve('异常：' + e.message); } }); });
+    test('存储', 'IndexedDB 可读', function () { return new Promise(function (resolve) { try { var req = indexedDB.open('material-library-db'); req.onsuccess = function () { resolve(true); }; req.onerror = function () { resolve('打开失败'); }; } catch (e) { resolve('异常：' + e.message); } }); });
 
     // ============ P. 内容质量 ============
     test('内容质量', '空 text 且无图片的素材', function () { return window.db.items.filter(function (i) { return i && !i.text && (!i.images || i.images.length === 0); }).length === 0 ? true : 'warn'; });
@@ -225,26 +226,26 @@
       var catOrder = ['DOM-主界面', 'DOM-批量栏', 'DOM-弹窗', 'DOM-设置', 'DOM-图片', 'DOM-批阅',
                       '分段控件', '控件计数', '全局函数', '数据完整性', '索引一致性', '统计准确性',
                       '核心函数', '回归验证', '存储', '内容质量'];
-      
+
       catOrder.forEach(function (catName) {
         var c = byCat[catName]; if (!c) return;
         var failedItems = c.items.filter(function (i) { return i.status !== 'pass'; });
-        if (failedItems.length === 0) return; 
-        
+        if (failedItems.length === 0) return;
+
         var icon = c.fail > 0 ? '❌' : '⚠️';
         var color = c.fail > 0 ? 'var(--danger)' : '#f59e0b';
-        
+
         catsHtml += '<details open style="margin-bottom:6px; background:var(--bg); border-radius:6px; border:1px solid var(--line);">'
           + '<summary style="padding:8px 10px; font-size:12.5px; font-weight:600; cursor:pointer; outline:none; color:' + color + '; display:flex; justify-content:space-between; align-items:center;">'
           + '<span>' + icon + ' ' + esc(catName) + '</span>'
           + '<span style="font-size:11px; padding:1px 6px; border-radius:8px; background:var(--card);">' + (c.fail + c.warn) + ' 项</span>'
           + '</summary>'
           + '<div style="padding:0 10px 8px; border-top:1px dashed var(--line); margin-top:2px;">'
-          + failedItems.map(function (i) { 
+          + failedItems.map(function (i) {
               return '<div style="font-size:12px; padding:4px 0; color:var(--text-2); border-bottom:1px solid var(--line); line-height:1.4;">'
-                + '• ' + esc(i.name) 
-                + (i.detail ? ' <span style="color:' + (i.status === 'warn' ? '#f59e0b' : 'var(--danger)') + '; font-weight:600;">[' + esc(i.detail) + ']</span>' : '') 
-                + '</div>'; 
+                + '• ' + esc(i.name)
+                + (i.detail ? ' <span style="color:' + (i.status === 'warn' ? '#f59e0b' : 'var(--danger)') + '; font-weight:600;">[' + esc(i.detail) + ']</span>' : '')
+                + '</div>';
             }).join('')
           + '</div>'
           + '</details>';

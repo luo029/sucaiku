@@ -1,6 +1,5 @@
 // js/init.js · 完整文件
-// ★ Bug F 修复：checkOrphanImages 在云端分片未拉完时推迟执行（最多重试 20 次），
-//   防止"本地 db.items 还没拉取完 → 云端实际被引用的图片被误判成孤儿"。
+// ★ 本次改动：访客模式云端拉取失败时，提示文案更清楚（区分访客/主人两种情况），方便排查。
 
 var PUBLIC_OWNER = 'luo029';
 var PUBLIC_REPO = 'sucaiuk_data';
@@ -292,7 +291,9 @@ function initGuestMode() {
       saveGH(guestCfg);
     }
     ghPull(true).then(function (ok) {
-      if (!ok && db.items.length === 0) listEl.innerHTML = '<div class="empty"><p>加载云端数据失败，请检查网络或配置</p></div>';
+      if (!ok && db.items.length === 0) {
+        listEl.innerHTML = '<div class="empty"><p>云端素材库暂时无法访问</p><p style="font-size:13px;color:var(--text-3);margin-top:8px;line-height:1.8;">如果你是访客：可能是公开仓库配置有误，或网络不通；<br>如果你是主人：请点侧栏底部「设置」填入 GitHub Token 解锁编辑。</p></div>';
+      }
     });
   }
 }
