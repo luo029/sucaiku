@@ -1,13 +1,5 @@
 // js/selftest.js · 完整文件
-// ★ 本次修复：
-//   IndexedDB 可读测试加 3 秒超时。
-//   原来如果 IDB 被其他标签页占用 / 卡在升级 / upgrade 阻塞，
-//   onsuccess 和 onerror 都不会触发，Promise 永远 pending，
-//   导致整个自检报告卡在"正在检测…"永远出不来。
-//   现在超时后返回"超时（可关掉其他标签页后重试）"，报告能正常弹出。
-//
-// ★ 上轮已修但本轮未动：
-//   IndexedDB 可读测试不再写死版本号 1，避免与 store.js 的 IDB_SCHEMA(2) 冲突
+// ★ 本次更新：移除了对已废弃的笔记更新弹窗元素的检测，防止自检误报。
 
 (function () {
   var results = { passed: 0, failed: 0, warned: 0, items: [] };
@@ -148,7 +140,7 @@
     test('核心函数', 'ghApiUrl 编码特殊字符', function () { return window.ghApiUrl({ owner: 'a b', repo: 'c/d' }, 'x y').indexOf('%20') >= 0 || '未编码'; });
 
     // ============ E. DOM 元素 ============
-    batchDom('DOM-主界面', ['sidebarOverlay', 'sidebar', 'themeToggleBtn', 'themeIconSun', 'themeIconMoon', 'sidebarCollapseBtn', 'catNav', 'manageCatBtn', 'sourceNav', 'tagNav', 'manageTagBtn', 'sidebarExportBtn', 'sidebarImportBtn', 'gearBtn', 'menuBtn', 'pageTitle', 'pageSub', 'reviewBtn', 'layoutBtn', 'hitokotoText', 'hitokotoFrom', 'hitokotoRefresh', 'input', 'pendingImgs', 'type', 'sourcePicker', 'source', 'sourceToggle', 'sourcePanel', 'spSearch', 'spList', 'tagPicker', 'tags', 'tagToggle', 'tagPanel', 'tpSearch', 'tpList', 'imgBtn', 'imgFileInput', 'cancelBtn', 'addBtn', 'search', 'catFilterWrap', 'catFilterBtn', 'catFilterText', 'catFilterPanel', 'catFilterSearch', 'catFilterList', 'sourceFilterWrap', 'sourceFilterBtn', 'sourceFilterText', 'sourceFilterPanel', 'sourceFilterSearch', 'sourceFilterList', 'focusBtn', 'pipBtn', 'imgViewBtn', 'zenBtn', 'selectBtn', 'moreWrap', 'moreBtn', 'menu', 'menuSettingBtn', 'menuImgManagerBtn', 'menuExportBtn', 'menuImportBtn', 'menuDupBtn', 'menuRandomBtn', 'menuStatsBtn', 'menuHealthBtn', 'menuTrashBtn', 'zenBar', 'list', 'pagination', 'zenExitBtn', 'focusExitBtn']);
+    batchDom('DOM-主界面', ['sidebarOverlay', 'sidebar', 'themeToggleBtn', 'themeIconSun', 'themeIconMoon', 'sidebarCollapseBtn', 'catNav', 'manageCatBtn', 'sourceNav', 'tagNav', 'manageTagBtn', 'sidebarExportBtn', 'sidebarImportBtn', 'gearBtn', 'menuBtn', 'pageTitle', 'pageSub', 'reviewBtn', 'layoutBtn', 'hitokotoText', 'hitokotoFrom', 'hitokotoRefresh', 'input', 'pendingImgs', 'type', 'sourcePicker', 'source', 'sourceToggle', 'sourcePanel', 'spSearch', 'spList', 'tagPicker', 'tags', 'tagToggle', 'tagPanel', 'tpSearch', 'tpList', 'imgBtn', 'imgFileInput', 'cancelBtn', 'addBtn', 'search', 'catFilterWrap', 'catFilterBtn', 'catFilterText', 'catFilterPanel', 'catFilterSearch', 'catFilterList', 'sourceFilterWrap', 'sourceFilterBtn', 'sourceFilterText', 'sourceFilterPanel', 'sourceFilterSearch', 'sourceFilterList', 'focusBtn', 'pipBtn', 'imgViewBtn', 'zenBtn', 'selectBtn', 'moreWrap', 'moreBtn', 'menu', 'menuSettingBtn', 'menuImgManagerBtn', 'menuExportBtn', 'menuImportBtn', 'menuDupBtn', 'menuRandomBtn', 'menuStatsBtn', 'menuHealthBtn', 'menuTrashBtn', 'zenBar', 'list', 'pagination', 'zenExitBtn', 'focusExitBtn', 'noteFileInput']);
     batchDom('DOM-批量栏', ['batchBar', 'batchNum', 'selectAllBtn', 'batchMoveBtn', 'batchTagBtn', 'batchSourceBtn', 'batchExportBtn', 'batchDel', 'batchExit', 'imgMgrBatchBar', 'imgMgrBatchNum', 'imgMgrSelectAllBtn', 'imgMgrBatchCatBtn', 'imgMgrBatchTagBtn', 'imgMgrBatchDelBtn', 'imgMgrBatchExit']);
     batchDom('DOM-弹窗', ['modalMask', 'modalDesc', 'noRemind', 'modalCancel', 'modalConfirm', 'exportMask', 'exportScope', 'exportFormat', 'exportCancel', 'exportConfirm', 'randomMask', 'randomFontSizeBtn', 'randomAutoFlipToggleBtn', 'randomFilterBtn', 'randomFilterText', 'randomFilterPanel', 'randomFilterSearch', 'randomFilterList', 'randomAutoFlipPanel', 'randomAutoFlipCheck', 'randomAutoFlipTime', 'randomContent', 'randomCloseBtn', 'randomAgainBtn', 'dupMask', 'dupList', 'dupCloseBtn', 'catManageMask', 'addCatBtnModal', 'catManageList', 'catManagePagination', 'catManageCloseBtn', 'logMask', 'logRefreshBtn', 'logClearBtn', 'logListWrap', 'logCloseBtn', 'deviceMask', 'deviceRefreshBtn', 'deviceList', 'deviceCloseBtn', 'tagColorMask', 'tagColorName', 'tagColorPalette', 'tagColorCustom', 'tagColorConfirm', 'tagColorCancel', 'tagColorClear', 'imgCatMask', 'imgCatCount', 'imgCatList', 'imgUploadTags', 'imgProgressWrap', 'imgProgressText', 'imgProgressPercent', 'imgProgressBar', 'imgUploadStatus', 'imgCatCancel', 'imgCatConfirm', 'tagManageMask', 'tagBatchToggleBtn', 'tagBatchBar', 'tagBatchCount', 'tagBatchMergeBtn', 'tagBatchDeleteBtn', 'tagBatchCancelBtn', 'tagManageList', 'tagManagePagination', 'tagManageCloseBtn', 'moveMask', 'moveCount', 'moveCatSelect', 'moveCancel', 'moveConfirm', 'tagAddMask', 'tagAddCount', 'tagAddInput', 'tagAddCancel', 'tagAddConfirm', 'batchSourceMask', 'batchSourceCount', 'batchSourceInput', 'batchSourceCancel', 'batchSourceConfirm', 'trashMask', 'trashDesc', 'trashList', 'trashClearBtn', 'trashCloseBtn', 'statsMask', 'statsContent', 'statsCloseBtn', 'healthMask', 'healthTotal', 'healthList', 'healthCloseBtn', 'customPromptMask', 'cpTitle', 'cpDesc', 'cpInput', 'cpSuggestions', 'cpCancel', 'cpConfirm', 'customConfirmMask', 'ccIcon', 'ccTitle', 'ccDesc', 'ccCancel', 'ccConfirm', 'snapshotListMask', 'snapshotListContent', 'snapshotRefreshBtn', 'snapshotListClose', 'imgMgrBatchEditMask', 'imgMgrBatchEditTitle', 'imgMgrBatchEditCount', 'imgMgrBatchCatWrap', 'imgMgrBatchCatGrid', 'imgMgrBatchTagWrap', 'imgMgrBatchSelectedTags', 'imgMgrBatchTagNewInput', 'imgMgrBatchTagAddBtn', 'imgMgrBatchTagSearchBtn', 'imgMgrBatchTagPoolWrap', 'imgMgrBatchTagSearch', 'imgMgrBatchTagPool', 'imgMgrBatchEditCancel', 'imgMgrBatchEditConfirm', 'fileInput', 'toast']);
     batchDom('DOM-设置', ['settingMask', 'settingTabs', 'settingsOverview', 'ovTotal', 'ovChars', 'ovImgs', 'ovTags', 'defaultTypeSelect', 'defaultPageSizeSelect', 'collapseLimitInput', 'trashTtlInput', 'copyWithoutMarks', 'copyKeepBlankLines', 'copyWithSource', 'copySourceFormatWrap', 'copySourceFormat', 'enableMarkdown', 'themeDarkToggle', 'useRelativeTimeToggle', 'showHitokoto', 'enableAnim', 'saveShortcut', 'focusModeCatInput', 'openFocusModeBtn', 'uiStyleMode', 'fontSizeMode', 'zenFontSize', 'listStyleMode', 'zenRenderMode', 'zenPageSizeWrap', 'zenPageSizeInput', 'zenAutoClosePanel', 'sidebarShowCat', 'sidebarShowSrc', 'sidebarShowTag', 'catLimitInput', 'srcLimitInput', 'tagLimitInput', 'enableShortcuts', 'shortcutSearch', 'shortcutNew', 'enableContextMenu', 'maxTagsInHeader', 'snapshotEnabled', 'snapshotDailyKeep', 'snapshotWeeklyKeep', 'snapshotMonthlyKeep', 'snapshotManualKeep', 'snapshotMaxAgeDays', 'snapshotChangeThreshold', 'snapshotForceDays', 'snapshotCompress', 'snapshotAutoCleanup', 'snapshotPath', 'snapshotNowBtn', 'snapshotListViewBtn', 'trashAutoCleanupThreshold', 'compressMode', 'tinypngFields', 'tinypngKey', 'tinypngProxy', 'tinyUsage', 'focusImgAutoUpload', 'focusImgCatWrap', 'focusImgDefaultCat', 'imgCatsEditor', 'newImgCatInput', 'imgNamingTemplate', 'imgNamingPreview', 'imgNamingWarn', 'ghToken', 'ghOwner', 'ghRepo', 'ghBranch', 'ghDataPath', 'ghDataDir', 'ghShardSubdir', 'ghSiteBase', 'ghAuto', 'ghAutoPull', 'autoPushDelay', 'syncCheckIntervalInput', 'autoCheckUpdateToggle', 'ghTestBtn', 'ghPullBtn', 'ghPushBtn', 'ghForcePushBtn', 'ghStatus', 'ghImgOwner', 'ghImgRepo', 'ghImgBranch', 'ghImgPath', 'ghImgSite', 'ghImgToken', 'ghImgStatus', 'loadMode', 'smartThresholdMB', 'manualRangeDays', 'lazyLoadBatchSize', 'pullConcurrency', 'shardMaxSizeKB', 'shardSplitEnabled', 'startupAutoPull', 'checkIntervalSeconds', 'autoPush', 'forceConfirm', 'gitTreeBatchEnabled', 'pushMode', 'pushRetryCount', 'pushRetryDelaySec', 'showSyncProgress', 'searchDebounceMs', 'tagColorMode', 'tagFilterLogic', 'enableYearIndex', 'enableMigrationResume', 'timezoneMode', 'enableLog', 'logMaxCount', 'logDisplayCount', 'openLogViewBtn', 'deviceName', 'deviceIcon', 'openDeviceViewBtn', 'catSyncAction', 'runSelfTestBtn', 'settingCloseBtn']);
@@ -184,7 +176,7 @@
     test('回归验证', 'DEFAULT_SETTINGS 关键字段存在', function () { if (!window.coreHelpers || !window.coreHelpers.DEFAULT_SETTINGS) return 'coreHelpers 未暴露'; var d = window.coreHelpers.DEFAULT_SETTINGS; var keys = ['saveShortcut', 'enableMarkdown', 'autoPush', 'snapshotEnabled', 'enableShortcuts', 'pushMode']; for (var i = 0; i < keys.length; i++) if (!(keys[i] in d)) return '缺 ' + keys[i]; return true; });
     test('存储', 'IndexedDB 可用', function () { return window.indexedDB ? true : '不可用'; });
     test('存储', 'localStorage 可写', function () { try { localStorage.setItem('__selftest__', '1'); localStorage.removeItem('__selftest__'); return true; } catch (e) { return '不可写：' + e.message; } });
-    // ★ 本次修复：加 3 秒超时，避免 IDB 被占用时 Promise 永远 pending，导致整个自检卡死
+    // 加 3 秒超时，避免 IDB 被占用时 Promise 永远 pending
     test('存储', 'IndexedDB 可读', function () {
       return new Promise(function (resolve) {
         var done = false;
@@ -244,14 +236,12 @@
 
     var catsHtml = '';
     if (results.failed === 0 && results.warned === 0) {
-      // 超小极简通过页
       catsHtml = '<div style="text-align:center; padding:20px 10px;">'
         + '<div style="font-size:36px; margin-bottom:10px;">🎉</div>'
         + '<div style="font-size:15px; font-weight:bold; color:#10b981; margin-bottom:4px;">全部功能正常</div>'
         + '<div style="font-size:12px; color:var(--text-3);">共执行了 ' + total + ' 项深度检测</div>'
         + '</div>';
     } else {
-      // 有异常时，紧凑折叠
       var catOrder = ['DOM-主界面', 'DOM-批量栏', 'DOM-弹窗', 'DOM-设置', 'DOM-图片', 'DOM-批阅',
                       '分段控件', '控件计数', '全局函数', '数据完整性', '索引一致性', '统计准确性',
                       '核心函数', '回归验证', '存储', '内容质量'];
@@ -281,7 +271,6 @@
       });
     }
 
-    // ★ 极端紧凑的小弹窗
     var html = '<div class="modal-mask show" id="selftestMask" style="z-index:9999;"><div class="modal" style="max-width:380px; width:90%; border-radius:12px; padding:16px; box-shadow:0 8px 32px rgba(0,0,0,0.15);">'
       + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">'
       + '<h3 class="modal-title" style="margin:0; font-size:14px; font-weight:600; color:var(--text-2);">🔍 自检报告</h3>'

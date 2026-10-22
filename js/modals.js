@@ -1,4 +1,9 @@
 // js/modals.js · 完整文件
+// ★ 本次更新：
+//   1) 删除了 noteDiffMask（笔记更新对比弹窗）的 HTML。
+//   2) 删除了 noteFileInput 的隐藏输入框。
+//   （这两项现已完全由 js/readest.js 动态管理）
+
 setTimeout(function () { var oldCatMgr = document.getElementById('catManager'); if (oldCatMgr) oldCatMgr.remove(); }, 100);
 
 var modalsHtml = ''
@@ -219,11 +224,8 @@ var modalsHtml = ''
 // ============ 快照列表弹窗 ============
 + '<div class="modal-mask" id="snapshotListMask"><div class="modal wide" style="max-width:600px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;"><h3 class="modal-title" style="margin:0;">📸 快照列表</h3><button class="btn tiny" id="snapshotRefreshBtn">刷新</button></div><div id="snapshotListContent" style="max-height:60vh; overflow-y:auto;"></div><div class="modal-actions" style="margin-top:16px;"><button class="btn" id="snapshotListClose">关闭</button></div></div></div>'
 
-// ============ 新增：笔记对比更新弹窗 ============
-+ '<div class="modal-mask" id="noteDiffMask" style="z-index: 250;"><div class="modal" style="max-width: 680px; width: 95%;"><h3 class="modal-title">发现笔记更新</h3><p class="modal-desc">以下划线内容没变，但你修改了笔记或标签，是否应用更新？</p><div style="display:flex; justify-content:space-between; margin-bottom:10px;"><label style="cursor:pointer; font-size:13px;"><input type="checkbox" id="noteDiffSelectAll" checked> 全选</label><span style="font-size:12px; color:var(--text-3);" id="noteDiffCount"></span></div><div id="noteDiffList" style="max-height: 50vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 16px; background: var(--bg); padding: 8px;"></div><div class="modal-actions"><button class="btn" id="noteDiffCancel">放弃更新</button><button class="primary" id="noteDiffConfirm">应用勾选</button></div></div></div>'
-
+// ============ 全局唯一的基础输入框 ============
 + '<input type="file" id="fileInput" accept=".json" hidden>'
-+ '<input type="file" id="noteFileInput" accept=".md" hidden>'
 + '<div id="toast"></div>';
 
 document.body.insertAdjacentHTML('beforeend', modalsHtml);

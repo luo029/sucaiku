@@ -1,5 +1,5 @@
 // js/bind-views.js · 完整文件
-// ★ 本次更新：新增右上角【导笔记】按钮的点击事件，触发专属的 .md 文件上传。
+// ★ 本次更新：移除了底部的 importNoteBtn 和 noteFileInput 绑定（已移入 js/readest.js）。
 
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
@@ -544,19 +544,3 @@ safeBind('newImgCatInput', 'keydown', function (e) { if (e.key !== 'Enter') retu
 if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor();
 
 window.renderLogView = renderLogView; window.renderDeviceList = renderDeviceList; window.refreshStorageInfo = refreshStorageInfo; window.openTagColorPicker = openTagColorPicker; window.renderTagManagerWithBatch = renderTagManagerWithBatch;
-
-// ==========================================
-// ★ 新增：Readest 笔记导入按钮事件
-// ==========================================
-safeBind('importNoteBtn', 'click', function () {
-  if ($('noteFileInput')) $('noteFileInput').click();
-});
-
-safeBind('noteFileInput', 'change', function (e) {
-  var f = e.target.files[0];
-  if (!f) return;
-  if (typeof importReadestMarkdown === 'function') {
-    importReadestMarkdown(f);
-  }
-  e.target.value = '';
-});
