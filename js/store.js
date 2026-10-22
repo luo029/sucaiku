@@ -1,6 +1,10 @@
 // js/store.js · 完整文件
-// ★ 本次改动：openIDB 里数据库版本号从写死的 1 改成 IDB_SCHEMA（当前=2），
-//   以后给本地数据库加新结构时不用再改代码。
+// ★ 本次修复：
+//   1) _doSaveIDB(forceAll) 时先清理 IDB 里已不存在的 shard key，
+//      防止已删除的素材在下次 loadStore 时因残留 shard 而"复活"
+//   2) _doSaveIDB 写盘成功后，只有在写盘期间没有新修改时才 _pendingSave = false，
+//      避免写盘期间的修改在 visibilitychange 时不被 flush 到 localStorage
+//   3) 新增 idbGetAllKeys() 辅助函数
 
 var IDB_NAME = 'material-library-db';
 var IDB_STORE = 'kv';
@@ -120,7 +124,6 @@ function markAllShardsDirty() {
   _metaDirty = true;
 }
 
-// ★ 新增：回收站 / 同步快照 单独标脏
 function markTrashDirty() {
   _trashDirty = true;
   _pendingSave = true;
@@ -161,6 +164,16 @@ function idbDeleteMany(keys) {
       keys.forEach(function (k) { store.delete(k); });
       tx.oncomplete = function () { resolve(); };
       tx.onerror = function () { reject(tx.error); };
+    });
+  });
+}
+// ★ 新增：读取 IDB 全部 key（用于 forceAll 时清理孤儿 shard）
+function idbGetAllKeys() {
+  return _idbTx('readonly').then(function (tx) {
+    return new Promise(function (resolve, reject) {
+      var req = tx.objectStore(IDB_STORE).getAllKeys();
+      req.onsuccess = function () { resolve(req.result || []); };
+      req.onerror = function () { reject(req.error); };
     });
   });
 }
@@ -273,18 +286,38 @@ function _doSaveIDB(forceAll) {
   _trashDirty = false;
   _syncDirty = false;
   if (!forceAll && !metaDirty && !trashDirty && !syncDirty && dirtyShards.length === 0) { _pendingSave = false; return Promise.resolve(); }
+
   var groups = _groupItemsByShard(db.items);
   var entries = [];
   if (metaDirty || forceAll) entries.push({ key: IDB_META_KEY, value: _buildMeta() });
   if (trashDirty || forceAll) entries.push({ key: IDB_TRASH_KEY, value: db.trash });
   if (syncDirty || forceAll) entries.push({ key: IDB_SNAP_KEY, value: _buildSyncSnap() });
+
+  // ★ 修复1：forceAll 时先清理 IDB 里已不存在的 shard key，
+  //   防止已删除的素材在下次 loadStore 时因残留 shard 而"复活"
+  var staleChain = Promise.resolve();
   if (forceAll) {
-    Object.keys(groups).forEach(function (k) { entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] }); });
-  } else {
-    dirtyShards.forEach(function (k) { entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] || [] }); });
+    staleChain = idbGetAllKeys().then(function (allKeys) {
+      var staleKeys = allKeys.filter(function (k) {
+        return typeof k === 'string' && k.indexOf(IDB_SHARD_PREFIX) === 0 && !(k.substring(IDB_SHARD_PREFIX.length) in groups);
+      });
+      return staleKeys.length ? idbDeleteMany(staleKeys) : undefined;
+    }).catch(function (e) { console.warn('[store] 清理旧分片失败', e); });
   }
-  return idbPutMany(entries).then(function () {
-    _pendingSave = false;
+
+  return staleChain.then(function () {
+    if (forceAll) {
+      Object.keys(groups).forEach(function (k) { entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] }); });
+    } else {
+      dirtyShards.forEach(function (k) { entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] || [] }); });
+    }
+    return idbPutMany(entries);
+  }).then(function () {
+    // ★ 修复2：只有写盘期间确实没有新修改时，才清 _pendingSave，
+    //   否则写盘期间新产生的修改在 visibilitychange 时不会被 flush 到 localStorage
+    if (_dirtyShards.size === 0 && !_metaDirty && !_trashDirty && !_syncDirty) {
+      _pendingSave = false;
+    }
     var size = JSON.stringify(entries).length;
     if (size > 4 * 1024 * 1024) showStorageWarning(size);
   }).catch(function (e) {
@@ -485,7 +518,6 @@ function ensureColors() {
   return dirty;
 }
 
-// ★ 图片数组比较不再用 JSON.stringify
 function _imagesArrayChanged(ni, oldArr) {
   if (ni.length !== oldArr.length) return true;
   for (var k = 0; k < ni.length; k++) {
@@ -593,7 +625,6 @@ function getSidebarStats() {
   return _statsCache;
 }
 
-// ★ collectTags 直接复用索引统计结果，不再每次全量遍历
 function collectTags() {
   return getSidebarStats().tagCounts;
 }
@@ -660,10 +691,8 @@ window.markIndexDirty = markIndexDirty; window.rebuildIndex = rebuildIndex;
 window._indexAddItem = _indexAddItem; window._indexRemoveItem = _indexRemoveItem; window._indexUpdateItem = _indexUpdateItem;
 window.__index = _index; window.__itemById = _itemById; window.__indexEnsure = _indexEnsure; window.__dirtyShards = _dirtyShards;
 window._maybeCleanTrash = _maybeCleanTrash;
-// ★ 回收站 / 同步快照 标脏接口（供 items.js、github.js 调用）
 window.markTrashDirty = markTrashDirty;
 window.markSyncDirty = markSyncDirty;
-// ★ 暴露给 io.js 等模块使用
 window.sanitizeHexColor = sanitizeHexColor;
 window.sanitizeTagColors = sanitizeTagColors;
 window.sanitizeCatColors = sanitizeCatColors;

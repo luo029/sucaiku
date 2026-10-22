@@ -1,9 +1,10 @@
 // js/custom-select.js
-// ★ 本次改动：
-//   1) 每个浮动面板挂 _select 反向引用
-//   2) 新增 cleanupOrphanPanels()：扫描 body 上所有 .custom-select-panel，
-//      如果它对应的 <select> 已经不在 DOM 里，就把面板移除
-//   3) scanSelects() 开头先 cleanupOrphanPanels()，翻页后旧面板会被自动清掉
+// ★ 本次修复：
+//   1) openPanel 里原来在 panel.hidden = true 的状态下读 panel.scrollHeight，
+//      永远是 0，导致 panelHeight = 12，总是判定"下方空间够"，按钮在屏幕底部时
+//      面板会被截断。现在改为先临时显示（visibility:hidden 保留占位）+ 读 offsetHeight
+//   2) 每个浮动面板挂 _select 反向引用（原有）
+//   3) cleanupOrphanPanels 清理孤儿面板（原有）
 
 (function() {
   function initCustomSelect(select) {
@@ -34,7 +35,7 @@
 
     display._panel = panel;
     display._select = select;
-    panel._select = select;  // ★ 新增：反向引用，用于清理孤儿面板
+    panel._select = select;
 
     function sync() {
       var selectedOption = select.options[select.selectedIndex];
@@ -63,13 +64,24 @@
       panel.style.width = rect.width + 'px';
       panel.style.left = rect.left + 'px';
 
-      var spaceBelow = window.innerHeight - rect.bottom;
-      var panelHeight = Math.min(240, panel.scrollHeight + 12);
+      // ★ 修复：先显示（visibility: hidden）测量真实高度，再决定上/下开
+      //   原代码在 hidden 状态下读 scrollHeight 恒为 0，导致 panelHeight 永远 = 12
+      panel.style.visibility = 'hidden';
+      panel.hidden = false;
+      var measured = panel.offsetHeight;
+      panel.hidden = true;
+      panel.style.visibility = '';
 
-      if (spaceBelow < panelHeight && rect.top > panelHeight) {
+      var panelHeight = measured > 0 ? Math.min(240, measured) : 240;
+      var spaceBelow = window.innerHeight - rect.bottom;
+      var spaceAbove = rect.top;
+
+      if (spaceBelow < panelHeight + 10 && spaceAbove > spaceBelow) {
+        // 上方空间更大：向上弹
         panel.style.top = 'auto';
         panel.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
       } else {
+        // 下方开
         panel.style.bottom = 'auto';
         panel.style.top = (rect.bottom + 6) + 'px';
       }
@@ -106,9 +118,6 @@
     sync();
   }
 
-  // ★ 新增：清理"对应的 <select> 已经不在 DOM 里"的孤儿面板
-  //   场景：翻页时 pagination 整体重建，旧的 <select> 被移除，
-  //         但它挂在 body 上的浮动面板还留着 → 这里统一清掉
   function cleanupOrphanPanels() {
     var panels = document.querySelectorAll('.custom-select-panel');
     for (var i = 0; i < panels.length; i++) {
@@ -121,7 +130,7 @@
   }
 
   function scanSelects() {
-    cleanupOrphanPanels();  // ★ 先清孤儿，再初始化新 select
+    cleanupOrphanPanels();
     document.querySelectorAll('select').forEach(initCustomSelect);
   }
 
@@ -130,7 +139,6 @@
     document.querySelectorAll('.custom-select-wrap').forEach(function(w) { w.classList.remove('open'); });
   }
 
-  // ★ 只有当新加入的节点里确实含 <select> 时才触发扫描
   var _scanTimer = null;
   var globalObserver = new MutationObserver(function(mutations) {
     var maybeHasSelect = false;
@@ -168,7 +176,6 @@
     });
   });
 
-  // ★ P0-3 修复：面板内部滚动不关闭，只有外部滚动才关闭
   window.addEventListener('scroll', function(e) {
     var t = e.target;
     if (t && t.closest && t.closest('.custom-select-panel')) return;

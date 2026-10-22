@@ -1,6 +1,7 @@
 // js/io.js · 完整文件
-// 修复内容：
-//  - P1-6：handleImportFile 支持导入 tagColors，并做白名单校验，防止 CSS 注入
+// ★ 本次修复：
+//   handleImportFile 里如果导入了 trash 内容，补 markTrashDirty()，
+//   否则 IDB 里的 trash 不会被更新，刷新页面后导入的回收站内容丢失
 
 function setZen(on) {
   zenMode = on;
@@ -140,7 +141,6 @@ function handleImportFile(file) {
         incomingTrash = Array.isArray(data.trash) ? data.trash : [];
         incomingFixedTags = Array.isArray(data.fixedTags) ? data.fixedTags : [];
         incomingImgCats = Array.isArray(data.imageCategories) ? data.imageCategories : [];
-        // ★ P1-6：支持导入 tagColors（原来不导入）
         incomingTagColors = (data.tagColors && typeof data.tagColors === 'object') ? data.tagColors : {};
       } else throw new Error('bad');
 
@@ -178,7 +178,6 @@ function handleImportFile(file) {
       incomingFixedTags.forEach(function (s) { if (typeof s === 'string' && s.trim() && db.fixedTags.indexOf(s) < 0) db.fixedTags.push(s); });
       incomingImgCats.forEach(function (s) { if (typeof s === 'string' && s.trim() && db.imageCategories.indexOf(s) < 0) db.imageCategories.push(s); });
 
-      // ★ P1-6：tagColors 校验后合并
       var safeTagColors = (typeof window.sanitizeTagColors === 'function') ? window.sanitizeTagColors(incomingTagColors) : {};
       if (!db.tagColors) db.tagColors = {};
       Object.keys(safeTagColors).forEach(function (k) { db.tagColors[k] = safeTagColors[k]; });
@@ -190,6 +189,10 @@ function handleImportFile(file) {
           if (typeof idx === 'number' && isFinite(idx) && idx >= 0 && !used.has(idx)) { db.colors[c] = idx; used.add(idx); }
         }
       });
+
+      // ★ 本次修复：导入了 trash 内容，必须标 _trashDirty，否则 IDB 里的 trash 不会更新，
+      //   刷新页面后导入的回收站内容丢失
+      if (incomingTrash.length > 0 && typeof markTrashDirty === 'function') markTrashDirty();
 
       markNeedNormalize();
       normalize();

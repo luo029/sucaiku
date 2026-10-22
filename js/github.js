@@ -1,6 +1,10 @@
-// js/github.js · 完整文件（迷你平滑流光进度条版）
-// ★ 本次改动：进度条面板缩水（宽 200px，紧凑内边距，更小字号），不再遮挡内容
-//   保留视觉平滑器和流光彩虹动画
+// js/github.js · 完整文件
+// ★ 本次修复：
+//   ghPull 拉 trash 时，如果云端还没有 trash.json 但本地回收站非空，
+//   把 _trashSnapshot 设为 ''（sentinel），让下次任何 push 必然把本地 trash 推上去，
+//   否则 _trashSnapshot === 本地 trashJson → push 永远跳过 → 云端永远缺 trash.json
+//
+//   （上一轮的修复仍然保留：云端无 trash.json 时不覆盖本地回收站）
 
 var STORE_VERSION = 4; var GH_INDEX_PATH = 'index.json'; var GH_TRASH_PATH = 'trash.json';
 var GH_LOG_PATH = 'push-log.json'; var GH_DEVICES_PATH = 'devices.json';
@@ -9,7 +13,7 @@ var _shardSnapshots = {}; var _trashSnapshot = ''; var _metaSnapshot = '';
 var _pushInFlight = false; var _pushQueued = false;
 
 // ============================================================
-// ★ 推送/拉取 进度条控制与平滑渲染
+// 推送/拉取 进度条控制与平滑渲染
 // ============================================================
 var _syncProgress = { active: false, total: 0, done: 0, failed: 0, startAt: 0, visualPct: 0, title: '正在同步' };
 var _syncTicker = null;
@@ -17,32 +21,32 @@ var _syncHideTimer = null;
 
 function _showSyncProgress(total, title) {
   if (!db.settings.showSyncProgress || total <= 0) return;
-  
+
   if (_syncHideTimer) { clearTimeout(_syncHideTimer); _syncHideTimer = null; }
   if (_syncTicker) { clearInterval(_syncTicker); _syncTicker = null; }
-  
+
   _syncProgress = { active: true, total: total, done: 0, failed: 0, startAt: Date.now(), visualPct: 0, title: title || '🔄 正在同步' };
-  
+
   var el = document.getElementById('syncProgressPanel');
   if (el) el.style.opacity = '1';
-  
+
   _renderSyncProgress();
-  
+
   _syncTicker = setInterval(function() {
     var targetPct = _syncProgress.total > 0 ? (_syncProgress.done / _syncProgress.total) * 100 : 0;
     if (_syncProgress.done >= _syncProgress.total) targetPct = 100;
-    
+
     if (_syncProgress.done === 0 && _syncProgress.active) {
       var elapsed = Date.now() - _syncProgress.startAt;
       var fakeTarget = Math.min(15, Math.floor(elapsed / 1000) * 2);
       if (fakeTarget > targetPct) targetPct = fakeTarget;
     }
-    
+
     targetPct = Math.min(100, Math.round(targetPct));
-    
+
     var diff = targetPct - _syncProgress.visualPct;
     if (diff > 0) {
-      var step = Math.min(diff, 2.5); 
+      var step = Math.min(diff, 2.5);
       _syncProgress.visualPct += step;
       if (_syncProgress.visualPct > targetPct) _syncProgress.visualPct = targetPct;
       _renderSyncProgress();
@@ -50,7 +54,7 @@ function _showSyncProgress(total, title) {
       _syncProgress.visualPct = targetPct;
       _renderSyncProgress();
     }
-    
+
     if (!_syncProgress.active && _syncProgress.visualPct >= 100) {
       clearInterval(_syncTicker);
       _syncTicker = null;
@@ -77,7 +81,6 @@ function _renderSyncProgress() {
   if (!el) {
     el = document.createElement('div');
     el.id = 'syncProgressPanel';
-    // ★ 面板缩水：宽度 200px，内边距 10px 14px
     el.style.cssText = 'position:fixed; bottom:16px; right:16px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; box-shadow:var(--sh-2); z-index:9999; width:200px; transition:opacity .3s; backdrop-filter: blur(8px);';
     document.body.appendChild(el);
   }
@@ -88,24 +91,21 @@ function _renderSyncProgress() {
   if (_syncProgress.done > 0 && _syncProgress.total > 0) eta = Math.round(elapsed / _syncProgress.done * (_syncProgress.total - _syncProgress.done));
 
   var hasFailed = _syncProgress.failed > 0;
-  
-  var barBg = hasFailed 
+
+  var barBg = hasFailed
     ? 'linear-gradient(90deg, #ef4444, #f59e0b, #ef4444)'
     : 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899, #8b5cf6, #6366f1)';
-  
-  // ★ 字号 13px，边距缩小
+
   var p1 = '<div style="font-weight:600; font-size:13px; margin-bottom:6px; display:flex; justify-content:space-between;"><span>' + (_syncProgress.title || '🔄 正在同步') + '</span><span style="color:' + (hasFailed ? 'var(--danger)' : 'var(--accent)') + ';">' + Math.round(pct) + '%</span></div>';
-  
-  // ★ 进度条高度 8px
+
   var p2 = '<div style="height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-bottom:6px; position:relative;">';
   p2 += '<div style="position:absolute; top:0; left:0; bottom:0; width:' + pct + '%; background:' + barBg + '; background-size: 200% 100%; border-radius:4px; transition: width 0.1s linear; box-shadow:0 0 6px rgba(99,102,241,0.4); animation: rainbow-flow 2s linear infinite;">';
   p2 += '</div></div>';
 
-  // ★ 底部文字 11.5px
   var p3 = '<div style="font-size:11.5px; color:var(--text-3); display:flex; justify-content:space-between;"><span>' + _syncProgress.done + ' / ' + _syncProgress.total + ' 份</span>';
   if (eta > 0 && pct < 100 && !hasFailed) p3 += '<span>剩余约 ' + eta + 's</span>';
   p3 += '</div>';
-  
+
   var p4 = '';
   if (hasFailed) p4 = '<div style="font-size:11px; color:var(--danger); margin-top:4px; font-weight:600;">⚠️ 失败 ' + _syncProgress.failed + ' 个</div>';
 
@@ -835,8 +835,21 @@ function ghPull(silent, pullMore) {
         }
         if (!pullMore) {
           return ghGetRaw(rc, _pathForTrash(cfg)).catch(function () { return null; }).then(function (trashFile) {
-            var trashItems = []; var trashSnap = '';
-            if (trashFile) { try { var td = JSON.parse(base64ToUtf8(trashFile.content.replace(/\n/g, ''))); trashItems = td.trash || []; trashSnap = JSON.stringify(trashItems); } catch (e) {} }
+            // ★ 修复1：云端还没有 trash.json 时保留本地回收站，避免被空数组覆盖
+            // ★ 修复2：云端没有 trash.json 但本地非空时，把 _trashSnapshot 设为 ''，
+            //   让下次任何 push 都必然把本地 trash 推上去，否则云端永远缺这份数据
+            var trashItems = Array.isArray(db.trash) ? db.trash.slice() : [];
+            var trashSnap = JSON.stringify(trashItems);
+            var cloudHasTrash = false;
+            if (trashFile) {
+              try {
+                var td = JSON.parse(base64ToUtf8(trashFile.content.replace(/\n/g, '')));
+                trashItems = td.trash || [];
+                trashSnap = JSON.stringify(trashItems);
+                cloudHasTrash = true;
+              } catch (e) {}
+            }
+            var trashSnapForPush = (!cloudHasTrash && trashItems.length > 0) ? '' : trashSnap;
             return ghGetRaw(rc, _pathForDevices(cfg)).catch(function () { return null; }).then(function (devFile) {
               if (devFile) { try { var dd = JSON.parse(base64ToUtf8(devFile.content.replace(/\n/g, ''))); if (dd.devices) localStorage.setItem('material-library.devices-cache', JSON.stringify(dd.devices)); } catch (e) {} }
               return ghGetRaw(rc, _pathForLog(cfg)).catch(function () { return null; }).then(function (logFile) {
@@ -844,7 +857,7 @@ function ghPull(silent, pullMore) {
                 suppressPush = true;
                 applyLoadedData({ items: dedupeItems(db.items), cats: meta.cats || DEFAULT_CATS, colors: meta.colors || {}, sources: meta.sources || [], fixedSource: meta.fixedSource || '', fixedTags: meta.fixedTags || [], imageCategories: meta.imageCategories || DEFAULT_IMG_CATS, settings: meta.settings || {}, tagColors: meta.tagColors || {}, trash: trashItems, _rev: index._rev || 0, catVersion: meta.catVersion || 0, _loadedShardKeys: db._loadedShardKeys, _allShardKeys: db._allShardKeys });
                 _shardSnapshots = newSnapshots; db._shardSnapshots = {}; Object.keys(newSnapshots).forEach(function (k) { db._shardSnapshots[k] = newSnapshots[k]; });
-                _trashSnapshot = trashSnap; db._trashSnapshot = trashSnap;
+                _trashSnapshot = trashSnapForPush; db._trashSnapshot = trashSnapForPush;
                 _metaSnapshot = JSON.stringify(meta) + JSON.stringify(yearSummary); db._metaSnapshot = _metaSnapshot;
                 if (typeof markSyncDirty === 'function') markSyncDirty();
                 db.items.forEach(function (i) { i.images = normalizeImages(i.images); });

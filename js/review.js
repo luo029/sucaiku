@@ -1,5 +1,10 @@
 // js/review.js · 完整文件
-// ★ 修复：批阅界面新建分类时，补充 catVersion++ 以触发多端同步
+// ★ 本次修复：
+//   1) applyValue 里 tag 分支：shouldPin=true 时若 reviewFixedTags 未初始化会抛错，加 Array 保护
+//   2) reviewNext() 增加 while 循环跳过已被删除的 item，避免 loadReviewItem 里 find 失败 → reviewNext → find 失败 的死循环
+//   3) applyReviewStyle() 加 skipSave 参数：初始化时（页面加载 100ms 后）只应用样式、不写盘，
+//      避免每次刷新页面都无意义地 _rev++ 并触发一次 scheduleAutoPush（自动推送时右下角进度条会闪、浪费 API 额度）
+//      用户手动改陈设时才真正 save()。
 
 (function() {
   var reviewHTML = ''
@@ -173,7 +178,9 @@
     if (isDel) { e.preventDefault(); document.getElementById('rvDelBtn').click(); return; }
   });
 
-  function applyReviewStyle() {
+  // ★ 本次修复：加 skipSave 参数。初始化时传 true，只应用样式、不写盘，
+  //   避免每次刷新页面都 _rev++ 并触发一次 scheduleAutoPush。
+  function applyReviewStyle(skipSave) {
     var paper = document.getElementById('reviewPaper');
     var textarea = document.getElementById('reviewText');
     var imgWrap = document.getElementById('reviewImgs');
@@ -244,7 +251,8 @@
     updateWordCount();
     updateShortcutHint();
     db.settings.reviewStyle = rvStyle;
-    if (typeof save === 'function') save();
+    // ★ 本次修复：初始化时 skipSave=true，不写盘
+    if (!skipSave && typeof save === 'function') save();
     resetAutoApproveTimer();
   }
 
@@ -304,7 +312,8 @@
   bindSelect('rvShortcutDel', 'shortcutDel');
   bindSelect('rvStatsRange', 'statsRange');
 
-  setTimeout(applyReviewStyle, 100);
+  // ★ 本次修复：初始化传 true，只应用样式不写盘
+  setTimeout(function () { applyReviewStyle(true); }, 100);
 
   function getTodayStr() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function getYesterdayStr() { var d = new Date(); d.setDate(d.getDate() - 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -473,6 +482,7 @@
       if (tIdx >= 0) db.trash.splice(tIdx, 1);
       db.items.push(item);
       markItemDirty(item); _indexAddItem(item);
+      if (typeof markTrashDirty === 'function') markTrashDirty();
     } else {
       var existIdx = db.items.findIndex(function (i) { return i.id === item.id; });
       if (existIdx >= 0) {
@@ -512,6 +522,12 @@
 
   function reviewNext() {
     if (pendingNextTimer) { clearTimeout(pendingNextTimer); pendingNextTimer = null; }
+    // ★ 本次修复：跳过已经被删除的 item，避免 loadReviewItem 找不到 → 再次 reviewNext 的死循环
+    while (reviewQueue.length > 0) {
+      var nextId = reviewQueue[0];
+      if (db.items.some(function (i) { return i.id === nextId; })) break;
+      reviewQueue.shift();
+    }
     reviewCurrentId = reviewQueue.length > 0 ? reviewQueue[0] : null;
     loadReviewItem();
   }
@@ -701,7 +717,7 @@
         if (db.settings.reviewFixedSource) currentSource = val;
         else if (currentSource === val) currentSource = '';
       } else if (type === 'tag') {
-        if (!db.settings.reviewFixedTags) db.settings.reviewFixedTags = [];
+        if (!Array.isArray(db.settings.reviewFixedTags)) db.settings.reviewFixedTags = [];
         var idx = db.settings.reviewFixedTags.indexOf(val);
         if (idx >= 0) { db.settings.reviewFixedTags.splice(idx, 1); currentTags.delete(val); }
         else { db.settings.reviewFixedTags.push(val); currentTags.add(val); }
@@ -730,7 +746,11 @@
       if (shouldPin) db.settings.reviewFixedCat = val;
     } else if (type === 'tag') {
       if (currentTags.has(val)) { if (!shouldPin) currentTags.delete(val); } else currentTags.add(val);
-      if (shouldPin && db.settings.reviewFixedTags.indexOf(val) < 0) db.settings.reviewFixedTags.push(val);
+      // ★ 本次修复：shouldPin 时若 reviewFixedTags 未初始化，先建数组，避免 undefined.indexOf 抛错
+      if (shouldPin) {
+        if (!Array.isArray(db.settings.reviewFixedTags)) db.settings.reviewFixedTags = [];
+        if (db.settings.reviewFixedTags.indexOf(val) < 0) db.settings.reviewFixedTags.push(val);
+      }
     } else if (type === 'source') {
       currentSource = val;
       if (db.sources.indexOf(val) < 0) db.sources.push(val);

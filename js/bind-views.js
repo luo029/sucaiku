@@ -1,5 +1,6 @@
 // js/bind-views.js · 完整文件
-// ★ 本次改动：删掉 #pushConcurrency 死代码（元素已不存在，safeBind 拿不到就不会绑，删掉纯为代码干净）
+// ★ 本次修复：清空回收站时补 markTrashDirty()，否则 IDB 里的 trash 不会更新，
+//   刷新页面后回收站内容"复活"，并且下一次 push 会把旧值推回云端，覆盖掉"已清空"
 
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
@@ -38,7 +39,6 @@ window.showCustomConfirm = function (options) {
   mask.onclick = function (e) { if (e.target === mask) mask.classList.remove('show'); };
 };
 
-// ★ 新增：同步"推送模式"按钮高亮
 function applyPushModeUI() {
   var el = $('pushMode');
   if (!el) return;
@@ -156,7 +156,25 @@ safeBind('healthList', 'click', function (e) { var row = e.target.closest('[data
 safeBind('menuTrashBtn', 'click', function () { cleanTrash(); renderTrash(); $('trashMask').classList.add('show'); });
 safeBind('trashCloseBtn', 'click', function () { $('trashMask').classList.remove('show'); });
 safeBind('trashMask', 'click', function (e) { if (e.target === $('trashMask')) $('trashMask').classList.remove('show'); });
-safeBind('trashClearBtn', 'click', function () { if (!db.trash.length) { toast('回收站已经是空的'); return; } window.showCustomConfirm({ title: '清空回收站', desc: '确定清空回收站吗？' + db.trash.length + ' 条素材将被彻底删除。', isDanger: true, onConfirm: function () { db.trash = []; save(); renderTrash(); toast('已清空回收站'); } }); });
+
+// ★ 本次修复：清空回收站时补 markTrashDirty()，否则 IDB 里的 trash 不会被更新，
+//   刷新页面后回收站内容"复活"，且下一次 push 会把旧值推回云端，覆盖掉"已清空"
+safeBind('trashClearBtn', 'click', function () {
+  if (!db.trash.length) { toast('回收站已经是空的'); return; }
+  window.showCustomConfirm({
+    title: '清空回收站',
+    desc: '确定清空回收站吗？' + db.trash.length + ' 条素材将被彻底删除。',
+    isDanger: true,
+    onConfirm: function () {
+      db.trash = [];
+      if (typeof markTrashDirty === 'function') markTrashDirty();
+      save();
+      renderTrash();
+      toast('已清空回收站');
+    }
+  });
+});
+
 safeBind('trashList', 'click', function (e) { var r = e.target.closest('[data-restore]'); if (r) { restoreFromTrash(r.dataset.restore); return; } var p = e.target.closest('[data-purge]'); if (p) { window.showCustomConfirm({ title: '彻底删除', desc: '确定彻底删除这条素材吗？此操作不可恢复。', isDanger: true, onConfirm: function () { purgeTrashItem(p.dataset.purge); toast('已彻底删除'); } }); } });
 
 safeBind('menuImgManagerBtn', 'click', function () { $('menu').classList.remove('show'); openImgManager(); });
@@ -288,7 +306,6 @@ safeBind('uiStyleMode', 'click', function (e) { var b = e.target.closest('button
 safeBind('listStyleMode', 'click', function (e) { var b = e.target.closest('button[data-style]'); if (!b) return; db.settings.listStyle = b.dataset.style; saveSettings(); applySettingsToUI(); toast('列表排版已调整'); });
 safeBind('zenFontSize', 'click', function (e) { var b = e.target.closest('button[data-zfs]'); if (!b) return; db.settings.zenFontSize = b.dataset.zfs; saveSettings(); applySettingsToUI(); toast('极简模式字号已调整'); });
 
-// ★ 极简模式渲染方式与每页条数
 safeBind('zenRenderMode', 'click', function (e) {
   var b = e.target.closest('button[data-mode]'); if (!b) return;
   db.settings.zenRenderMode = b.dataset.mode;
@@ -346,7 +363,6 @@ safeBind('shortcutNew', 'input', function (e) { if (e.target.value.length > 1) e
 safeBind('enableContextMenu', 'change', function (e) { db.settings.enableContextMenu = e.target.checked; saveSettings(); toast(e.target.checked ? '已开启右键/长按菜单' : '已关闭右键/长按菜单'); });
 safeBind('maxTagsInHeader', 'change', function (e) { var v = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 3)); e.target.value = v; db.settings.maxTagsInHeader = v; saveSettings(); renderHeader(); toast('标签折叠阈值已设为 ' + v + ' 个'); });
 
-// ★ 推送模式切换
 safeBind('pushMode', 'click', function (e) {
   var b = e.target.closest('button[data-mode]'); if (!b) return;
   db.settings.pushMode = b.dataset.mode; saveSettings(); applyPushModeUI();
