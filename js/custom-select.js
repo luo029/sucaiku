@@ -1,10 +1,18 @@
 // js/custom-select.js
 // ★ 本次修复：
-//   1) openPanel 里原来在 panel.hidden = true 的状态下读 panel.scrollHeight，
-//      永远是 0，导致 panelHeight = 12，总是判定"下方空间够"，按钮在屏幕底部时
-//      面板会被截断。现在改为先临时显示（visibility:hidden 保留占位）+ 读 offsetHeight
-//   2) 每个浮动面板挂 _select 反向引用（原有）
-//   3) cleanupOrphanPanels 清理孤儿面板（原有）
+//   1) 原来 globalObserver 监听整个 body 的 childList，每次页面任何变化都 debounce 120ms
+//      然后 scanSelects() 全量 document.querySelectorAll('select')，白扫一大片
+//   2) 现在改为：只处理 MutationObserver 回调里新增的节点
+//      - 新增节点本身是 SELECT → 初始化
+//      - 新增节点里含 SELECT → 遍历它们初始化
+//      - 其他（比如只是加了个按钮/div）→ 直接忽略，不再全量扫描
+//   3) cleanupOrphanPanels 保留，改为在 MutationObserver 里顺手做（O(panels)，通常 <50，可忽略）
+//   4) 初始 DOMContentLoaded 时仍走一次全量 scanSelects()，保证页面已有的 select 都能美化
+//
+// ★ 上轮已修但本轮未动：
+//   - openPanel 里"先显示（visibility:hidden）测量真实高度，再决定上/下开"
+//   - 每个浮动面板挂 _select 反向引用
+//   - 按钮在屏幕底部时自动向上弹
 
 (function() {
   function initCustomSelect(select) {
@@ -64,7 +72,7 @@
       panel.style.width = rect.width + 'px';
       panel.style.left = rect.left + 'px';
 
-      // ★ 修复：先显示（visibility: hidden）测量真实高度，再决定上/下开
+      // ★ 先显示（visibility: hidden）测量真实高度，再决定上/下开
       //   原代码在 hidden 状态下读 scrollHeight 恒为 0，导致 panelHeight 永远 = 12
       panel.style.visibility = 'hidden';
       panel.hidden = false;
@@ -118,6 +126,7 @@
     sync();
   }
 
+  // ★ 清理孤儿面板：select 已从 DOM 里消失，它对应挂到 body 上的 panel 也要删掉
   function cleanupOrphanPanels() {
     var panels = document.querySelectorAll('.custom-select-panel');
     for (var i = 0; i < panels.length; i++) {
@@ -129,7 +138,8 @@
     }
   }
 
-  function scanSelects() {
+  // 全量扫描：只在页面初始化时调用一次（保证页面一开始就有的 select 都被美化）
+  function scanAllSelects() {
     cleanupOrphanPanels();
     document.querySelectorAll('select').forEach(initCustomSelect);
   }
@@ -139,29 +149,56 @@
     document.querySelectorAll('.custom-select-wrap').forEach(function(w) { w.classList.remove('open'); });
   }
 
+  // ★ 核心修复：只处理新增节点，不再全量扫描
+  //   处理完顺手清一下孤儿面板（O(panels)，通常 <50，性能可忽略）
+  function handleAddedNode(node) {
+    if (!node || node.nodeType !== 1) return;
+    if (node.tagName === 'SELECT') {
+      initCustomSelect(node);
+      return;
+    }
+    if (node.querySelectorAll) {
+      var selects = node.querySelectorAll('select');
+      if (selects.length) {
+        for (var i = 0; i < selects.length; i++) initCustomSelect(selects[i]);
+      }
+    }
+  }
+
   var _scanTimer = null;
   var globalObserver = new MutationObserver(function(mutations) {
-    var maybeHasSelect = false;
+    var addedNodes = [];
     for (var i = 0; i < mutations.length; i++) {
       var added = mutations[i].addedNodes;
       for (var j = 0; j < added.length; j++) {
-        var n = added[j];
-        if (n.nodeType !== 1) continue;
-        if (n.tagName === 'SELECT' || (n.querySelector && n.querySelector('select'))) {
-          maybeHasSelect = true;
-          break;
-        }
+        addedNodes.push(added[j]);
       }
-      if (maybeHasSelect) break;
     }
-    if (!maybeHasSelect) return;
+    if (!addedNodes.length) return;
+
+    // 先用 debounce 聚合这一波 DOM 变动，避免连续多次插入时反复跑
     if (_scanTimer) clearTimeout(_scanTimer);
-    _scanTimer = setTimeout(function() { _scanTimer = null; scanSelects(); }, 120);
+    _scanTimer = setTimeout(function() {
+      _scanTimer = null;
+      // 处理新节点
+      for (var k = 0; k < addedNodes.length; k++) handleAddedNode(addedNodes[k]);
+      // 顺手清一下已经消失的 select 对应的面板
+      cleanupOrphanPanels();
+    }, 80);
   });
 
   window.addEventListener('DOMContentLoaded', function() {
-    scanSelects();
+    scanAllSelects();
     globalObserver.observe(document.body, { childList: true, subtree: true });
+  });
+
+  // 页面要关闭时，把排队的处理先冲一遍（避免最后一批 select 没初始化）
+  window.addEventListener('pagehide', function() {
+    if (_scanTimer) {
+      clearTimeout(_scanTimer);
+      _scanTimer = null;
+      cleanupOrphanPanels();
+    }
   });
 
   document.addEventListener('click', function(e) {

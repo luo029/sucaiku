@@ -1,6 +1,5 @@
 // js/bind-views.js · 完整文件
-// ★ 本次修复：清空回收站时补 markTrashDirty()，否则 IDB 里的 trash 不会更新，
-//   刷新页面后回收站内容"复活"，并且下一次 push 会把旧值推回云端，覆盖掉"已清空"
+// ★ 本次更新：新增右上角【导笔记】按钮的点击事件，触发专属的 .md 文件上传。
 
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
@@ -157,8 +156,6 @@ safeBind('menuTrashBtn', 'click', function () { cleanTrash(); renderTrash(); $('
 safeBind('trashCloseBtn', 'click', function () { $('trashMask').classList.remove('show'); });
 safeBind('trashMask', 'click', function (e) { if (e.target === $('trashMask')) $('trashMask').classList.remove('show'); });
 
-// ★ 本次修复：清空回收站时补 markTrashDirty()，否则 IDB 里的 trash 不会被更新，
-//   刷新页面后回收站内容"复活"，且下一次 push 会把旧值推回云端，覆盖掉"已清空"
 safeBind('trashClearBtn', 'click', function () {
   if (!db.trash.length) { toast('回收站已经是空的'); return; }
   window.showCustomConfirm({
@@ -547,3 +544,19 @@ safeBind('newImgCatInput', 'keydown', function (e) { if (e.key !== 'Enter') retu
 if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor();
 
 window.renderLogView = renderLogView; window.renderDeviceList = renderDeviceList; window.refreshStorageInfo = refreshStorageInfo; window.openTagColorPicker = openTagColorPicker; window.renderTagManagerWithBatch = renderTagManagerWithBatch;
+
+// ==========================================
+// ★ 新增：Readest 笔记导入按钮事件
+// ==========================================
+safeBind('importNoteBtn', 'click', function () {
+  if ($('noteFileInput')) $('noteFileInput').click();
+});
+
+safeBind('noteFileInput', 'change', function (e) {
+  var f = e.target.files[0];
+  if (!f) return;
+  if (typeof importReadestMarkdown === 'function') {
+    importReadestMarkdown(f);
+  }
+  e.target.value = '';
+});

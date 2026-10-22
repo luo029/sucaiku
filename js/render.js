@@ -1,6 +1,7 @@
 // js/render.js · 完整文件
-// ★ 本次改动：renderList() 非极简分支开头加 _zenClearObserver()
-//   从极简模式退出时，会先主动断开上一次的 observer，避免对象残留
+// ★ 本次更新：
+//   1) 撤销了正文 '---' 分割线的替换逻辑，保持原样渲染。
+//   2) 来源（source）仅加上《书名》号，并保留浅色背景胶囊样式，无任何图标。
 
 var tagExpanded = false, catExpanded = false, srcExpanded = false;
 var catManagerPage = 1, tagManagerPage = 1;
@@ -14,7 +15,7 @@ var _zenObserver = null;
 function _isMobileViewport() { return window.matchMedia('(max-width: 768px)').matches; }
 
 function _zenCardHtml(i) {
-  return '<article class="card" data-id="' + i.id + '"><div class="content">' + getCachedFormat(i, []) + '</div></article>';
+  return '<article class="card" data-id="' + i.id + '"><div class="content">' + getCachedFormat(i, [], true) + '</div></article>';
 }
 function _zenGetPageSize() {
   return Math.max(20, Math.min(500, Number(db.settings.zenPageSize) || 60));
@@ -207,15 +208,26 @@ function renderTagChip(t) {
 var _formatCache = new Map();
 var _FORMAT_CACHE_MAX = 1000;
 
-function getCachedFormat(item, terms) {
-  var key = item.id + ':' + (item.updatedAt || item.createdAt || 0) + ':' + (terms || []).join(',') + ':' + (db.settings.enableMarkdown !== false ? '1' : '0');
+function getCachedFormat(item, terms, expanded) {
+  var key = item.id + ':' + (item.updatedAt || item.createdAt || 0) + ':' + (terms || []).join(',') + ':' + (db.settings.enableMarkdown !== false ? '1' : '0') + ':' + (expanded ? '1' : '0');
   if (_formatCache.has(key)) return _formatCache.get(key);
   var text = item.text || '';
   var html;
   
-  // ★ 性能优化：超长文本的截断策略
-  if (text.length > 2000 && terms && terms.length) {
-    // 超过 2000 字且有关键词搜索：只取首个命中位置的上下文（前后各 200 字）
+  var MAX_PREVIEW = 5000;    // 折叠预览上限
+  var MAX_EXPANDED = 20000;  // 展开渲染上限
+  
+  if (expanded) {
+    if (text.length > MAX_EXPANDED) {
+      html = formatText(text.slice(0, MAX_EXPANDED), terms) +
+        '<div style="margin-top:12px; padding:10px 14px; background:var(--accent-soft); color:var(--accent); border-radius:8px; font-size:13px; line-height:1.65;">' +
+        '📖 全文共 <b>' + text.length + '</b> 字，当前已显示前 <b>' + MAX_EXPANDED + '</b> 字。<br>' +
+        '完整内容请点击卡片下方「编辑」按钮查看。' +
+        '</div>';
+    } else {
+      html = formatText(text, terms);
+    }
+  } else if (text.length > 2000 && terms && terms.length) {
     var firstMatchIdx = -1;
     var matchedTerm = '';
     var escTerms = terms.map(function(t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|');
@@ -232,18 +244,16 @@ function getCachedFormat(item, terms) {
       var prefix = start > 0 ? '...' : '';
       var suffix = end < text.length ? '...' : '';
       html = '<div style="margin: 8px 0; padding: 10px; background: var(--bg); border-left: 3px solid var(--accent); border-radius: 4px;">' +
-             '<div style="font-size: 12px; color: var(--accent); margin-bottom: 6px;">↓ 命中位置预览（原文共 ' + text.length + ' 字）</div>' +
+             '<div style="font-size: 12px; color: var(--accent); margin-bottom: 6px;">↓ 命中位置预览（原文共 ' + text.length + ' 字，点下方「展开全文」看完整内容）</div>' +
              '<div>' + prefix + formatText(snippet, terms) + suffix + '</div>' +
              '</div>';
     } else {
-      // 没搜索到关键词，但文本极长，截断展示
-      html = formatText(text.slice(0, 2000), []) + '...';
+      html = formatText(text.slice(0, MAX_PREVIEW), []) + '...';
     }
-  } else if (text.length > 5000 && (!terms || !terms.length)) {
-    // 即使没搜索，超过 5000 字也截断，防止 DOM 撑爆
-    html = formatText(text.slice(0, 5000), []) + '<div style="color:var(--text-3);font-size:12px;margin-top:8px;">（内容过长，已截断）</div>';
+  } else if (text.length > MAX_PREVIEW) {
+    html = formatText(text.slice(0, MAX_PREVIEW), terms) +
+      '<div style="color:var(--text-3);font-size:12px;margin-top:8px;">（已显示前 ' + MAX_PREVIEW + ' 字，共 ' + text.length + ' 字。点下方「展开全文」查看全部）</div>';
   } else {
-    // 正常渲染（5000字以内，或者没搜索词）
     html = formatText(text, terms);
   }
   
@@ -265,18 +275,15 @@ function renderList() {
     } else {
       _zenFilteredCache = filteredZen;
       if ((db.settings.zenRenderMode || 'paged') === 'all') {
-        // 一次性全部渲染（原行为）
         _zenRenderedCount = filteredZen.length;
         listEl.innerHTML = filteredZen.map(_zenCardHtml).join('');
       } else {
-        // 分页加载（默认）
         _zenRenderInitial(filteredZen);
       }
     }
     $('pagination').innerHTML = ''; batchBar.classList.remove('show');
     return;
   }
-  // ★ 新增：非极简分支也主动清一次 observer，避免退出极简时的残留
   _zenClearObserver();
   var filtered = getFilteredItems();
   var total = filtered.length;
@@ -292,6 +299,7 @@ function renderList() {
     else listEl.innerHTML = '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><p>没有找到匹配的素材</p></div>';
     $('pagination').innerHTML = ''; updateBatchBar([]); return;
   }
+  
   listEl.innerHTML = pageItems.map(function (i) {
     var c = catColor(i.type);
     var sel = selectedIds.has(i.id);
@@ -309,9 +317,29 @@ function renderList() {
       var src = imageSrc(im);
       return '<span class="ci"><img src="' + esc(src) + '" alt="" loading="lazy" data-open-img="' + esc(src) + '" data-img-path="' + esc(im.path || '') + '">' + imgCatBadge(im) + '</span>';
     }).join('') + '</div>' : '';
+    
     var dateTitle = '创建：' + fmtFull(i.createdAt) + (i.updatedAt ? '\n更新：' + fmtFull(i.updatedAt) : '');
-    var contentHtml = i.text ? '<div class="content ' + contentClass + '">' + getCachedFormat(i, terms) + '</div>' + expandBtn : '';
-    return '<article class="card' + (isImgItem ? ' card-img' : '') + (selectMode ? ' selectable' : '') + (sel ? ' selected' : '') + '" data-id="' + i.id + '" style="--cat-fg:' + c.fg + '" draggable="' + (!selectMode) + '">' + (selectMode ? '<div class="card-check"><span class="check-circle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></div>' : '') + '<div class="card-main"><div class="card-top"><span class="tag' + (isImgItem ? ' tag-img' : '') + '" style="' + (isImgItem ? '' : 'background:' + c.bg + ';color:' + c.fg) + '">' + esc(i.type) + '</span>' + (i.source ? '<span class="src src-clickable" data-source="' + esc(i.source) + '" title="点击筛选自《' + esc(i.source) + '》">' + esc(i.source) + '</span>' : '') + tagsHtml + '<span class="date" title="' + esc(dateTitle) + '">' + fmtDate(i.createdAt) + '</span></div>' + contentHtml + imgsHtml + (selectMode ? '' : '<div class="ops"><button data-act="copy" data-id="' + i.id + '">复制</button><button data-act="edit" data-id="' + i.id + '">编辑</button><button data-act="del" data-id="' + i.id + '" class="danger">删除</button></div>') + '</div></article>';
+    
+    // ★ 来源：加书名号，保留浅色背景胶囊样式，无图标
+    var sourceHtml = '';
+    if (i.source) {
+      sourceHtml = '<span class="src src-clickable" data-source="' + esc(i.source) + '" title="点击按此来源筛选" style="font-size:12.5px; color:var(--text-2); background:var(--bg); padding:2px 10px; border-radius:99px; border:1px solid var(--line); display:inline-flex; align-items:center; max-width:50%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">《' + esc(i.source) + '》</span>';
+    }
+
+    var contentHtml = i.text ? '<div class="content ' + contentClass + '">' + getCachedFormat(i, terms, isExpanded) + '</div>' + expandBtn : '';
+    
+    return '<article class="card' + (isImgItem ? ' card-img' : '') + (selectMode ? ' selectable' : '') + (sel ? ' selected' : '') + '" data-id="' + i.id + '" style="--cat-fg:' + c.fg + '" draggable="' + (!selectMode) + '">' + 
+      (selectMode ? '<div class="card-check"><span class="check-circle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></div>' : '') + 
+      '<div class="card-main"><div class="card-top">' + 
+        '<span class="tag' + (isImgItem ? ' tag-img' : '') + '" style="' + (isImgItem ? '' : 'background:' + c.bg + ';color:' + c.fg) + '">' + esc(i.type) + '</span>' + 
+        sourceHtml + 
+        tagsHtml + 
+        '<span class="date" title="' + esc(dateTitle) + '">' + fmtDate(i.createdAt) + '</span>' + 
+      '</div>' + 
+      contentHtml + 
+      imgsHtml + 
+      (selectMode ? '' : '<div class="ops"><button data-act="copy" data-id="' + i.id + '">复制</button><button data-act="edit" data-id="' + i.id + '">编辑</button><button data-act="del" data-id="' + i.id + '" class="danger">删除</button></div>') + 
+      '</div></article>';
   }).join('');
   renderPagination(total, totalPages, start, pageItems.length);
   updateBatchBar(pageItems);
@@ -409,7 +437,6 @@ function deleteSource(sourceName) {
           markItemDirty(i);
         }
       });
-      // ★ 修复：批量改完后统一重建索引，避免旧来源统计残留
       markIndexDirty();
       if (currentSource === sourceName) currentSource = ALL_SOURCES;
       save(); render(); toast('已删除来源');

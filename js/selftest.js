@@ -1,6 +1,13 @@
 // js/selftest.js · 完整文件
-// ★ 本次改动：IndexedDB 可读测试里，open 不再写死版本号 1，
-//   避免跟 store.js 的 IDB_SCHEMA(2) 冲突导致误报失败。
+// ★ 本次修复：
+//   IndexedDB 可读测试加 3 秒超时。
+//   原来如果 IDB 被其他标签页占用 / 卡在升级 / upgrade 阻塞，
+//   onsuccess 和 onerror 都不会触发，Promise 永远 pending，
+//   导致整个自检报告卡在"正在检测…"永远出不来。
+//   现在超时后返回"超时（可关掉其他标签页后重试）"，报告能正常弹出。
+//
+// ★ 上轮已修但本轮未动：
+//   IndexedDB 可读测试不再写死版本号 1，避免与 store.js 的 IDB_SCHEMA(2) 冲突
 
 (function () {
   var results = { passed: 0, failed: 0, warned: 0, items: [] };
@@ -177,7 +184,29 @@
     test('回归验证', 'DEFAULT_SETTINGS 关键字段存在', function () { if (!window.coreHelpers || !window.coreHelpers.DEFAULT_SETTINGS) return 'coreHelpers 未暴露'; var d = window.coreHelpers.DEFAULT_SETTINGS; var keys = ['saveShortcut', 'enableMarkdown', 'autoPush', 'snapshotEnabled', 'enableShortcuts', 'pushMode']; for (var i = 0; i < keys.length; i++) if (!(keys[i] in d)) return '缺 ' + keys[i]; return true; });
     test('存储', 'IndexedDB 可用', function () { return window.indexedDB ? true : '不可用'; });
     test('存储', 'localStorage 可写', function () { try { localStorage.setItem('__selftest__', '1'); localStorage.removeItem('__selftest__'); return true; } catch (e) { return '不可写：' + e.message; } });
-    test('存储', 'IndexedDB 可读', function () { return new Promise(function (resolve) { try { var req = indexedDB.open('material-library-db'); req.onsuccess = function () { resolve(true); }; req.onerror = function () { resolve('打开失败'); }; } catch (e) { resolve('异常：' + e.message); } }); });
+    // ★ 本次修复：加 3 秒超时，避免 IDB 被占用时 Promise 永远 pending，导致整个自检卡死
+    test('存储', 'IndexedDB 可读', function () {
+      return new Promise(function (resolve) {
+        var done = false;
+        function finish(v) {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          resolve(v);
+        }
+        var timer = setTimeout(function () {
+          finish('超时 3 秒（可能是 IDB 被其他标签页占用，可关掉其他标签页后重试）');
+        }, 3000);
+        try {
+          var req = indexedDB.open('material-library-db');
+          req.onsuccess = function () { finish(true); };
+          req.onerror = function () { finish('打开失败'); };
+          req.onblocked = function () { finish('被其他标签页阻塞'); };
+        } catch (e) {
+          finish('异常：' + e.message);
+        }
+      });
+    });
 
     // ============ P. 内容质量 ============
     test('内容质量', '空 text 且无图片的素材', function () { return window.db.items.filter(function (i) { return i && !i.text && (!i.images || i.images.length === 0); }).length === 0 ? true : 'warn'; });

@@ -1,10 +1,16 @@
 // js/store.js · 完整文件
 // ★ 本次修复：
-//   1) _doSaveIDB(forceAll) 时先清理 IDB 里已不存在的 shard key，
-//      防止已删除的素材在下次 loadStore 时因残留 shard 而"复活"
-//   2) _doSaveIDB 写盘成功后，只有在写盘期间没有新修改时才 _pendingSave = false，
-//      避免写盘期间的修改在 visibilitychange 时不被 flush 到 localStorage
-//   3) 新增 idbGetAllKeys() 辅助函数
+//   1) _doSaveIDB(forceAll) 普通分支里，如果某天的素材已被全部删光，
+//      原来会往 IDB 里写一个空数组（留下"空抽屉"），
+//      现在改为直接删除对应 key，让 IDB 干净不膨胀
+//   2) forceAll 时清理 IDB 里已不存在的 shard key（原有逻辑保留）
+//   3) _doSaveIDB 写盘成功后，只有在写盘期间没有新修改时才 _pendingSave = false
+//   4) idbGetAllKeys() 辅助函数保留
+//
+// ★ 上轮已修但本轮未动：
+//   - localStorage 兜底对比 _rev
+//   - 兼容旧版 meta 里的 trash / 快照迁移
+//   - 颜色白名单校验
 
 var IDB_NAME = 'material-library-db';
 var IDB_STORE = 'kv';
@@ -306,14 +312,29 @@ function _doSaveIDB(forceAll) {
   }
 
   return staleChain.then(function () {
+    // ★ 修复2（本批核心）：普通分支也要删掉"空抽屉"。
+    //   原来这里写的是 groups[k] || []，
+    //   即某天素材删光后，还会往 IDB 里写一个空数组，留下永远用不上的 key。
+    //   现在：如果 groups[k] 是空数组（说明这天已经没有素材了），
+    //   把对应的 IDB key 加进"待删除清单"，写盘时一并删掉。
+    var keysToDelete = [];
     if (forceAll) {
       Object.keys(groups).forEach(function (k) { entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] }); });
     } else {
-      dirtyShards.forEach(function (k) { entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] || [] }); });
+      dirtyShards.forEach(function (k) {
+        if (groups[k] && groups[k].length > 0) {
+          entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] });
+        } else {
+          // 这天的素材已经全部删光 → 抽屉整个拿走
+          keysToDelete.push(IDB_SHARD_PREFIX + k);
+        }
+      });
     }
-    return idbPutMany(entries);
+    return idbPutMany(entries).then(function () {
+      return keysToDelete.length ? idbDeleteMany(keysToDelete) : undefined;
+    });
   }).then(function () {
-    // ★ 修复2：只有写盘期间确实没有新修改时，才清 _pendingSave，
+    // ★ 修复3：只有写盘期间确实没有新修改时，才清 _pendingSave，
     //   否则写盘期间新产生的修改在 visibilitychange 时不会被 flush 到 localStorage
     if (_dirtyShards.size === 0 && !_metaDirty && !_trashDirty && !_syncDirty) {
       _pendingSave = false;

@@ -1,10 +1,13 @@
 // js/github.js · 完整文件
 // ★ 本次修复：
+//   1) ghPush 里 failedShards 记录待重试分片，原来直接引用 store.js 里的私家变量 _dirtyShards 会报 ReferenceError
+//      改为调用官方接口 markShardDirty（store.js 已挂到 window），安全可靠
+//   2) currentYears_helper 改名为 _collectYears，语义更清晰
+//
+// ★ 上轮保留的修复（未动）：
 //   ghPull 拉 trash 时，如果云端还没有 trash.json 但本地回收站非空，
 //   把 _trashSnapshot 设为 ''（sentinel），让下次任何 push 必然把本地 trash 推上去，
 //   否则 _trashSnapshot === 本地 trashJson → push 永远跳过 → 云端永远缺 trash.json
-//
-//   （上一轮的修复仍然保留：云端无 trash.json 时不覆盖本地回收站）
 
 var STORE_VERSION = 4; var GH_INDEX_PATH = 'index.json'; var GH_TRASH_PATH = 'trash.json';
 var GH_LOG_PATH = 'push-log.json'; var GH_DEVICES_PATH = 'devices.json';
@@ -639,7 +642,7 @@ function ghPush(silent, force) {
     return yearChain.then(function () { return existingShaMap; });
   }).then(function (existingShaMap) {
     var yearSummary = {};
-    Object.keys(currentYears_helper(currentKeys)).forEach(function (cy) {
+    Object.keys(_collectYears(currentKeys)).forEach(function (cy) {
       var count = 0; var shardCount = 0;
       currentKeys.forEach(function (ck) { if (getYearFromKey(ck) === cy) { count += groups[ck].length; shardCount++; } });
       yearSummary[cy] = { count: count, shardCount: shardCount };
@@ -660,7 +663,10 @@ function ghPush(silent, force) {
   }).then(function () {
     registerDevice('push');
     appendLog({ action: 'push', status: failedShards.length === 0 ? 'success' : 'error', summary: pushedCount > 0 ? ('推送 ' + pushedCount + ' 个分片' + (failedShards.length ? '，失败 ' + failedShards.length : '')) : '无变化', shards: toPush, itemCount: db.items.length, duration: Date.now() - startTime });
-    failedShards.forEach(function (k) { _dirtyShards.add(k); });
+    // ★ 修复 1：原来直接写 _dirtyShards.add(k)，但 _dirtyShards 是 store.js 的私家变量，
+    //   这里直接引用会抛 ReferenceError，导致"推送失败时反而看不到失败原因"。
+    //   改为调用 store.js 官方对外的 markShardDirty，安全可靠。
+    failedShards.forEach(function (k) { if (typeof markShardDirty === 'function') markShardDirty(k); });
 
     _syncProgress.failed = failedShards.length;
     _syncProgress.done = _syncProgress.total;
@@ -678,7 +684,8 @@ function ghPush(silent, force) {
   }).catch(function (err) {
     console.error('[ghPush] 失败', err);
     appendLog({ action: 'push', status: 'error', summary: '推送失败：' + err.message });
-    failedShards.forEach(function (k) { _dirtyShards.add(k); });
+    // ★ 修复 1（同上）：改用官方接口
+    failedShards.forEach(function (k) { if (typeof markShardDirty === 'function') markShardDirty(k); });
     _hideSyncProgress();
     if (err.message && err.message.indexOf('409') >= 0 && !force) {
       if (silent) return false;
@@ -699,7 +706,8 @@ function ghPush(silent, force) {
   });
 }
 
-function currentYears_helper(keys) {
+// ★ 修复 2：原函数名 currentYears_helper 语义不清，改为 _collectYears
+function _collectYears(keys) {
   var m = {};
   keys.forEach(function (k) { m[getYearFromKey(k)] = true; });
   return m;

@@ -1,10 +1,5 @@
 // js/review.js · 完整文件
-// ★ 本次修复：
-//   1) applyValue 里 tag 分支：shouldPin=true 时若 reviewFixedTags 未初始化会抛错，加 Array 保护
-//   2) reviewNext() 增加 while 循环跳过已被删除的 item，避免 loadReviewItem 里 find 失败 → reviewNext → find 失败 的死循环
-//   3) applyReviewStyle() 加 skipSave 参数：初始化时（页面加载 100ms 后）只应用样式、不写盘，
-//      避免每次刷新页面都无意义地 _rev++ 并触发一次 scheduleAutoPush（自动推送时右下角进度条会闪、浪费 API 额度）
-//      用户手动改陈设时才真正 save()。
+// ★ 本次修复：彻底解除 textarea 的 flex 限制，同时将字数统计和快捷键提示重新纳入常规文档流（去除绝对定位），让它们跟着文字滚动到最底部。
 
 (function() {
   var reviewHTML = ''
@@ -30,6 +25,35 @@
     + '</div></div>';
 
   document.body.insertAdjacentHTML('beforeend', reviewHTML);
+
+  // ★ 关键修复：彻底干掉 textarea 的默认高度限制，同时把字数统计和快捷键提示改为跟随文本滚动
+  var fixStyle = document.createElement('style');
+  fixStyle.innerHTML = `
+    .review-textarea {
+      flex: none !important; 
+      min-height: calc(100% - 20px) !important;
+      overflow-y: hidden !important;
+      padding-bottom: 60px !important; 
+    }
+    .rv-word-count {
+      position: static !important;
+      text-align: right;
+      padding-right: 24px !important;
+      margin-top: -45px !important; 
+      height: 20px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .rv-shortcut-hint {
+      position: static !important;
+      padding-left: 24px !important;
+      margin-top: -20px !important;
+      height: 20px;
+      z-index: 10;
+      pointer-events: none;
+    }
+  `;
+  document.head.appendChild(fixStyle);
 
   var reviewQueue = [];
   var reviewCurrentId = null;
@@ -93,10 +117,17 @@
   }
 
   function updateWordCount() {
-    var text = document.getElementById('reviewText').value || '';
+    var textarea = document.getElementById('reviewText');
+    var text = textarea.value || '';
     var count = text.replace(/\s/g, '').length;
     document.getElementById('rvWordCount').textContent = (rvStyle.showWordCount && count > 0) ? '计 ' + count + ' 字' : '';
+
+    if (textarea) {
+      textarea.style.height = '0px';
+      textarea.style.height = textarea.scrollHeight + 'px';
+    }
   }
+
   function updateShortcutHint() {
     if (!rvStyle.enableShortcuts || !rvStyle.showShortcutHint) { document.getElementById('rvShortcutHint').textContent = ''; return; }
     var map = { 'ctrl-enter': 'Ctrl+Enter', 'alt-enter': 'Alt+Enter', 'enter': 'Enter' };
@@ -178,8 +209,6 @@
     if (isDel) { e.preventDefault(); document.getElementById('rvDelBtn').click(); return; }
   });
 
-  // ★ 本次修复：加 skipSave 参数。初始化时传 true，只应用样式、不写盘，
-  //   避免每次刷新页面都 _rev++ 并触发一次 scheduleAutoPush。
   function applyReviewStyle(skipSave) {
     var paper = document.getElementById('reviewPaper');
     var textarea = document.getElementById('reviewText');
@@ -248,10 +277,10 @@
     sidebar.classList.toggle('hidden', rvStyle.sidebar === 'hide');
     document.getElementById('rvApproveBtn').textContent = rvStyle.btnText;
     stampCorner.textContent = rvStyle.btnText;
+    
     updateWordCount();
     updateShortcutHint();
     db.settings.reviewStyle = rvStyle;
-    // ★ 本次修复：初始化时 skipSave=true，不写盘
     if (!skipSave && typeof save === 'function') save();
     resetAutoApproveTimer();
   }
@@ -312,7 +341,6 @@
   bindSelect('rvShortcutDel', 'shortcutDel');
   bindSelect('rvStatsRange', 'statsRange');
 
-  // ★ 本次修复：初始化传 true，只应用样式不写盘
   setTimeout(function () { applyReviewStyle(true); }, 100);
 
   function getTodayStr() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -422,22 +450,34 @@
     var item = db.items.find(function (i) { return i.id === reviewCurrentId; });
     if (!item) { reviewNext(); return; }
     document.getElementById('reviewProgress').textContent = '剩 ' + reviewQueue.length + ' 条';
-    document.getElementById('reviewText').value = item.text || '';
+    
+    var rvTextEl = document.getElementById('reviewText');
+    rvTextEl.value = item.text || '';
+    
     updateWordCount();
+
     currentCat = db.settings.reviewFixedCat || item.type;
     var tagsSet = new Set(item.tags || []);
     if (db.settings.reviewFixedTags && db.settings.reviewFixedTags.length) db.settings.reviewFixedTags.forEach(function (t) { tagsSet.add(t); });
     currentTags = tagsSet;
     currentSource = db.settings.reviewFixedSource || item.source || (db.fixedSource || '');
     document.getElementById('rvCornerStamp').classList.remove('active');
-    var rvBody = document.getElementById('rvBody'); if (rvBody) rvBody.scrollTop = 0;
+    
+    var rvBody = document.getElementById('rvBody'); 
+    if (rvBody) rvBody.scrollTop = 0;
+    rvTextEl.scrollTop = 0;
+    
     activeSearchType = null;
     var imgWrap = document.getElementById('reviewImgs');
     if (item.images && item.images.length) {
       imgWrap.innerHTML = item.images.map(function (im) { var src = typeof imageSrc === 'function' ? imageSrc(im) : im.url; return '<img src="' + esc(src) + '" loading="lazy" data-review-img="' + esc(src) + '" data-img-path="' + esc(im.path || '') + '" title="点击查看原图">'; }).join('');
     } else imgWrap.innerHTML = '';
     renderAllPanels();
-    document.getElementById('reviewText').focus();
+    
+    rvTextEl.focus();
+    rvTextEl.scrollTop = 0;
+    if (rvBody) rvBody.scrollTop = 0;
+
     resetAutoApproveTimer();
     if (rvStyle.enableAnim && !isUndo) { rvBody.classList.remove('rv-anim-in'); void rvBody.offsetWidth; rvBody.classList.add('rv-anim-in'); }
   }
@@ -522,7 +562,6 @@
 
   function reviewNext() {
     if (pendingNextTimer) { clearTimeout(pendingNextTimer); pendingNextTimer = null; }
-    // ★ 本次修复：跳过已经被删除的 item，避免 loadReviewItem 找不到 → 再次 reviewNext 的死循环
     while (reviewQueue.length > 0) {
       var nextId = reviewQueue[0];
       if (db.items.some(function (i) { return i.id === nextId; })) break;
@@ -746,7 +785,6 @@
       if (shouldPin) db.settings.reviewFixedCat = val;
     } else if (type === 'tag') {
       if (currentTags.has(val)) { if (!shouldPin) currentTags.delete(val); } else currentTags.add(val);
-      // ★ 本次修复：shouldPin 时若 reviewFixedTags 未初始化，先建数组，避免 undefined.indexOf 抛错
       if (shouldPin) {
         if (!Array.isArray(db.settings.reviewFixedTags)) db.settings.reviewFixedTags = [];
         if (db.settings.reviewFixedTags.indexOf(val) < 0) db.settings.reviewFixedTags.push(val);
