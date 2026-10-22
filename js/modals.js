@@ -1,6 +1,5 @@
 // js/modals.js · 完整文件
-// ★ 本次改动：设置面板"推送优化"卡片里，把原来"推送并发 + 批次间隔"两个输入框
-//   替换为"推送模式"二选一按钮（稳定 / 加速），与新 github.js 的限速器配套
+// ★ 本次改动：设置面板「外观与显示」卡片新增「极简模式渲染方式」+「每页加载条数」两个控件
 
 setTimeout(function () { var oldCatMgr = document.getElementById('catManager'); if (oldCatMgr) oldCatMgr.remove(); }, 100);
 
@@ -59,6 +58,8 @@ var modalsHtml = ''
 + '<div class="st-field"><label>UI 风格</label><div class="segmented" id="uiStyleMode"></div></div>'
 + '<div class="st-grid-2"><div class="st-field"><label>全局字号</label><div class="segmented" id="fontSizeMode"><button type="button" data-size="normal">标准</button><button type="button" data-size="large">大</button><button type="button" data-size="xlarge">特大</button></div></div><div class="st-field"><label>极简字号</label><div class="segmented" id="zenFontSize"><button type="button" data-zfs="normal">标准</button><button type="button" data-zfs="large">大</button><button type="button" data-zfs="xlarge">特大</button></div></div></div>'
 + '<div class="st-field"><label>列表排版</label><div class="segmented" id="listStyleMode"><button type="button" data-style="card">卡片</button><button type="button" data-style="strip">紧凑</button></div></div>'
++ '<div class="st-field"><label>极简模式渲染方式</label><div class="segmented" id="zenRenderMode"><button type="button" data-mode="all">一次性全部</button><button type="button" data-mode="paged">分页加载</button></div><div class="st-hint">数据多时建议「分页加载」，进入极简模式不卡顿</div></div>'
++ '<div class="st-field" id="zenPageSizeWrap"><label>每页加载条数</label><div class="st-inline"><input type="number" class="setting-num" id="zenPageSizeInput" min="20" max="500" value="60"><span class="st-suffix">条</span></div><div class="st-hint">仅「分页加载」时生效，滚动到底自动加载下一批</div></div>'
 + '<label class="st-toggle" style="margin-top:12px;"><div><div class="st-toggle-title">极简模式：滑动时收起筛选</div><div class="st-toggle-desc">极简模式下，只要滑动页面（鼠标滚轮/手指），弹出的面板和顶部筛选条会自动隐藏</div></div><input type="checkbox" id="zenAutoClosePanel" checked></label>'
 + '</div></div>'
 + '<div class="st-card" data-group="general"><div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg><div><div class="st-card-title">侧栏设置</div></div></div><div class="st-card-body">'

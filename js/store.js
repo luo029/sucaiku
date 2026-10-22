@@ -1,10 +1,7 @@
-// js/store.js · 完整文件（性能优化版）
-// 本次改动：
-//  1) meta 瘦身：trash 单独存一个 key，sync-snap（分片快照/回收站快照/元数据快照）合并存一个 key
-//     日常保存只写小 meta + 脏分片，不再每次都把几 MB 的快照字符串全量写盘
-//  2) collectTags 直接复用索引统计结果，不再每次全量遍历
-//  3) normalize 比较图片数组不再用 JSON.stringify
-//  4) 颜色白名单校验保留
+// js/store.js · 完整文件
+// ★ 本次改动：loadStore 末尾增加 localStorage 兜底对比。
+//   如果 pagehide 时写入的 localStorage 数据 _rev 比 IndexedDB 更新（说明强制关闭时 IndexedDB 没写完），
+//   则采用 localStorage 的数据，并回写 IndexedDB，避免最后一点改动丢失。
 
 var IDB_NAME = 'material-library-db';
 var IDB_STORE = 'kv';
@@ -375,6 +372,25 @@ async function loadStore() {
       console.log('✅ 迁移完成');
     }
   }
+
+  // ★ 兜底：强制关闭页面时 IndexedDB 可能未写完，对比 localStorage 的 _rev
+  var _usedLSFallback = false;
+  try {
+    var _lsRaw = localStorage.getItem(STORE_KEY);
+    if (_lsRaw) {
+      var _lsData = JSON.parse(_lsRaw);
+      if (_lsData && Array.isArray(_lsData.items)) {
+        var _lsRev = Number(_lsData._rev) || 0;
+        var _idbRev = Number(db._rev) || 0;
+        if (_lsRev > _idbRev) {
+          console.warn('[loadStore] 检测到 localStorage 版本更新（_rev ' + _idbRev + ' → ' + _lsRev + '），采用 localStorage 数据');
+          applyLoadedData(_lsData);
+          _usedLSFallback = true;
+        }
+      }
+    }
+  } catch (e) { console.warn('[loadStore] localStorage 兜底检查失败', e); }
+
   db.items.forEach(function (i) {
     if (i.source && db.sources.indexOf(i.source) < 0) db.sources.push(i.source);
     if (!i.tags) i.tags = [];
@@ -384,6 +400,13 @@ async function loadStore() {
   // ★ 旧版 meta 里混着的 trash / 快照，读出来后会标脏，这里补一次写盘完成迁移
   if (_trashDirty || _syncDirty) {
     _doSaveIDB(false).catch(function () {});
+  }
+  // ★ 如果采用了 localStorage 兜底，回写 IndexedDB，让 _rev 向前走一步
+  if (_usedLSFallback) {
+    try {
+      await saveImmediate();
+      console.log('[loadStore] 已把 localStorage 数据回写 IndexedDB');
+    } catch (e) { console.warn('[loadStore] 回写 IndexedDB 失败', e); }
   }
 }
 

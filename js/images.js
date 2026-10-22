@@ -1,5 +1,8 @@
 // js/images.js · 完整文件
-// ★ Bug G 修复：上传 promise 链末尾加 .catch/.finally，即使中间某步抛错也能复位 uploadInProgress
+// ★ 本次改动：startUploadPending 重写
+//   - 压缩（本地 CPU）和上传（GitHub API）拆成两个阶段
+//   - 压缩 3 路并行，上传按数量选档 + 撞限流自动降级
+//   - 上传限速器只服务"这一次上传"，本次结束就丢弃，下次重新按数量选档
 
 var webpSupported = false;
 try { webpSupported = document.createElement('canvas').toDataURL('image/webp').indexOf('data:image/webp') === 0; } catch (e) {}
@@ -183,6 +186,39 @@ function openImgCatChooser(files) {
 
 function sanitizeFilename(s) { return String(s || '').replace(/[\\/:*?"<>|#%\s]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'img'; }
 
+// ★ 新增：上传限速器 —— 只服务"这一次上传"，用完即丢
+//   mode = { concurrency, interval }
+//   downgrade() 遇到 429/403 时把并发降到 1、间隔拉到 800ms
+function createUploadLimiter(concurrency, interval) {
+  var state = { concurrency: concurrency, interval: interval };
+  return {
+    get concurrency() { return state.concurrency; },
+    get interval() { return state.interval; },
+    downgrade: function () {
+      state.concurrency = 1;
+      state.interval = 800;
+    }
+  };
+}
+
+// ★ 新增：并行 map，用于压缩阶段。压缩是本地 CPU，不消耗 GitHub 额度
+function mapLimit(arr, limit, fn) {
+  var results = new Array(arr.length);
+  var idx = 0;
+  function worker() {
+    if (idx >= arr.length) return Promise.resolve();
+    var i = idx++;
+    return Promise.resolve(fn(arr[i], i)).then(function (r) {
+      results[i] = r;
+      return worker();
+    });
+  }
+  var workers = [];
+  var n = Math.min(limit, arr.length);
+  for (var w = 0; w < n; w++) workers.push(worker());
+  return Promise.all(workers).then(function () { return results; });
+}
+
 function startUploadPending() {
   if (!pendingUploadFiles.length || uploadInProgress) return;
   var cfg = loadGH();
@@ -194,10 +230,17 @@ function startUploadPending() {
   var statusEl = $('imgUploadStatus');
   var rc = ghRepoConfig('img');
   var files = pendingUploadFiles.slice();
+  var total = files.length;
   var success = 0, fail = 0, done = 0;
   $('imgProgressWrap').style.display = 'block';
-  $('imgProgressText').textContent = '共 ' + files.length + ' 张，并发上传中...';
+  $('imgProgressText').textContent = '共 ' + total + ' 张，正在压缩...';
   var namingTemplate = (db.settings.imgNamingTemplate || '{cat}-{timestamp}-{rand}').trim();
+
+  // ★ 按数量选档：1-2 张 1 路 0 等待 / 3-8 张 2 路 300ms / 9 张以上 1 路 500ms
+  var limiter;
+  if (total <= 2) limiter = createUploadLimiter(1, 0);
+  else if (total <= 8) limiter = createUploadLimiter(2, 300);
+  else limiter = createUploadLimiter(1, 500);
 
   function makeFilename(file, comp, index) {
     var now = new Date();
@@ -215,44 +258,72 @@ function startUploadPending() {
     return { year: year, month: month, filename: baseName + '.' + ext };
   }
 
-  function uploadOne(file, idx) {
-    return compressImage(file, function (msg) { statusEl.textContent = '[' + (idx + 1) + '/' + files.length + '] ' + msg; }).then(function (comp) {
-      var ratio = comp.origSize > 0 ? (1 - comp.newSize / comp.origSize) * 100 : 0;
-      statusEl.textContent = '[' + (idx + 1) + '/' + files.length + '] 压缩 ' + fmtSize(comp.origSize) + ' → ' + fmtSize(comp.newSize) + '（' + (ratio > 0 ? '-' + ratio.toFixed(0) + '%' : '无变化') + '），上传中…';
-      var f = makeFilename(file, comp, idx);
+  function updateProgress() {
+    done++;
+    var pct = (done / total) * 100;
+    $('imgProgressBar').style.width = pct + '%';
+    $('imgProgressPercent').textContent = Math.floor(pct) + '%';
+    if (fail > 0 && done < total) $('imgProgressBar').style.background = 'var(--danger)';
+    else if (done < total) $('imgProgressBar').style.background = 'var(--accent)';
+  }
+
+  // ---------- 阶段一：压缩（本地 CPU，3 路并行） ----------
+  mapLimit(files, 3, function (file, i) {
+    return compressImage(file, function (msg) { statusEl.textContent = '[' + (i + 1) + '/' + total + '] ' + msg; })
+      .then(function (comp) {
+        var ratio = comp.origSize > 0 ? (1 - comp.newSize / comp.origSize) * 100 : 0;
+        return { file: file, comp: comp, ratio: ratio, idx: i };
+      })
+      .catch(function (err) {
+        console.warn('压缩失败，按原图上传', err);
+        return { file: file, comp: { blob: file, origSize: file.size, newSize: file.size, via: 'none' }, ratio: 0, idx: i };
+      });
+  }).then(function (compressed) {
+    // ---------- 阶段二：上传（按 limiter 节奏） ----------
+    var cursor = 0;
+
+    function doOne(entry) {
+      var i = entry.idx;
+      var file = entry.file;
+      var comp = entry.comp;
+      var ratio = entry.ratio;
+      var f = makeFilename(file, comp, i);
       var relPath = f.year + '/' + f.month + '/' + f.filename;
       var fullPath = rc.path + '/' + relPath;
-      return blobToBase64(comp.blob).then(function (b64) { return ghPutRaw(rc, fullPath, b64, null, 'upload ' + relPath); }).then(function () {
+      statusEl.textContent = '[' + (i + 1) + '/' + total + '] 压缩 ' + fmtSize(comp.origSize) + ' → ' + fmtSize(comp.newSize) + '（' + (ratio > 0 ? '-' + ratio.toFixed(0) + '%' : '无变化') + '），上传中…';
+      return blobToBase64(comp.blob).then(function (b64) {
+        return ghPutRaw(rc, fullPath, b64, null, 'upload ' + relPath);
+      }).then(function () {
         pendingImages.push({ path: relPath, url: '', cat: cat, tags: imgTags.slice(), size: comp.newSize, origSize: comp.origSize });
         recordOrphanImage(relPath);
         renderPendingImgs();
         success++;
-        statusEl.textContent = '[' + (idx + 1) + '/' + files.length + '] 完成：' + f.filename;
-      });
-    }).catch(function (err) {
-      console.error(err); fail++;
-      statusEl.textContent = '[' + (idx + 1) + '/' + files.length + '] 失败：' + err.message;
-    }).then(function () {
-      done++;
-      var pct = (done / files.length) * 100;
-      $('imgProgressBar').style.width = pct + '%';
-      $('imgProgressPercent').textContent = Math.floor(pct) + '%';
-      if (fail > 0 && done < files.length) $('imgProgressBar').style.background = 'var(--danger)';
-      else if (done < files.length) $('imgProgressBar').style.background = 'var(--accent)';
-    });
-  }
+        statusEl.textContent = '[' + (i + 1) + '/' + total + '] 完成：' + f.filename;
+      }).catch(function (err) {
+        console.error(err);
+        fail++;
+        // ★ 撞限流：本次上传剩余部分立刻降级（1 路 800ms）
+        if (err && err.message && (/HTTP 429/.test(err.message) || /HTTP 403/.test(err.message))) {
+          limiter.downgrade();
+        }
+        statusEl.textContent = '[' + (i + 1) + '/' + total + '] 失败：' + err.message;
+      }).then(function () { updateProgress(); });
+    }
 
-  var CONCURRENCY = Math.min(3, files.length), cursor = 0;
-  function worker() {
-    if (cursor >= files.length) return Promise.resolve();
-    var i = cursor++;
-    return uploadOne(files[i], i).then(function () { return new Promise(function (r) { setTimeout(r, 150); }); }).then(function () { return worker(); });
-  }
-  var workers = [];
-  for (var w = 0; w < CONCURRENCY; w++) workers.push(worker());
+    function worker() {
+      if (cursor >= compressed.length) return Promise.resolve();
+      var entry = compressed[cursor++];
+      return doOne(entry).then(function () {
+        var wait = limiter.interval;
+        if (wait > 0) return new Promise(function (r) { setTimeout(r, wait); });
+      }).then(worker);
+    }
 
-  // ★ Bug G 修复：加 .catch + .finally，保证 uploadInProgress 一定复位
-  Promise.all(workers).then(function () {
+    var workers = [];
+    var n = Math.min(limiter.concurrency, compressed.length);
+    for (var w = 0; w < n; w++) workers.push(worker());
+    return Promise.all(workers);
+  }).then(function () {
     $('imgProgressBar').style.background = fail > 0 ? 'var(--danger)' : '#10b981';
     $('imgProgressText').textContent = fail > 0 ? '部分失败' : '全部完成';
     if (fail === 0) {
@@ -293,7 +364,6 @@ function startUploadPending() {
     console.error('[upload] 异常', e);
     toast('上传异常：' + (e && e.message || '未知错误'));
   }).finally(function () {
-    // finally 在现代浏览器都支持；即使不支持也会因为 catch 兜底而不死
     uploadInProgress = false;
     pendingUploadFiles = [];
   });

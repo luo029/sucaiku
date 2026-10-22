@@ -1,6 +1,9 @@
 // js/custom-select.js
-// 本次改动：MutationObserver 只在新节点确实含 <select> 时才触发扫描，
-//          列表刷新（大量 div 替换）不再反复扫全文档
+// ★ 本次改动：
+//   1) 每个浮动面板挂 _select 反向引用
+//   2) 新增 cleanupOrphanPanels()：扫描 body 上所有 .custom-select-panel，
+//      如果它对应的 <select> 已经不在 DOM 里，就把面板移除
+//   3) scanSelects() 开头先 cleanupOrphanPanels()，翻页后旧面板会被自动清掉
 
 (function() {
   function initCustomSelect(select) {
@@ -31,6 +34,7 @@
 
     display._panel = panel;
     display._select = select;
+    panel._select = select;  // ★ 新增：反向引用，用于清理孤儿面板
 
     function sync() {
       var selectedOption = select.options[select.selectedIndex];
@@ -102,7 +106,22 @@
     sync();
   }
 
+  // ★ 新增：清理"对应的 <select> 已经不在 DOM 里"的孤儿面板
+  //   场景：翻页时 pagination 整体重建，旧的 <select> 被移除，
+  //         但它挂在 body 上的浮动面板还留着 → 这里统一清掉
+  function cleanupOrphanPanels() {
+    var panels = document.querySelectorAll('.custom-select-panel');
+    for (var i = 0; i < panels.length; i++) {
+      var p = panels[i];
+      var s = p._select;
+      if (!s || !document.body.contains(s)) {
+        if (p.parentNode) p.parentNode.removeChild(p);
+      }
+    }
+  }
+
   function scanSelects() {
+    cleanupOrphanPanels();  // ★ 先清孤儿，再初始化新 select
     document.querySelectorAll('select').forEach(initCustomSelect);
   }
 

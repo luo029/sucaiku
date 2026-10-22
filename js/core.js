@@ -1,5 +1,8 @@
 // js/core.js · 完整文件
-// ★ 修复：极简字号不生效。在 applySettingsToUI 中补充了 body 的 zen-font 类切换。
+// ★ 本次改动：
+//  1) DEFAULT_SETTINGS 新增 imgUploadMode / imgUploadSmallMax / imgUploadSmallConcurrency / imgUploadSmallDelay / imgUploadLargeConcurrency / imgUploadLargeDelay
+//  2) applySettingsToUI 同步新控件
+//  3) loadSettings 校验新控件范围
 
 var UNCAT = '未分类'; var IMG_TYPE = '图片'; var ALL_SOURCES = '__all__';
 var DEFAULT_CATS = ['句子', '段落', '梗', '情话', '吐槽', '点子'];
@@ -22,6 +25,13 @@ var DEFAULT_SETTINGS = {
   inputPlaceholder: '粘贴句子、段落（Ctrl+Enter保存）。用【文字】可高亮。可直接粘贴图片。',
   cardSpacing: 'standard', listStyle: 'card', zenFontSize: 'normal', uiStyle: 'modern',
   zenAutoClosePanel: true,
+  zenRenderMode: 'paged', zenPageSize: 60,
+  imgUploadMode: 'smart',
+  imgUploadSmallMax: 2,
+  imgUploadSmallConcurrency: 1,
+  imgUploadSmallDelay: 0,
+  imgUploadLargeConcurrency: 1,
+  imgUploadLargeDelay: 500,
   focusModeCat: '收件箱', saveShortcut: 'ctrl-enter', enableMarkdown: true,
   copyWithoutMarks: true, copyKeepBlankLines: true, focusImgAutoUpload: true, focusImgDefaultCat: '其他',
   imgNamingTemplate: '{cat}-{timestamp}-{rand}',
@@ -163,7 +173,7 @@ function toast(msg) {
 function processToastQueue() {
   var el = $('toast');
   if (!el) return;
-  
+
   if (toastQueue.length === 0) {
     isToasting = false;
     el.classList.remove('show');
@@ -173,7 +183,7 @@ function processToastQueue() {
   isToasting = true;
   var currentMsg = toastQueue.shift();
   el.textContent = currentMsg;
-  
+
   var imgMgrBar = $('imgMgrBatchBar');
   el.classList.toggle('raised', (batchBar && batchBar.classList.contains('show')) || (imgMgrBar && imgMgrBar.classList.contains('show')));
   el.classList.add('show');
@@ -242,24 +252,36 @@ function applySettingsToUI() {
   if ($('zenAutoClosePanel')) $('zenAutoClosePanel').checked = s.zenAutoClosePanel !== false;
   if ($('focusModeCatInput')) $('focusModeCatInput').value = s.focusModeCat || '收件箱';
   if ($('sidebarShowCat')) $('sidebarShowCat').checked = s.sidebarShowCat !== false; if ($('sidebarShowSrc')) $('sidebarShowSrc').checked = s.sidebarShowSrc !== false; if ($('sidebarShowTag')) $('sidebarShowTag').checked = s.sidebarShowTag !== false;
-  
+
   var catGroup = $('catNav') && $('catNav').closest ? $('catNav').closest('.nav-group') : null; var srcGroup = $('sourceNav') && $('sourceNav').closest ? $('sourceNav').closest('.nav-group') : null; var tagGroup = $('tagNav') && $('tagNav').closest ? $('tagNav').closest('.nav-group') : null;
   if (catGroup) catGroup.style.display = s.sidebarShowCat !== false ? '' : 'none'; if (srcGroup) srcGroup.style.display = s.sidebarShowSrc !== false ? '' : 'none'; if (tagGroup) tagGroup.style.display = s.sidebarShowTag !== false ? '' : 'none';
-  
+
   if (inputEl) { var hint = s.saveShortcut === 'enter' ? '（Enter 保存，Shift+Enter 换行）' : '（Ctrl+Enter 保存）'; var isCustom = s.inputPlaceholder && s.inputPlaceholder !== DEFAULT_SETTINGS.inputPlaceholder; if (isCustom) inputEl.placeholder = s.inputPlaceholder; else inputEl.placeholder = '粘贴句子、段落' + hint + '。用【文字】可高亮。可直接粘贴图片。'; }
   if ($('inputPlaceholder')) $('inputPlaceholder').value = s.inputPlaceholder || DEFAULT_SETTINGS.inputPlaceholder;
-  
+
   document.body.classList.remove('layout-strip'); if (s.listStyle === 'strip') document.body.classList.add('layout-strip');
-  
-  // ★ 修复：极简字号不生效
+
   document.body.classList.remove('zen-font-large', 'zen-font-xlarge');
   if (s.zenFontSize === 'large') document.body.classList.add('zen-font-large');
   if (s.zenFontSize === 'xlarge') document.body.classList.add('zen-font-xlarge');
-  
+
   setSegmentedActive('saveShortcut', 'data-shortcut', s.saveShortcut || 'ctrl-enter');
   setSegmentedActive('listStyleMode', 'data-style', s.listStyle || 'card');
   setSegmentedActive('zenFontSize', 'data-zfs', s.zenFontSize || 'normal');
   setSegmentedActive('fontSizeMode', 'data-size', s.fontSizeMode || 'normal');
+  setSegmentedActive('zenRenderMode', 'data-mode', s.zenRenderMode || 'paged');
+  if ($('zenPageSizeInput')) $('zenPageSizeInput').value = Number(s.zenPageSize) || 60;
+  if ($('zenPageSizeWrap')) $('zenPageSizeWrap').style.display = ((s.zenRenderMode || 'paged') === 'paged') ? 'block' : 'none';
+
+  // ★ 图片上传速度
+  setSegmentedActive('imgUploadMode', 'data-mode', s.imgUploadMode || 'smart');
+  if ($('imgUploadSmallMax')) $('imgUploadSmallMax').value = Number(s.imgUploadSmallMax) || 2;
+  if ($('imgUploadSmallConcurrency')) $('imgUploadSmallConcurrency').value = Number(s.imgUploadSmallConcurrency) || 1;
+  if ($('imgUploadSmallDelay')) $('imgUploadSmallDelay').value = Number(s.imgUploadSmallDelay) || 0;
+  if ($('imgUploadLargeConcurrency')) $('imgUploadLargeConcurrency').value = Number(s.imgUploadLargeConcurrency) || 1;
+  if ($('imgUploadLargeDelay')) $('imgUploadLargeDelay').value = Number(s.imgUploadLargeDelay) || 500;
+  if ($('imgUploadCustomWrap')) $('imgUploadCustomWrap').style.display = ((s.imgUploadMode || 'smart') === 'custom') ? 'block' : 'none';
+
   setSegmentedActive('compressMode', 'data-mode', s.compressMode || 'local');
   setSegmentedActive('loadMode', 'data-mode', s.loadMode || 'smart');
   setSegmentedActive('historyLoadMode', 'data-mode', s.historyLoadMode || 'auto');
@@ -279,12 +301,12 @@ function applySettingsToUI() {
 
   if ($('catLimitInput')) $('catLimitInput').value = Number(s.catLimit) || 3; if ($('srcLimitInput')) $('srcLimitInput').value = Number(s.srcLimit) || 3; if ($('tagLimitInput')) $('tagLimitInput').value = Number(s.tagLimit) || 3; if ($('collapseLimitInput')) $('collapseLimitInput').value = Number(s.collapseLimit) || 150;
   if ($('showHitokoto')) $('showHitokoto').checked = s.showHitokoto !== false; if ($('enableAnim')) $('enableAnim').checked = s.enableAnim !== false; if ($('defaultPageSizeSelect')) $('defaultPageSizeSelect').value = String(s.defaultPageSize) || '12';
-  
+
   if ($('defaultTypeSelect')) { var sel = $('defaultTypeSelect'); sel.innerHTML = '<option value="">跟随系统（无）</option>' + db.cats.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join(''); sel.value = s.defaultType || ''; }
   if ($('tinypngFields')) $('tinypngFields').style.display = (s.compressMode === 'tinypng') ? 'block' : 'none';
   document.body.classList.toggle('no-anim', s.enableAnim === false);
   var hitokotoBox = document.querySelector('.hitokoto-box'); if (hitokotoBox) hitokotoBox.style.display = (s.showHitokoto !== false) ? 'flex' : 'none';
-  
+
   if ($('focusImgAutoUpload')) $('focusImgAutoUpload').checked = s.focusImgAutoUpload !== false; if ($('focusImgCatWrap')) $('focusImgCatWrap').style.display = (s.focusImgAutoUpload !== false) ? 'block' : 'none';
   if ($('focusImgDefaultCat')) { var selCat = $('focusImgDefaultCat'); selCat.innerHTML = db.imageCategories.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join(''); selCat.value = s.focusImgDefaultCat || '其他'; }
   if ($('imgNamingTemplate')) $('imgNamingTemplate').value = s.imgNamingTemplate || '{cat}-{timestamp}-{rand}'; if (typeof window.updateImgNamingPreview === 'function') window.updateImgNamingPreview();
@@ -328,6 +350,14 @@ function loadSettings() {
   if (['none', 'local', 'tinypng'].indexOf(db.settings.compressMode) < 0) db.settings.compressMode = 'local'; if (['normal', 'large', 'xlarge'].indexOf(db.settings.fontSizeMode) < 0) db.settings.fontSizeMode = 'normal';
   if (['ask', 'auto', 'never'].indexOf(db.settings.catSyncAction) < 0) db.settings.catSyncAction = 'ask';
   if (['last-write', 'merge'].indexOf(db.settings.catConflictMode) < 0) db.settings.catConflictMode = 'last-write';
+  if (['all', 'paged'].indexOf(db.settings.zenRenderMode) < 0) db.settings.zenRenderMode = 'paged';
+  db.settings.zenPageSize = Math.max(20, Math.min(500, Number(db.settings.zenPageSize) || 60));
+  if (['smart', 'conservative', 'custom'].indexOf(db.settings.imgUploadMode) < 0) db.settings.imgUploadMode = 'smart';
+  db.settings.imgUploadSmallMax = Math.max(1, Math.min(20, Number(db.settings.imgUploadSmallMax) || 2));
+  db.settings.imgUploadSmallConcurrency = Math.max(1, Math.min(5, Number(db.settings.imgUploadSmallConcurrency) || 1));
+  db.settings.imgUploadSmallDelay = Math.max(0, Math.min(3000, Number(db.settings.imgUploadSmallDelay) || 0));
+  db.settings.imgUploadLargeConcurrency = Math.max(1, Math.min(5, Number(db.settings.imgUploadLargeConcurrency) || 1));
+  db.settings.imgUploadLargeDelay = Math.max(0, Math.min(3000, Number(db.settings.imgUploadLargeDelay) || 500));
   if (typeof db.settings.imgNamingTemplate !== 'string' || !db.settings.imgNamingTemplate.trim()) db.settings.imgNamingTemplate = DEFAULT_SETTINGS.imgNamingTemplate;
   if (typeof db.settings.dataDir !== 'string') db.settings.dataDir = DEFAULT_SETTINGS.dataDir; if (typeof db.settings.shardSubdir !== 'string') db.settings.shardSubdir = DEFAULT_SETTINGS.shardSubdir;
   if (typeof db.settings.snapshotPath !== 'string' || !db.settings.snapshotPath) db.settings.snapshotPath = 'snapshots/';
@@ -344,14 +374,13 @@ function loadTinyCount() { try { var d = JSON.parse(localStorage.getItem(TINY_KE
 function bumpTinyCount() { var d = loadTinyCount(); d.count += 1; localStorage.setItem(TINY_KEY, JSON.stringify(d)); updateTinyUsageUI(); return d; }
 function updateTinyUsageUI() { var d = loadTinyCount(); var el = $('tinyUsage'); if (el) el.innerHTML = '本月（' + d.month + '）已用 <b>' + d.count + '</b> / 500 次'; }
 
-// ★ 辅助函数：用于批量操作时替代深拷贝，提高性能
 function copyIndexItem(item) {
   if (!item) return null;
-  return { 
-    id: item.id, 
-    type: item.type, 
-    source: item.source, 
-    tags: Array.isArray(item.tags) ? item.tags.slice() : [], 
+  return {
+    id: item.id,
+    type: item.type,
+    source: item.source,
+    tags: Array.isArray(item.tags) ? item.tags.slice() : [],
     images: Array.isArray(item.images) ? item.images.map(function(im) { return { tags: Array.isArray(im.tags) ? im.tags.slice() : [] }; }) : []
   };
 }

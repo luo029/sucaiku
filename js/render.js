@@ -1,12 +1,67 @@
 // js/render.js · 完整文件
-// ★ 性能优化：长文本搜索高亮截断，防止 DOM 节点过多卡顿。
-// ★ 本次修复：deleteSource 删除来源后统一 markIndexDirty()，避免旧来源统计残留。
+// ★ 本次改动：renderList() 非极简分支开头加 _zenClearObserver()
+//   从极简模式退出时，会先主动断开上一次的 observer，避免对象残留
 
 var tagExpanded = false, catExpanded = false, srcExpanded = false;
 var catManagerPage = 1, tagManagerPage = 1;
 var CAT_PAGE_SIZE = 10, TAG_PAGE_SIZE = 20;
 
+// ★ 极简模式渲染状态
+var _zenFilteredCache = [];
+var _zenRenderedCount = 0;
+var _zenObserver = null;
+
 function _isMobileViewport() { return window.matchMedia('(max-width: 768px)').matches; }
+
+function _zenCardHtml(i) {
+  return '<article class="card" data-id="' + i.id + '"><div class="content">' + getCachedFormat(i, []) + '</div></article>';
+}
+function _zenGetPageSize() {
+  return Math.max(20, Math.min(500, Number(db.settings.zenPageSize) || 60));
+}
+function _zenClearObserver() {
+  if (_zenObserver) { _zenObserver.disconnect(); _zenObserver = null; }
+}
+function _zenRenderInitial(filtered) {
+  var pageSize = _zenGetPageSize();
+  _zenRenderedCount = Math.min(pageSize, filtered.length);
+  listEl.innerHTML = filtered.slice(0, _zenRenderedCount).map(_zenCardHtml).join('');
+  _zenAppendSentinel();
+}
+function _zenAppendSentinel() {
+  var filtered = _zenFilteredCache;
+  if (_zenRenderedCount >= filtered.length) return;
+  var sentinel = document.getElementById('zenLoadSentinel');
+  if (!sentinel) {
+    sentinel = document.createElement('div');
+    sentinel.id = 'zenLoadSentinel';
+    sentinel.style.cssText = 'text-align:center;padding:20px 0 30px;color:var(--text-3);font-size:13px;letter-spacing:.3px;';
+    listEl.appendChild(sentinel);
+  }
+  sentinel.textContent = '已加载 ' + _zenRenderedCount + ' / ' + filtered.length + ' 条，继续下滑加载更多…';
+  _zenClearObserver();
+  _zenObserver = new IntersectionObserver(function (entries) {
+    if (entries[0].isIntersecting) {
+      _zenClearObserver();
+      _zenLoadMore();
+    }
+  }, { rootMargin: '800px 0px' });
+  _zenObserver.observe(sentinel);
+}
+function _zenLoadMore() {
+  var filtered = _zenFilteredCache;
+  if (_zenRenderedCount >= filtered.length) return;
+  var pageSize = _zenGetPageSize();
+  var start = _zenRenderedCount;
+  var end = Math.min(start + pageSize, filtered.length);
+  var sentinel = document.getElementById('zenLoadSentinel');
+  if (sentinel) sentinel.remove();
+  var html = '';
+  for (var i = start; i < end; i++) html += _zenCardHtml(filtered[i]);
+  if (html) listEl.insertAdjacentHTML('beforeend', html);
+  _zenRenderedCount = end;
+  _zenAppendSentinel();
+}
 
 function render() {
   draggedItemId = null; normalize();
@@ -204,11 +259,25 @@ function renderList() {
   if (zenMode) {
     renderZenBar();
     var filteredZen = getFilteredItems().filter(function (i) { return i.text; });
-    if (!filteredZen.length) listEl.innerHTML = '<div class="empty"><p>没有找到符合条件的内容</p></div>';
-    else listEl.innerHTML = filteredZen.map(function (i) { return '<article class="card" data-id="' + i.id + '"><div class="content">' + getCachedFormat(i, []) + '</div></article>'; }).join('');
+    _zenClearObserver();
+    if (!filteredZen.length) {
+      listEl.innerHTML = '<div class="empty"><p>没有找到符合条件的内容</p></div>';
+    } else {
+      _zenFilteredCache = filteredZen;
+      if ((db.settings.zenRenderMode || 'paged') === 'all') {
+        // 一次性全部渲染（原行为）
+        _zenRenderedCount = filteredZen.length;
+        listEl.innerHTML = filteredZen.map(_zenCardHtml).join('');
+      } else {
+        // 分页加载（默认）
+        _zenRenderInitial(filteredZen);
+      }
+    }
     $('pagination').innerHTML = ''; batchBar.classList.remove('show');
     return;
   }
+  // ★ 新增：非极简分支也主动清一次 observer，避免退出极简时的残留
+  _zenClearObserver();
   var filtered = getFilteredItems();
   var total = filtered.length;
   var totalPages = Math.max(1, Math.ceil(total / pageSize));

@@ -1,8 +1,5 @@
 // js/bind-views.js · 完整文件
-// ★ 本次改动：
-//  1) 新增 applyPushModeUI()，打开设置时同步"推送模式"按钮的高亮状态（不需要改 core.js）
-//  2) 新增 pushMode 点击绑定，写入 db.settings.pushMode
-//  3) 其余绑定保持原样
+// ★ 本次改动：删掉 #pushConcurrency 死代码（元素已不存在，safeBind 拿不到就不会绑，删掉纯为代码干净）
 
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
@@ -291,6 +288,22 @@ safeBind('uiStyleMode', 'click', function (e) { var b = e.target.closest('button
 safeBind('listStyleMode', 'click', function (e) { var b = e.target.closest('button[data-style]'); if (!b) return; db.settings.listStyle = b.dataset.style; saveSettings(); applySettingsToUI(); toast('列表排版已调整'); });
 safeBind('zenFontSize', 'click', function (e) { var b = e.target.closest('button[data-zfs]'); if (!b) return; db.settings.zenFontSize = b.dataset.zfs; saveSettings(); applySettingsToUI(); toast('极简模式字号已调整'); });
 
+// ★ 极简模式渲染方式与每页条数
+safeBind('zenRenderMode', 'click', function (e) {
+  var b = e.target.closest('button[data-mode]'); if (!b) return;
+  db.settings.zenRenderMode = b.dataset.mode;
+  saveSettings(); applySettingsToUI();
+  if (zenMode) renderList();
+  toast(b.dataset.mode === 'all' ? '极简模式：一次性全部渲染' : '极简模式：分页加载');
+});
+safeBind('zenPageSizeInput', 'change', function (e) {
+  var v = Math.max(20, Math.min(500, parseInt(e.target.value, 10) || 60));
+  e.target.value = v;
+  db.settings.zenPageSize = v;
+  saveSettings();
+  if (zenMode) renderList();
+});
+
 safeBind('zenAutoClosePanel', 'change', function (e) {
   db.settings.zenAutoClosePanel = e.target.checked;
   saveSettings();
@@ -333,7 +346,7 @@ safeBind('shortcutNew', 'input', function (e) { if (e.target.value.length > 1) e
 safeBind('enableContextMenu', 'change', function (e) { db.settings.enableContextMenu = e.target.checked; saveSettings(); toast(e.target.checked ? '已开启右键/长按菜单' : '已关闭右键/长按菜单'); });
 safeBind('maxTagsInHeader', 'change', function (e) { var v = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 3)); e.target.value = v; db.settings.maxTagsInHeader = v; saveSettings(); renderHeader(); toast('标签折叠阈值已设为 ' + v + ' 个'); });
 
-// ★ 新增：推送模式切换
+// ★ 推送模式切换
 safeBind('pushMode', 'click', function (e) {
   var b = e.target.closest('button[data-mode]'); if (!b) return;
   db.settings.pushMode = b.dataset.mode; saveSettings(); applyPushModeUI();
@@ -380,7 +393,6 @@ safeBind('autoPush', 'change', function (e) { db.settings.autoPush = e.target.ch
 safeBind('forceConfirm', 'change', function (e) { db.settings.forceConfirm = e.target.checked; saveSettings(); });
 safeBind('snapshotBeforePush', 'change', function (e) { db.settings.snapshotBeforePush = e.target.checked; saveSettings(); });
 safeBind('pushDelayMs', 'change', function (e) { var v = Math.max(500, Math.min(60000, parseInt(e.target.value, 10) || 2000)); e.target.value = v; db.settings.pushDelayMs = v; saveSettings(); });
-safeBind('pushConcurrency', 'change', function (e) { var v = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 3)); e.target.value = v; db.settings.pushConcurrency = v; saveSettings(); });
 safeBind('pushBatchDelay', 'change', function (e) { var v = Math.max(200, Math.min(5000, parseInt(e.target.value, 10) || 500)); e.target.value = v; db.settings.pushBatchDelay = v; saveSettings(); });
 safeBind('conflictAction', 'click', function (e) { var b = e.target.closest('button[data-act]'); if (!b) return; db.settings.conflictAction = b.dataset.act; saveSettings(); applySettingsToUI(); });
 safeBind('searchScope', 'click', function (e) { var b = e.target.closest('button[data-scope]'); if (!b) return; db.settings.searchScope = b.dataset.scope; saveSettings(); applySettingsToUI(); });
