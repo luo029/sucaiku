@@ -1,8 +1,6 @@
 // js/modals.js · 完整文件
-// ★ 本次更新：
-//   1) 删除了 noteDiffMask（笔记更新对比弹窗）的 HTML。
-//   2) 删除了 noteFileInput 的隐藏输入框。
-//   （这两项现已完全由 js/readest.js 动态管理）
+// ★ 本次更新：重新规划了“数据” Tab 下的 UI。
+//   将原来孤立的“导入后默认动作”和新增的 5 个选项，全部整合进了一个名为“笔记导入专属设置”的醒目卡片中。
 
 setTimeout(function () { var oldCatMgr = document.getElementById('catManager'); if (oldCatMgr) oldCatMgr.remove(); }, 100);
 
@@ -88,13 +86,26 @@ var modalsHtml = ''
 + '<div class="st-field"><label>快照目录</label><input type="text" id="snapshotPath" placeholder="snapshots/"></div>'
 + '<div class="st-actions" style="margin-top:16px;"><button class="btn" id="snapshotNowBtn">立即打快照</button><button class="btn primary" id="snapshotListViewBtn">查看快照列表</button></div>'
 + '</div></div>'
+
+// 🌟 全新改版的“笔记导入专属设置”卡片
++ '<div class="st-card" data-group="data" style="display:none;"><div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><div><div class="st-card-title">笔记导入专属设置</div><div class="st-card-desc">定制 Readest 等笔记导入时的界面交互与行为</div></div></div><div class="st-card-body">'
++ '<div class="st-field"><label>通用导入默认动作</label><div class="segmented" id="importDefaultAction"><button type="button" data-action="ask">询问</button><button type="button" data-action="push">立即推</button><button type="button" data-action="local">仅本地</button></div></div>'
++ '<div style="margin-top:20px; border-top:1px dashed var(--line); padding-top:16px;">'
++ '  <div style="font-size:12px; font-weight:700; color:var(--text-3); margin-bottom:12px; letter-spacing:0.5px;">READEST 沉浸式定制</div>'
++ '  <label class="st-toggle"><div><div class="st-toggle-title">导入后自动跳转</div><div class="st-toggle-desc">无缝衔接：导入完成后，自动切回【收件箱】查看成果</div></div><input type="checkbox" id="readestAutoJump" checked></label>'
++ '  <label class="st-toggle"><div><div class="st-toggle-title">收纳“已存在”项</div><div class="st-toggle-desc">将内容未修改的重复笔记折叠到底部，保持界面清爽</div></div><input type="checkbox" id="readestCollapseSkip" checked></label>'
++ '  <label class="st-toggle"><div><div class="st-toggle-title">长文本默认展开</div><div class="st-toggle-desc">预览时长文本显示全部，而不是默认折叠 3 行</div></div><input type="checkbox" id="readestAutoExpand"></label>'
++ '  <label class="st-toggle"><div><div class="st-toggle-title">显示差异对比(Diff)</div><div class="st-toggle-desc">更新笔记时显示红绿字级差异对比（高级排版）</div></div><input type="checkbox" id="readestShowDiff" checked></label>'
++ '  <label class="st-toggle"><div><div class="st-toggle-title">默认立即同步</div><div class="st-toggle-desc">预览弹窗里的“立即同步到云端”开关，默认处于打开状态</div></div><input type="checkbox" id="readestDefaultPush"></label>'
++ '</div>'
++ '</div></div>'
+
 + '<div class="st-card" data-group="data" style="display:none;"><div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg><div><div class="st-card-title">回收站</div></div></div><div class="st-card-body">'
 + '<div class="st-field"><label>自动清理阈值</label><div class="st-inline"><input type="number" class="setting-num" id="trashAutoCleanupThreshold" min="100" max="100000" value="1000"><span class="st-suffix">条</span></div><div class="st-hint">回收站超过此数量时自动删除最旧的</div></div>'
 + '</div></div>'
-+ '<div class="st-card" data-group="data" style="display:none;"><div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9z"/></svg><div><div class="st-card-title">标签与导入</div></div></div><div class="st-card-body">'
++ '<div class="st-card" data-group="data" style="display:none;"><div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9z"/></svg><div><div class="st-card-title">标签与分类</div></div></div><div class="st-card-body">'
 + '<div class="st-field"><label>标签颜色显示</label><div class="segmented" id="tagColorMode"><button type="button" data-mode="dot">圆点</button><button type="button" data-mode="bg">背景</button><button type="button" data-mode="border">边框</button></div></div>'
 + '<div class="st-field"><label>多选标签逻辑</label><div class="segmented" id="tagFilterLogic"><button type="button" data-logic="and">AND</button><button type="button" data-logic="or">OR</button></div></div>'
-+ '<div class="st-field"><label>导入后默认动作</label><div class="segmented" id="importDefaultAction"><button type="button" data-action="ask">询问</button><button type="button" data-action="push">立即推</button><button type="button" data-action="local">仅本地</button></div></div>'
 + '</div></div>'
 + '<div class="st-card" data-group="data" style="display:none;"><div class="st-card-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg><div><div class="st-card-title">高级</div></div></div><div class="st-card-body">'
 + '<div class="st-field"><label>分片粒度</label><div class="segmented" id="shardMode"><button type="button" data-mode="daily">按日</button><button type="button" data-mode="monthly">按月</button></div></div>'

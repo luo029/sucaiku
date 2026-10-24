@@ -1,5 +1,5 @@
 // js/io.js · 完整文件
-// ★ 本次更新：瘦身。移除了 Readest 相关逻辑（现已移至 js/readest.js）。
+// ★ 本次更新：瘦身。移除了 Readest 相关逻辑（现已移至 js/readest.js）。修复了文件编码导致的乱码问题。
 
 function setZen(on) {
   zenMode = on;
