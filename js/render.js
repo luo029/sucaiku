@@ -1,13 +1,10 @@
 // js/render.js · 完整文件
-// ★ 本次更新：
-//   1) 撤销了正文 '---' 分割线的替换逻辑，保持原样渲染。
-//   2) 来源（source）仅加上《书名》号，并保留浅色背景胶囊样式，无任何图标。
+// ★ 本次更新：分类管理面板的圆点增加点击事件，支持修改颜色。
 
 var tagExpanded = false, catExpanded = false, srcExpanded = false;
 var catManagerPage = 1, tagManagerPage = 1;
 var CAT_PAGE_SIZE = 10, TAG_PAGE_SIZE = 20;
 
-// ★ 极简模式渲染状态
 var _zenFilteredCache = [];
 var _zenRenderedCount = 0;
 var _zenObserver = null;
@@ -214,8 +211,8 @@ function getCachedFormat(item, terms, expanded) {
   var text = item.text || '';
   var html;
   
-  var MAX_PREVIEW = 5000;    // 折叠预览上限
-  var MAX_EXPANDED = 20000;  // 展开渲染上限
+  var MAX_PREVIEW = 5000;
+  var MAX_EXPANDED = 20000;
   
   if (expanded) {
     if (text.length > MAX_EXPANDED) {
@@ -320,7 +317,6 @@ function renderList() {
     
     var dateTitle = '创建：' + fmtFull(i.createdAt) + (i.updatedAt ? '\n更新：' + fmtFull(i.updatedAt) : '');
     
-    // ★ 来源：加书名号，保留浅色背景胶囊样式，无图标
     var sourceHtml = '';
     if (i.source) {
       sourceHtml = '<span class="src src-clickable" data-source="' + esc(i.source) + '" title="点击按此来源筛选" style="font-size:12.5px; color:var(--text-2); background:var(--bg); padding:2px 10px; border-radius:99px; border:1px solid var(--line); display:inline-flex; align-items:center; max-width:50%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">《' + esc(i.source) + '》</span>';
@@ -458,12 +454,77 @@ function renderCatManager() {
   var slice = db.cats.slice(start, start + CAT_PAGE_SIZE);
   listEl.innerHTML = slice.map(function (c) {
     var idx = db.cats.indexOf(c), col = catColor(c), n = getSidebarStats().catCounts[c] || 0;
-    return '<div class="cat-row"><span class="dot" style="background:' + col.fg + '"></span><input class="cat-name" data-idx="' + idx + '" value="' + esc(c) + '" maxlength="12"><span class="cat-n">' + formatCount(n) + '</span><button class="btn tiny danger" data-cat-del="' + idx + '">删除</button></div>';
+    return '<div class="cat-row"><span class="dot" style="background:' + col.fg + '; cursor:pointer;" data-cat-color="' + esc(c) + '" title="点击设置颜色"></span><input class="cat-name" data-idx="' + idx + '" value="' + esc(c) + '" maxlength="12"><span class="cat-n">' + formatCount(n) + '</span><button class="btn tiny danger" data-cat-del="' + idx + '">删除</button></div>';
   }).join('');
+  
+  // ★ 绑定圆点点击事件
+  listEl.querySelectorAll('[data-cat-color]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      openCatColorPicker(el.dataset.catColor);
+    });
+  });
+
   if (pagEl) {
     if (totalPages <= 1) pagEl.innerHTML = '';
     else pagEl.innerHTML = '<button class="btn tiny" id="catPagePrev" ' + (catManagerPage === 1 ? 'disabled' : '') + '>上一页</button><span>第 <b>' + catManagerPage + '</b> / ' + totalPages + ' 页</span><button class="btn tiny" id="catPageNext" ' + (catManagerPage === totalPages ? 'disabled' : '') + '>下一页</button>';
   }
+}
+
+// ★ 新增：分类颜色选择器逻辑
+var _catColorCurrentName = null;
+function openCatColorPicker(catName) {
+  _catColorCurrentName = catName;
+  $('tagColorName').textContent = catName;
+  var currentColor = (db.colors && db.colors[catName]) || '';
+  if ($('tagColorCustom')) $('tagColorCustom').value = currentColor || '#5b6ef5';
+  
+  var palette = $('tagColorPalette');
+  if (palette) {
+    palette.innerHTML = PALETTE.map(function (p) {
+      return '<div style="background:' + p.fg + '; height:32px; border-radius:6px; cursor:pointer; border:2px solid ' + (currentColor === p.fg ? 'var(--text)' : 'transparent') + ';" data-color="' + p.fg + '"></div>';
+    }).join('');
+    palette.querySelectorAll('[data-color]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        palette.querySelectorAll('[data-color]').forEach(function (e) { e.style.border = '2px solid transparent'; });
+        el.style.border = '2px solid var(--text)';
+        if ($('tagColorCustom')) $('tagColorCustom').value = el.dataset.color;
+      });
+    });
+  }
+  $('tagColorMask').classList.add('show');
+}
+
+// 覆盖保存按钮逻辑
+var oldConfirm = $('tagColorConfirm');
+if (oldConfirm) {
+  var newConfirm = oldConfirm.cloneNode(true);
+  oldConfirm.parentNode.replaceChild(newConfirm, oldConfirm);
+  newConfirm.addEventListener('click', function () {
+    if (!_catColorCurrentName) return;
+    var color = $('tagColorCustom').value || '';
+    if (!db.colors) db.colors = {};
+    if (color) db.colors[_catColorCurrentName] = color;
+    save(); render();
+    $('tagColorMask').classList.remove('show');
+    if ($('catManageMask').classList.contains('show')) renderCatManager();
+    toast('分类颜色已保存');
+  });
+}
+
+// 覆盖清除按钮逻辑
+var oldClear = $('tagColorClear');
+if (oldClear) {
+  var newClear = oldClear.cloneNode(true);
+  oldClear.parentNode.replaceChild(newClear, oldClear);
+  newClear.addEventListener('click', function () {
+    if (!_catColorCurrentName) return;
+    if (db.colors) delete db.colors[_catColorCurrentName];
+    ensureColors(); // 重新生成一个不撞色的
+    save(); render();
+    $('tagColorMask').classList.remove('show');
+    if ($('catManageMask').classList.contains('show')) renderCatManager();
+    toast('已重置为随机不撞色');
+  });
 }
 
 function refreshTypeSelect(keep) {
@@ -572,3 +633,4 @@ window.renderSourcePanelList = renderSourcePanelList; window.renderTagPanelList 
 window.renderCatFilterList = renderCatFilterList; window.renderSourceFilterList = renderSourceFilterList;
 window.openSourcePanel = openSourcePanel; window.closeSourcePanel = closeSourcePanel;
 window.openTagPanel = openTagPanel; window.closeTagPanel = closeTagPanel;
+window.openCatColorPicker = openCatColorPicker;

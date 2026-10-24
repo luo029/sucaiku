@@ -1,7 +1,9 @@
 // js/core.js · 完整文件
-// ★ 本次改动：
-//   1) 删除"图片上传速度"幽灵配置（modals.js 里没有对应控件，属于白写的死代码）
-//   2) DEFAULT_SETTINGS 补上 pushMode: 'stable'，让推送模式开关首次打开也有明确默认值
+// ★ 本次更新：
+//   1) db.colors 改为存储 Hex 色值，彻底摆脱 PALETTE 数组限制。
+//   2) 新增 hexToRgb 和 hslToHex 工具函数，用于动态生成颜色。
+//   3) ensureColors 重写：新增分类时绝对不撞色，若 PALETTE 用尽自动生成新 HSL 色。
+//   4) catColor 重写：根据 Hex 色值动态计算浅色背景和深色前景。
 
 var UNCAT = '未分类'; var IMG_TYPE = '图片'; var ALL_SOURCES = '__all__';
 var DEFAULT_CATS = ['句子', '段落', '梗', '情话', '吐槽', '点子'];
@@ -55,7 +57,9 @@ var DEFAULT_SETTINGS = {
   importDefaultAction: 'ask', timezoneMode: 'local', showProgressBar: true,
   integrityCheckMode: 'weekly', maxSplitParts: 10, autoDeleteEmptyShard: true,
   enableShortcuts: true, shortcutSearch: '/', shortcutNew: 'n', shortcutPush: 'ctrl+s',
-  maxTagsInHeader: 3, enableContextMenu: true
+  maxTagsInHeader: 3, enableContextMenu: true,
+  
+  readestAutoJump: true, readestCollapseSkip: true, readestAutoExpand: false, readestShowDiff: true, readestDefaultPush: false
 };
 
 var PALETTE = [
@@ -67,6 +71,17 @@ var PALETTE = [
   { bg: '#ffedd5', fg: '#c2410c' }, { bg: '#fce7f3', fg: '#be185d' }, { bg: '#e0e7ff', fg: '#3730a3' },
   { bg: '#ccfbf1', fg: '#0f766e' }, { bg: '#fee2e2', fg: '#b91c1c' }
 ];
+
+// ★ 颜色转换工具
+function hexToRgb(hex) {
+  var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : { r: 99, g: 102, b: 241 };
+}
+function hslToHex(h, s, l) {
+  l /= 100; var a = s * Math.min(l, 1 - l) / 100;
+  var f = n => { var k = (n + h / 30) % 12; var color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1); return Math.round(255 * color).toString(16).padStart(2, '0'); };
+  return '#' + f(0) + f(8) + f(4);
+}
 
 var db = {
   items: [], cats: DEFAULT_CATS.slice(), colors: {}, sources: [], fixedSource: '', fixedTags: [],
@@ -323,6 +338,13 @@ function applySettingsToUI() {
   if ($('showSyncProgress')) $('showSyncProgress').checked = s.showSyncProgress !== false;
   if ($('trashAutoCleanupThreshold')) $('trashAutoCleanupThreshold').value = Number(s.trashAutoCleanupThreshold) || 1000;
 
+  // ★ 回显 Readest 专属设置
+  if ($('readestAutoJump')) $('readestAutoJump').checked = s.readestAutoJump !== false;
+  if ($('readestCollapseSkip')) $('readestCollapseSkip').checked = s.readestCollapseSkip !== false;
+  if ($('readestAutoExpand')) $('readestAutoExpand').checked = s.readestAutoExpand === true;
+  if ($('readestShowDiff')) $('readestShowDiff').checked = s.readestShowDiff !== false;
+  if ($('readestDefaultPush')) $('readestDefaultPush').checked = s.readestDefaultPush === true;
+
   updateTinyUsageUI(); if (typeof window.renderImgCatsEditor === 'function') window.renderImgCatsEditor(); if (typeof renderStyleOptions === 'function') renderStyleOptions();
 
   applyFontSize(s.fontSizeMode || 'normal');
@@ -367,3 +389,7 @@ window.copyIndexItem = copyIndexItem;
 
 window.coreHelpers = { DEFAULT_SETTINGS: DEFAULT_SETTINGS, PALETTE: PALETTE, AVAILABLE_STYLES: AVAILABLE_STYLES };
 window.db = db; window.$ = $; window.toast = toast; window.esc = esc; window.formatText = formatText; window.uid = uid; window.fmtDate = fmtDate; window.fmtFull = fmtFull; window.fmtDateOnly = fmtDateOnly; window.utf8ToBase64 = utf8ToBase64; window.base64ToUtf8 = base64ToUtf8; window.blobToBase64 = blobToBase64; window.download = download; window.copyText = copyText; window.scrollTop = scrollTop; window.formatCount = formatCount;
+
+// ★ 新增：分类颜色相关的全局函数导出
+window.hexToRgb = hexToRgb;
+window.hslToHex = hslToHex;
