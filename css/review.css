@@ -227,15 +227,31 @@
 }
 .review-search-btn:hover { color: #b92b27; border-color: #b92b27; }
 
+/* ★ 修复：绝对禁止换行，防止被挤压时变成两列导致出现白框 */
 .review-opt-list {
-  display: flex; flex-wrap: wrap; flex-direction: column; align-items: center; justify-content: flex-start;
-  gap: 6px; width: 100%; overflow-y: auto; overflow-x: hidden;
-  padding-bottom: 10px; flex: 1; max-height: calc(100% - 80px);
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  justify-content: flex-start;
+  flex-wrap: nowrap; 
+  gap: 6px; 
+  width: 100%; 
+  overflow-y: auto; 
+  overflow-x: hidden;
+  padding-bottom: 10px; 
+  flex: 1; 
+  max-height: calc(100% - 80px);
+  /* 隐藏滚动条让界面更干净 */
+  scrollbar-width: none; 
+  -ms-overflow-style: none;
 }
+.review-opt-list::-webkit-scrollbar { display: none; }
 
+/* ★ 修复：加上 flex: none 防止按钮被压扁 */
 .review-pill {
   writing-mode: vertical-rl; text-orientation: upright; position: relative;
   padding: 12px 6px; min-width: 28px; min-height: 40px;
+  flex: none;
   font-size: 15px; border-radius: 4px; cursor: pointer;
   background: var(--rv-bg, #fff); border: 1px solid var(--rv-panel-border, #d0c2b0); color: var(--rv-text, #5d3a1a); 
   transition: all 0.15s; user-select: none; box-shadow: 0 1px 3px rgba(0,0,0,0.02);
@@ -478,14 +494,6 @@
 
 /* =========================================================
    ★ 新增：手机端批阅界面适配
-   ---------------------------------------------------------
-   问题：手机端 review-paper 是 flex-direction: row，
-         右侧 220px 竖排侧栏把正文挤得几乎没法用。
-   方案：
-     - 纸张改为上下布局（正文在上，侧栏在下）
-     - 侧栏变横排 3 列，可横向滚动
-     - 竖排竹简变回横排胶囊
-     - 头部/底部/印章/倒计时全部缩小
    ========================================================= */
 @media (max-width: 680px) {
   .review-paper { flex-direction: column; }
@@ -543,7 +551,7 @@
 
   .review-opt-list {
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: nowrap; /* 手机上强制单行 */
     overflow-x: auto;
     overflow-y: hidden;
     max-height: none;
@@ -551,6 +559,7 @@
     align-items: center;
     gap: 6px;
     scrollbar-width: thin;
+    display: flex; /* 确保是 flex */
   }
 
   /* 竖排竹简变横排胶囊 */
