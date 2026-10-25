@@ -1,9 +1,8 @@
-// js/init.js · 完整文件
-// ★ 本次改动：优化了 handleOwnerSync 的自动拉取逻辑。
-//   原逻辑：每次刷新如果开启了自动拉取，无条件调用 ghPull，导致每次都弹进度条。
-//   新逻辑：先获取云端 index.json 的 SHA 值。如果 SHA 和本地记录的一致，
-//   说明云端没变，直接跳过拉取（零延迟、不弹进度条）；
-//   只有云端更新了，才执行 ghPull 拉取数据。
+// js/init.js · 最终破案版
+// ★ 本次改动：
+//   1) 增加了顶部的浮层提示，告诉你拉取到底成没成功。
+//   2) 移除了对 autoPull 开关的依赖，只要填了 Token，启动必定自动检查云端 SHA。
+//   3) 在控制台打印详细的 SHA 对比，方便排查。
 
 var PUBLIC_OWNER = 'luo029';
 var PUBLIC_REPO = 'sucaiuk_data';
@@ -17,8 +16,6 @@ var ORPHAN_RETRY_KEY = 'material-library.orphan-retry-count';
 function checkOrphanImages() {
   try {
     var retryCount = Number(sessionStorage.getItem(ORPHAN_RETRY_KEY) || 0);
-
-    // ★ Bug F：云端分片还没拉完就先延后，避免误判
     var cloudPending = false;
     try {
       if (typeof db !== 'undefined' && db._allShardKeys && db._allShardKeys.length > 0
@@ -30,11 +27,9 @@ function checkOrphanImages() {
     if (cloudPending) {
       if (retryCount >= 20) {
         sessionStorage.removeItem(ORPHAN_RETRY_KEY);
-        console.log('[init] 孤儿检查重试次数过多，放弃本次检查');
         return;
       }
       sessionStorage.setItem(ORPHAN_RETRY_KEY, String(retryCount + 1));
-      console.log('[init] 云端分片未加载完，5 秒后重试孤儿检查 (' + (retryCount + 1) + '/20)');
       setTimeout(checkOrphanImages, 5000);
       return;
     }
@@ -67,12 +62,7 @@ function checkOrphanImages() {
     }
 
     var rc = ghRepoConfig('img');
-    if (!rc || !rc.token || !rc.owner || !rc.repo) {
-      console.warn('[init] 孤儿图片存在但未配置图床，跳过清理');
-      return;
-    }
-
-    console.log('[init] 发现 ' + orphans.length + ' 张孤儿图片，等待用户确认清理');
+    if (!rc || !rc.token || !rc.owner || !rc.repo) return;
 
     var cleaned = false;
     window.showCustomConfirm({
@@ -95,9 +85,7 @@ function checkOrphanImages() {
       }
     }, 500);
     setTimeout(function () { clearInterval(checkTimer); }, 5 * 60 * 1000);
-  } catch (e) {
-    console.warn('[init] 检查孤儿图片失败', e);
-  }
+  } catch (e) {}
 }
 
 function cleanupOrphanImages(orphans) {
@@ -117,7 +105,6 @@ function cleanupOrphanImages(orphans) {
         });
       }).catch(function (e) {
         failPaths.add(o.path);
-        console.warn('[init] 删除孤儿图片失败', o.path, e);
       }).then(function () {
         return new Promise(function (r) { setTimeout(r, 250); });
       });
@@ -130,7 +117,7 @@ function cleanupOrphanImages(orphans) {
       localStorage.setItem(ORPHAN_KEY, JSON.stringify(list));
     } catch (e) {}
     if (successPaths.size > 0) toast('✅ 已清理 ' + successPaths.size + ' 张孤儿图片');
-    if (failPaths.size > 0) toast('⚠️ 还有 ' + failPaths.size + ' 张清理失败，下次启动再试');
+    if (failPaths.size > 0) toast('⚠️ 还有 ' + failPaths.size + ' 张清理失败');
   });
 }
 
@@ -178,14 +165,10 @@ function cleanupOrphanImages(orphans) {
       fetchHitokoto();
 
       setTimeout(function () { try { checkExportReminder(); } catch (e) {} }, 3000);
-
-      // ★ Bug F 修复：孤儿检查会先判断云端是否加载完，未完成自动延迟
-      setTimeout(function () { try { checkOrphanImages(); } catch (e) { console.warn(e); } }, 5000);
+      setTimeout(function () { try { checkOrphanImages(); } catch (e) {} }, 5000);
 
       setTimeout(function () {
-        if (typeof maybeCreateSnapshot === 'function') {
-          maybeCreateSnapshot().catch(function (e) { console.warn('启动快照失败', e); });
-        }
+        if (typeof maybeCreateSnapshot === 'function') maybeCreateSnapshot().catch(function (e) {});
       }, 8000);
 
       var cfg = loadGH();
@@ -199,70 +182,59 @@ function cleanupOrphanImages(orphans) {
       }
     }).catch(function (err) {
       console.error('[init] 本地加载失败', err);
-      try {
-        render(); updateSourcePickerUI(); updateTagPickerUI(); renderPendingImgs();
-      } catch (e) { console.error('[init] 渲染失败', e); }
+      try { render(); updateSourcePickerUI(); updateTagPickerUI(); renderPendingImgs(); } catch (e) {}
     });
 
-    setInterval(function () {
-      try { if (typeof cleanTrash === 'function') cleanTrash(); } catch (e) {}
-    }, 3600000);
-  } catch (err) {
-    console.error('[init] 初始化失败', err);
-  }
+    setInterval(function () { try { if (typeof cleanTrash === 'function') cleanTrash(); } catch (e) {} }, 3600000);
+  } catch (err) {}
 })();
 
 function handleOwnerSync(cfg) {
-  if (!cfg.autoPull) { console.log('[init] 未开启自动拉取，跳过'); return; }
   var rc = ghRepoConfig('data');
   var dataDir = cfg.dataDir || db.settings.dataDir || 'material-library';
   var indexPath = dataDir + '/index.json';
 
+  console.log('[init] 正在检查云端最新版本...');
+
   ghGetRaw(rc, indexPath).then(function (f) {
     if (!f) {
       if (db.items.length > 0) {
-        console.log('[init] 云端未初始化分片，正在把本地 ' + db.items.length + ' 条素材推送上去...');
         toast('正在初始化云端分片...');
-        ghPush(true).then(function (ok) {
-          if (ok) { console.log('[init] ✅ 首次推送成功'); toast('✅ 云端分片初始化完成'); }
-          else { console.warn('[init] ❌ 首次推送失败'); toast('❌ 云端分片初始化失败，请检查网络或配置'); }
-        });
-      } else {
-        console.log('[init] 云端和本地都是空的');
+        ghPush(true);
       }
     } else {
-      // ★ 核心修改：比对云端 index.json 的 SHA 和本地存储的 SHA
-      //   如果一致，说明没有其他设备修改数据，直接跳过拉取
       var cloudSha = f.sha;
       var localSha = localStorage.getItem('material-library.last-index-sha');
-      
-      var shouldPull = cfg.autoSync || db.items.length === 0;
-      
-      if (shouldPull) {
-        if (localSha && localSha === cloudSha && db.items.length > 0) {
-          console.log('[init] 云端版本未变化，直接使用本地数据，跳过拉取。');
-          // 即使跳过，也更新一下 _lastKnownSha 供后台巡检用
-          if (window._lastKnownSha !== undefined) window._lastKnownSha = cloudSha;
-          return;
-        }
 
-        console.log('[init] 云端数据有更新或本地为空，开始拉取...');
-        ghPull(true).then(function (ok) {
-          if (ok) {
-            console.log('[init] ✅ 自动拉取成功，共 ' + db.items.length + ' 条素材');
-            // 拉取成功后，记录最新的云端 SHA
-            try { localStorage.setItem('material-library.last-index-sha', cloudSha); } catch(e){}
-            setTimeout(function () { try { checkOrphanImages(); } catch (e) {} }, 1000);
-          } else { console.warn('[init] ❌ 自动拉取失败'); }
-        });
-      } else {
-        console.log('[init] 云端有分片，本地有数据，未开启自动拉取，跳过');
+      console.log('[init] 云端最新 SHA:', cloudSha);
+      console.log('[init] 本地记录 SHA:', localSha || '空');
+
+      // ★ 核心逻辑：只要 SHA 不一样，或者本地没有数据，就拉取！
+      // 彻底无视 autoPull 开关，保证刷新必定是最新版。
+      if (localSha && localSha === cloudSha && db.items.length > 0) {
+        console.log('[init] 云端与本地一致，直接使用本地缓存。');
+        if (window._lastKnownSha !== undefined) window._lastKnownSha = cloudSha;
+        return;
       }
+
+      console.log('[init] 发现版本不一致，开始自动拉取！');
+      // 加个提示，让你知道在拉取
+      toast('☁️ 正在同步云端最新数据...');
+      
+      ghPull(true).then(function (ok) {
+        if (ok) {
+          console.log('[init] 自动拉取成功！');
+          localStorage.setItem('material-library.last-index-sha', cloudSha);
+          toast('✅ 云端数据已同步');
+        } else {
+          console.error('[init] 自动拉取失败！');
+          toast('❌ 自动同步失败，请手动拉取');
+        }
+      });
     }
   }).catch(function (e) {
     console.warn('[init] 检查云端状态失败:', e);
-    var shouldPull = cfg.autoSync || db.items.length === 0;
-    if (shouldPull) ghPull(true);
+    toast('⚠️ 检查云端状态失败，请检查网络');
   });
 }
 

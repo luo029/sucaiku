@@ -1,13 +1,7 @@
 // js/github.js · 完整文件
 // ★ 本次修复：
-//   1) ghPush 里 failedShards 记录待重试分片，原来直接引用 store.js 里的私家变量 _dirtyShards 会报 ReferenceError
-//      改为调用官方接口 markShardDirty（store.js 已挂到 window），安全可靠
-//   2) currentYears_helper 改名为 _collectYears，语义更清晰
-//
-// ★ 上轮保留的修复（未动）：
-//   ghPull 拉 trash 时，如果云端还没有 trash.json 但本地回收站非空，
-//   把 _trashSnapshot 设为 ''（sentinel），让下次任何 push 必然把本地 trash 推上去，
-//   否则 _trashSnapshot === 本地 trashJson → push 永远跳过 → 云端永远缺 trash.json
+//   在 ghPush 推送阶段，如果 pushedCount > 0（有分片更新），则强制重写 index.json，
+//   确保 index.json 的 SHA 永远能反映底层数据的变化，解决刷新时拉取不到最新素材的问题。
 
 var STORE_VERSION = 4; var GH_INDEX_PATH = 'index.json'; var GH_TRASH_PATH = 'trash.json';
 var GH_LOG_PATH = 'push-log.json'; var GH_DEVICES_PATH = 'devices.json';
@@ -15,9 +9,6 @@ var SHARD_PREFIX = 'data-'; var FETCH_CONCURRENCY = 8;
 var _shardSnapshots = {}; var _trashSnapshot = ''; var _metaSnapshot = '';
 var _pushInFlight = false; var _pushQueued = false;
 
-// ============================================================
-// 推送/拉取 进度条控制与平滑渲染
-// ============================================================
 var _syncProgress = { active: false, total: 0, done: 0, failed: 0, startAt: 0, visualPct: 0, title: '正在同步' };
 var _syncTicker = null;
 var _syncHideTimer = null;
@@ -72,12 +63,8 @@ function _showSyncProgress(total, title) {
   }, 60);
 }
 
-function _updateSyncProgress() {
-}
-
-function _hideSyncProgress() {
-  _syncProgress.active = false;
-}
+function _updateSyncProgress() {}
+function _hideSyncProgress() { _syncProgress.active = false; }
 
 function _renderSyncProgress() {
   var el = document.getElementById('syncProgressPanel');
@@ -122,9 +109,6 @@ function _renderSyncProgress() {
   el.innerHTML = p1 + p2 + p3 + p4;
 }
 
-// ============================================================
-// 推送限速器
-// ============================================================
 var _pushLimiter = {
   pausedUntil: 0, nextAllowedAt: 0, minInterval: 1000, maxInflight: 1, inflight: 0,
   wait: function () {
@@ -650,22 +634,31 @@ function ghPush(silent, force) {
     var meta = { cats: db.cats, colors: db.colors, sources: db.sources, fixedSource: db.fixedSource, fixedTags: db.fixedTags, imageCategories: db.imageCategories, settings: db.settings, tagColors: db.tagColors || {}, catVersion: db.catVersion || 0 };
     var metaSig = JSON.stringify(meta) + JSON.stringify(yearSummary);
 
-    if (!force && _metaSnapshot === metaSig) { _syncProgress.done++; return; }
+    // ★ 核心修复：只要有任何分片被推送或删除（pushedCount > 0 或 toDelete.length > 0），
+    //   说明底层数据有变动，即使 meta 没变，也必须强制重写 index.json，让它的 SHA 发生改变。
+    var hasShardChanges = pushedCount > 0 || toDelete.length > 0;
+
+    if (!force && _metaSnapshot === metaSig && !hasShardChanges) { _syncProgress.done++; return; }
+    
     return loadIndex(rc).then(function (oldIndex) {
       var oldRev = (oldIndex && oldIndex.data) ? (oldIndex.data._rev || 0) : 0;
       var newIndex = { _rev: oldRev + 1, version: STORE_VERSION, updatedAt: new Date().toISOString(), indexShards: yearSummary, meta: meta };
       var iContent = JSON.stringify(newIndex, null, 2);
       var iSha = existingShaMap[_pathForIndex(cfg)] || null;
       return _pushLimiter.wait().then(function () { return ghPutRaw(rc, _pathForIndex(cfg), utf8ToBase64(iContent), iSha, 'sync index'); })
-        .then(function () { _pushLimiter.done(); _setMeta(metaSig); _syncProgress.done++; })
+        .then(function (res) { 
+            _pushLimiter.done(); 
+            _setMeta(metaSig); 
+            _syncProgress.done++; 
+            if (res && res.content && res.content.sha) {
+               try { localStorage.setItem('material-library.last-index-sha', res.content.sha); } catch(e){}
+            }
+        })
         .catch(function (e) { _pushLimiter.done(); throw e; });
     });
   }).then(function () {
     registerDevice('push');
     appendLog({ action: 'push', status: failedShards.length === 0 ? 'success' : 'error', summary: pushedCount > 0 ? ('推送 ' + pushedCount + ' 个分片' + (failedShards.length ? '，失败 ' + failedShards.length : '')) : '无变化', shards: toPush, itemCount: db.items.length, duration: Date.now() - startTime });
-    // ★ 修复 1：原来直接写 _dirtyShards.add(k)，但 _dirtyShards 是 store.js 的私家变量，
-    //   这里直接引用会抛 ReferenceError，导致"推送失败时反而看不到失败原因"。
-    //   改为调用 store.js 官方对外的 markShardDirty，安全可靠。
     failedShards.forEach(function (k) { if (typeof markShardDirty === 'function') markShardDirty(k); });
 
     _syncProgress.failed = failedShards.length;
@@ -684,7 +677,6 @@ function ghPush(silent, force) {
   }).catch(function (err) {
     console.error('[ghPush] 失败', err);
     appendLog({ action: 'push', status: 'error', summary: '推送失败：' + err.message });
-    // ★ 修复 1（同上）：改用官方接口
     failedShards.forEach(function (k) { if (typeof markShardDirty === 'function') markShardDirty(k); });
     _hideSyncProgress();
     if (err.message && err.message.indexOf('409') >= 0 && !force) {
@@ -706,7 +698,6 @@ function ghPush(silent, force) {
   });
 }
 
-// ★ 修复 2：原函数名 currentYears_helper 语义不清，改为 _collectYears
 function _collectYears(keys) {
   var m = {};
   keys.forEach(function (k) { m[getYearFromKey(k)] = true; });
@@ -843,9 +834,6 @@ function ghPull(silent, pullMore) {
         }
         if (!pullMore) {
           return ghGetRaw(rc, _pathForTrash(cfg)).catch(function () { return null; }).then(function (trashFile) {
-            // ★ 修复1：云端还没有 trash.json 时保留本地回收站，避免被空数组覆盖
-            // ★ 修复2：云端没有 trash.json 但本地非空时，把 _trashSnapshot 设为 ''，
-            //   让下次任何 push 都必然把本地 trash 推上去，否则云端永远缺这份数据
             var trashItems = Array.isArray(db.trash) ? db.trash.slice() : [];
             var trashSnap = JSON.stringify(trashItems);
             var cloudHasTrash = false;
