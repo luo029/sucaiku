@@ -1,5 +1,4 @@
 // js/io.js · 完整文件
-// ★ 本次更新：瘦身。移除了 Readest 相关逻辑（现已移至 js/readest.js）。修复了文件编码导致的乱码问题。
 
 function setZen(on) {
   zenMode = on;
@@ -143,18 +142,28 @@ function handleImportFile(file) {
       } else throw new Error('bad');
 
       var added = 0, skipped = 0, monthsTouched = {};
+      var importTime = Date.now();
+
       incomingItems.forEach(function (i) {
         if (!i || typeof i.text !== 'string') return;
         if (!i.text && (!Array.isArray(i.images) || i.images.length === 0)) return;
         if (i.id && db.items.some(function (x) { return x.id === i.id; })) { skipped++; return; }
+        
         var newItem = {
-          id: i.id || uid(), text: i.text, type: i.type || UNCAT,
-          source: i.source || '', tags: Array.isArray(i.tags) ? Array.from(new Set(i.tags)) : [],
-          images: normalizeImages(i.images), createdAt: i.createdAt || Date.now(), updatedAt: i.updatedAt || undefined
+          id: i.id || uid(), 
+          text: i.text, 
+          type: i.type || UNCAT,
+          source: i.source || '', 
+          tags: Array.isArray(i.tags) ? Array.from(new Set(i.tags)) : [],
+          images: normalizeImages(i.images), 
+          createdAt: importTime, 
+          originalCreatedAt: i.createdAt || undefined, 
+          updatedAt: importTime 
         };
         db.items.push(newItem);
         markItemDirty(newItem);
         if (i.source && db.sources.indexOf(i.source) < 0) db.sources.push(i.source);
+        
         var d = new Date(newItem.createdAt);
         var monthKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
         monthsTouched[monthKey] = (monthsTouched[monthKey] || 0) + 1;
@@ -167,8 +176,8 @@ function handleImportFile(file) {
         db.trash.push({
           id: i.id || uid(), text: i.text, type: i.type || UNCAT,
           source: i.source || '', tags: Array.isArray(i.tags) ? Array.from(new Set(i.tags)) : [],
-          images: normalizeImages(i.images), createdAt: i.createdAt || Date.now(),
-          updatedAt: i.updatedAt || undefined, deletedAt: i.deletedAt || Date.now()
+          images: normalizeImages(i.images), createdAt: importTime, 
+          updatedAt: importTime, deletedAt: importTime
         });
       });
       incomingCats.forEach(function (c) { if (typeof c === 'string' && c.trim() && c !== UNCAT && c !== IMG_TYPE && db.cats.indexOf(c) < 0) db.cats.push(c); });
@@ -187,8 +196,6 @@ function handleImportFile(file) {
           if (typeof idx === 'number' && isFinite(idx) && idx >= 0 && !used.has(idx)) { db.colors[c] = idx; used.add(idx); }
         }
       });
-
-      if (incomingTrash.length > 0 && typeof markTrashDirty === 'function') markTrashDirty();
 
       markNeedNormalize();
       normalize();

@@ -1,5 +1,6 @@
 // js/render.js · 完整文件
-// ★ 本次更新：分类管理面板的圆点增加点击事件，支持修改颜色。
+// ★ 基于你提供的版本：包含分类颜色选择器、来源背景样式、展开长文本等功能。
+// ★ 本次调整：统一了各处的书名号与来源背景样式。
 
 var tagExpanded = false, catExpanded = false, srcExpanded = false;
 var catManagerPage = 1, tagManagerPage = 1;
@@ -101,7 +102,8 @@ function renderSidebar() {
   if (!db.sources.length) srcHtml += '<div class="nav-empty">还没有保存来源</div>';
   else displaySrcs.forEach(function (s) {
     var isFixed = db.fixedSource === s;
-    srcHtml += '<button class="nav-item ' + (currentSource === s ? 'active' : '') + '" data-source="' + esc(s) + '" draggable="false">' + bookIcon + '<span class="nav-name" title="' + esc(s) + '">' + esc(s) + '</span>' + (isFixed ? pinIcon : '') + '<span class="nav-count" style="' + (isFixed ? 'margin-right:2px' : '') + '">' + formatCount(sourceCounts[s] || 0) + '</span><span class="nav-del-btn" data-del-source="' + esc(s) + '" title="删除来源">' + delIcon + '</span></button>';
+    var sDisplay = (s.startsWith('《') || s.startsWith('“')) ? s : '《' + s + '》';
+    srcHtml += '<button class="nav-item ' + (currentSource === s ? 'active' : '') + '" data-source="' + esc(s) + '" draggable="false">' + bookIcon + '<span class="nav-name" title="' + esc(s) + '">' + esc(sDisplay) + '</span>' + (isFixed ? pinIcon : '') + '<span class="nav-count" style="' + (isFixed ? 'margin-right:2px' : '') + '">' + formatCount(sourceCounts[s] || 0) + '</span><span class="nav-del-btn" data-del-source="' + esc(s) + '" title="删除来源">' + delIcon + '</span></button>';
   });
   if (srcHasMore) srcHtml += '<button class="nav-item nav-manage" id="toggleSrcsBtn" style="margin-top:4px; padding:6px 12px; font-size:12px; justify-content:center;">' + (srcExpanded ? '收起来源' : '展开更多来源 (' + (db.sources.length - srcLimit) + ')') + '</button>';
   $('sourceNav').innerHTML = srcHtml;
@@ -135,7 +137,10 @@ function renderTags() {
 
 function renderHeader() {
   var title = currentType === '全部' ? '全部素材' : currentType;
-  if (currentSource !== ALL_SOURCES) title = currentSource + ' · ' + title;
+  if (currentSource !== ALL_SOURCES) {
+    var sDisplay = (currentSource.startsWith('《') || currentSource.startsWith('“')) ? currentSource : '《' + currentSource + '》';
+    title = sDisplay + ' · ' + title;
+  }
   var tagArr = currentTags && currentTags.size > 0 ? Array.from(currentTags) : (currentTag ? [currentTag] : []);
   var maxTags = db.settings.maxTagsInHeader || 3;
   if (tagArr.length > 0) {
@@ -148,7 +153,10 @@ function renderHeader() {
   }
   $('pageTitle').textContent = title;
   var parts = [];
-  if (currentSource !== ALL_SOURCES) parts.push('来自《' + currentSource + '》');
+  if (currentSource !== ALL_SOURCES) {
+    var sDisplay2 = (currentSource.startsWith('《') || currentSource.startsWith('“')) ? currentSource : '《' + currentSource + '》';
+    parts.push('来自 ' + sDisplay2);
+  }
   if (tagArr.length > 0) parts.push('标签 ' + tagArr.join(', '));
   if (currentType !== '全部') parts.push(currentType);
   var loadedCount = db._loadedShardKeys ? db._loadedShardKeys.length : 0, totalCount = db._allShardKeys ? db._allShardKeys.length : 0;
@@ -159,7 +167,7 @@ function renderHeader() {
 function imgCatBadge(img) { return img && img.cat ? '<span class="ci-cat">' + esc(img.cat) + '</span>' : ''; }
 function renderZenBar() {
   var typeTxt = currentType === '全部' ? '全部分类' : currentType;
-  var srcTxt = currentSource === ALL_SOURCES ? '全部来源' : currentSource;
+  var srcTxt = currentSource === ALL_SOURCES ? '全部来源' : ((currentSource.startsWith('《') || currentSource.startsWith('“')) ? currentSource : '《' + currentSource + '》');
   var tagTxt = currentTag ? '#' + currentTag : '全部标签';
   var html = '<div class="zb zen-filter-btn ' + (currentType !== '全部' ? 'active' : '') + '" id="zenTypeBtn">' + esc(typeTxt) + ' <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div><div class="zb zen-filter-btn ' + (currentSource !== ALL_SOURCES ? 'active' : '') + '" id="zenSrcBtn">' + esc(srcTxt) + ' <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div><div class="zb zen-filter-btn ' + (currentTag ? 'active' : '') + '" id="zenTagBtn">' + esc(tagTxt) + ' <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>';
   zenBarEl.innerHTML = html;
@@ -290,7 +298,10 @@ function renderList() {
   var start = (currentPage - 1) * pageSize;
   var pageItems = filtered.slice(start, start + pageSize);
   var terms = getSearchTerms();
+  
+  // 使用用户设置里的折叠阈值，默认 150 字。在设置里改小（比如 50）就会触发图一的折叠
   var collapseLimit = db.settings.collapseLimit || 150;
+  
   if (!pageItems.length) {
     if (!db.items.length) listEl.innerHTML = '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg><p>还没有素材，把喜欢的句子粘到上面吧</p></div>';
     else listEl.innerHTML = '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><p>没有找到匹配的素材</p></div>';
@@ -315,11 +326,16 @@ function renderList() {
       return '<span class="ci"><img src="' + esc(src) + '" alt="" loading="lazy" data-open-img="' + esc(src) + '" data-img-path="' + esc(im.path || '') + '">' + imgCatBadge(im) + '</span>';
     }).join('') + '</div>' : '';
     
-    var dateTitle = '创建：' + fmtFull(i.createdAt) + (i.updatedAt ? '\n更新：' + fmtFull(i.updatedAt) : '');
+    var dateTitle = '入库时间：' + fmtFull(i.createdAt);
+    if (i.originalCreatedAt) dateTitle += '\n原记录时间：' + fmtFull(i.originalCreatedAt);
+    if (i.updatedAt && i.updatedAt !== i.createdAt) dateTitle += '\n更新时间：' + fmtFull(i.updatedAt);
     
+    // ★ 来源标签加灰底圆角背景 (还原图一效果)
     var sourceHtml = '';
     if (i.source) {
-      sourceHtml = '<span class="src src-clickable" data-source="' + esc(i.source) + '" title="点击按此来源筛选" style="font-size:12.5px; color:var(--text-2); background:var(--bg); padding:2px 10px; border-radius:99px; border:1px solid var(--line); display:inline-flex; align-items:center; max-width:50%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">《' + esc(i.source) + '》</span>';
+      var sName = String(i.source);
+      var sDisplay = (sName.startsWith('《') || sName.startsWith('“')) ? sName : '《' + sName + '》';
+      sourceHtml = '<span class="src src-clickable" data-source="' + esc(sName) + '" title="点击按此来源筛选" style="font-size:12.5px; color:var(--text-2); background:var(--bg); padding:2px 10px; border-radius:99px; border:1px solid var(--line); display:inline-flex; align-items:center; max-width:50%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + esc(sDisplay) + '</span>';
     }
 
     var contentHtml = i.text ? '<div class="content ' + contentClass + '">' + getCachedFormat(i, terms, isExpanded) + '</div>' + expandBtn : '';
@@ -457,7 +473,6 @@ function renderCatManager() {
     return '<div class="cat-row"><span class="dot" style="background:' + col.fg + '; cursor:pointer;" data-cat-color="' + esc(c) + '" title="点击设置颜色"></span><input class="cat-name" data-idx="' + idx + '" value="' + esc(c) + '" maxlength="12"><span class="cat-n">' + formatCount(n) + '</span><button class="btn tiny danger" data-cat-del="' + idx + '">删除</button></div>';
   }).join('');
   
-  // ★ 绑定圆点点击事件
   listEl.querySelectorAll('[data-cat-color]').forEach(function (el) {
     el.addEventListener('click', function () {
       openCatColorPicker(el.dataset.catColor);
@@ -470,7 +485,6 @@ function renderCatManager() {
   }
 }
 
-// ★ 新增：分类颜色选择器逻辑
 var _catColorCurrentName = null;
 function openCatColorPicker(catName) {
   _catColorCurrentName = catName;
@@ -494,7 +508,6 @@ function openCatColorPicker(catName) {
   $('tagColorMask').classList.add('show');
 }
 
-// 覆盖保存按钮逻辑
 var oldConfirm = $('tagColorConfirm');
 if (oldConfirm) {
   var newConfirm = oldConfirm.cloneNode(true);
@@ -511,7 +524,6 @@ if (oldConfirm) {
   });
 }
 
-// 覆盖清除按钮逻辑
 var oldClear = $('tagColorClear');
 if (oldClear) {
   var newClear = oldClear.cloneNode(true);
@@ -519,7 +531,7 @@ if (oldClear) {
   newClear.addEventListener('click', function () {
     if (!_catColorCurrentName) return;
     if (db.colors) delete db.colors[_catColorCurrentName];
-    ensureColors(); // 重新生成一个不撞色的
+    ensureColors();
     save(); render();
     $('tagColorMask').classList.remove('show');
     if ($('catManageMask').classList.contains('show')) renderCatManager();
@@ -593,7 +605,10 @@ function renderSourceFilter() {
   var text = $('sourceFilterText'), btn = $('sourceFilterBtn');
   if (!text) return;
   if (currentSource === ALL_SOURCES) { text.textContent = '全部来源'; if (btn) btn.classList.remove('active-filter'); }
-  else { text.textContent = currentSource; if (btn) btn.classList.add('active-filter'); }
+  else {
+    var sDisplay = (currentSource.startsWith('《') || currentSource.startsWith('“')) ? currentSource : '《' + currentSource + '》';
+    text.textContent = sDisplay; if (btn) btn.classList.add('active-filter');
+  }
   if ($('sourceFilterPanel') && !$('sourceFilterPanel').hidden) renderSourceFilterList();
 }
 function renderSourceFilterList() {
@@ -606,7 +621,8 @@ function renderSourceFilterList() {
   var html = '<div class="sp-item ' + (currentSource === ALL_SOURCES ? 'sp-selected' : '') + '" data-pick="__all__"><span class="sp-name">全部来源</span></div>';
   list.forEach(function (s) {
     var isActive = currentSource === s, count = counts[s] || 0;
-    html += '<div class="sp-item ' + (isActive ? 'sp-selected' : '') + '" data-pick="' + esc(s) + '"><span class="sp-name">' + esc(s) + (count ? '<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">' + formatCount(count) + '</span>' : '') + '</span></div>';
+    var sDisplay = (s.startsWith('《') || s.startsWith('“')) ? s : '《' + s + '》';
+    html += '<div class="sp-item ' + (isActive ? 'sp-selected' : '') + '" data-pick="' + esc(s) + '"><span class="sp-name">' + esc(sDisplay) + (count ? '<span style="color:var(--text-3);font-size:12px;font-weight:400;margin-left:6px">' + formatCount(count) + '</span>' : '') + '</span></div>';
   });
   if (!db.sources.length) html = '<div class="sp-empty">还没有保存过来源</div>';
   else if (!list.length && q) html = '<div class="sp-empty">没有匹配的来源</div>';

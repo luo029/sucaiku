@@ -1,8 +1,5 @@
-// js/init.js · 最终破案版
-// ★ 本次改动：
-//   1) 增加了顶部的浮层提示，告诉你拉取到底成没成功。
-//   2) 移除了对 autoPull 开关的依赖，只要填了 Token，启动必定自动检查云端 SHA。
-//   3) 在控制台打印详细的 SHA 对比，方便排查。
+// js/init.js · 完整文件
+// ★ 本次改动：强制每次刷新页面都去云端拉取合并，不再受"本地是否有数据"的限制。
 
 var PUBLIC_OWNER = 'luo029';
 var PUBLIC_REPO = 'sucaiuk_data';
@@ -69,10 +66,7 @@ function checkOrphanImages() {
       title: '发现未保存的图片',
       desc: '有 ' + orphans.length + ' 张图片上传后未保存到素材库。\n\n是否从图床清理这些图片？（取消则在 24 小时后再提醒）',
       isDanger: false,
-      onConfirm: function () {
-        cleaned = true;
-        cleanupOrphanImages(orphans);
-      }
+      onConfirm: function () { cleaned = true; cleanupOrphanImages(orphans); }
     });
 
     var checkTimer = setInterval(function () {
@@ -100,12 +94,8 @@ function cleanupOrphanImages(orphans) {
       var fullPath = rc.path + '/' + o.path;
       return ghGetRaw(rc, fullPath).then(function (file) {
         if (!file) { successPaths.add(o.path); return; }
-        return ghDeleteRaw(rc, fullPath, file.sha, 'cleanup orphan ' + o.path).then(function () {
-          successPaths.add(o.path);
-        });
-      }).catch(function (e) {
-        failPaths.add(o.path);
-      }).then(function () {
+        return ghDeleteRaw(rc, fullPath, file.sha, 'cleanup orphan ' + o.path).then(function () { successPaths.add(o.path); });
+      }).catch(function (e) { failPaths.add(o.path); }).then(function () {
         return new Promise(function (r) { setTimeout(r, 250); });
       });
     });
@@ -117,7 +107,7 @@ function cleanupOrphanImages(orphans) {
       localStorage.setItem(ORPHAN_KEY, JSON.stringify(list));
     } catch (e) {}
     if (successPaths.size > 0) toast('✅ 已清理 ' + successPaths.size + ' 张孤儿图片');
-    if (failPaths.size > 0) toast('⚠️ 还有 ' + failPaths.size + ' 张清理失败');
+    if (failPaths.size > 0) toast('⚠️ 还有 ' + failPaths.size + ' 张清理失败，下次启动再试');
   });
 }
 
@@ -149,8 +139,6 @@ function cleanupOrphanImages(orphans) {
     if (typeof db.catVersion !== 'number') db.catVersion = 0;
 
     loadStore().then(function () {
-      console.log('[init] 本地数据加载完成，共 ' + db.items.length + ' 条素材');
-
       cleanTrash();
       refreshTypeSelect(db.settings.defaultType || db.cats[0] || '');
       setupDropZones();
@@ -165,10 +153,12 @@ function cleanupOrphanImages(orphans) {
       fetchHitokoto();
 
       setTimeout(function () { try { checkExportReminder(); } catch (e) {} }, 3000);
-      setTimeout(function () { try { checkOrphanImages(); } catch (e) {} }, 5000);
+      setTimeout(function () { try { checkOrphanImages(); } catch (e) { console.warn(e); } }, 5000);
 
       setTimeout(function () {
-        if (typeof maybeCreateSnapshot === 'function') maybeCreateSnapshot().catch(function (e) {});
+        if (typeof maybeCreateSnapshot === 'function') {
+          maybeCreateSnapshot().catch(function (e) { console.warn('启动快照失败', e); });
+        }
       }, 8000);
 
       var cfg = loadGH();
@@ -186,55 +176,36 @@ function cleanupOrphanImages(orphans) {
     });
 
     setInterval(function () { try { if (typeof cleanTrash === 'function') cleanTrash(); } catch (e) {} }, 3600000);
-  } catch (err) {}
+  } catch (err) { console.error('[init] 初始化失败', err); }
 })();
 
 function handleOwnerSync(cfg) {
+  if (!cfg.autoPull) { console.log('[init] 未开启自动拉取，跳过'); return; }
   var rc = ghRepoConfig('data');
   var dataDir = cfg.dataDir || db.settings.dataDir || 'material-library';
   var indexPath = dataDir + '/index.json';
-
-  console.log('[init] 正在检查云端最新版本...');
 
   ghGetRaw(rc, indexPath).then(function (f) {
     if (!f) {
       if (db.items.length > 0) {
         toast('正在初始化云端分片...');
-        ghPush(true);
+        ghPush(true).then(function (ok) {
+          if (ok) toast('✅ 云端分片初始化完成');
+        });
       }
     } else {
-      var cloudSha = f.sha;
-      var localSha = localStorage.getItem('material-library.last-index-sha');
-
-      console.log('[init] 云端最新 SHA:', cloudSha);
-      console.log('[init] 本地记录 SHA:', localSha || '空');
-
-      // ★ 核心逻辑：只要 SHA 不一样，或者本地没有数据，就拉取！
-      // 彻底无视 autoPull 开关，保证刷新必定是最新版。
-      if (localSha && localSha === cloudSha && db.items.length > 0) {
-        console.log('[init] 云端与本地一致，直接使用本地缓存。');
-        if (window._lastKnownSha !== undefined) window._lastKnownSha = cloudSha;
-        return;
-      }
-
-      console.log('[init] 发现版本不一致，开始自动拉取！');
-      // 加个提示，让你知道在拉取
-      toast('☁️ 正在同步云端最新数据...');
-      
+      // ★ 核心改动：只要开启了自动拉取，无视本地是否有数据，每次刷新都必须拉取！
+      console.log('[init] 开始检查并拉取云端数据...');
       ghPull(true).then(function (ok) {
         if (ok) {
-          console.log('[init] 自动拉取成功！');
-          localStorage.setItem('material-library.last-index-sha', cloudSha);
-          toast('✅ 云端数据已同步');
-        } else {
-          console.error('[init] 自动拉取失败！');
-          toast('❌ 自动同步失败，请手动拉取');
+          console.log('[init] ✅ 自动拉取成功，共 ' + db.items.length + ' 条素材');
+          setTimeout(function () { try { checkOrphanImages(); } catch (e) {} }, 1000);
         }
       });
     }
   }).catch(function (e) {
     console.warn('[init] 检查云端状态失败:', e);
-    toast('⚠️ 检查云端状态失败，请检查网络');
+    ghPull(true);
   });
 }
 

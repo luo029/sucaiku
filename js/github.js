@@ -1,7 +1,6 @@
 // js/github.js · 完整文件
-// ★ 本次修复：
-//   在 ghPush 推送阶段，如果 pushedCount > 0（有分片更新），则强制重写 index.json，
-//   确保 index.json 的 SHA 永远能反映底层数据的变化，解决刷新时拉取不到最新素材的问题。
+// ★ 本次改动：拉取云端数据时，记录“云端新增”、“冲突”、“本地独有”的详细素材内容。
+//   如果有差异，会弹出一个非常清晰的“同步报告”页面，让用户一目了然。
 
 var STORE_VERSION = 4; var GH_INDEX_PATH = 'index.json'; var GH_TRASH_PATH = 'trash.json';
 var GH_LOG_PATH = 'push-log.json'; var GH_DEVICES_PATH = 'devices.json';
@@ -9,38 +8,34 @@ var SHARD_PREFIX = 'data-'; var FETCH_CONCURRENCY = 8;
 var _shardSnapshots = {}; var _trashSnapshot = ''; var _metaSnapshot = '';
 var _pushInFlight = false; var _pushQueued = false;
 
+// ============================================================
+// ★ 推送/拉取 进度条控制与平滑渲染
+// ============================================================
 var _syncProgress = { active: false, total: 0, done: 0, failed: 0, startAt: 0, visualPct: 0, title: '正在同步' };
 var _syncTicker = null;
 var _syncHideTimer = null;
 
 function _showSyncProgress(total, title) {
   if (!db.settings.showSyncProgress || total <= 0) return;
-
   if (_syncHideTimer) { clearTimeout(_syncHideTimer); _syncHideTimer = null; }
   if (_syncTicker) { clearInterval(_syncTicker); _syncTicker = null; }
-
   _syncProgress = { active: true, total: total, done: 0, failed: 0, startAt: Date.now(), visualPct: 0, title: title || '🔄 正在同步' };
-
   var el = document.getElementById('syncProgressPanel');
   if (el) el.style.opacity = '1';
-
   _renderSyncProgress();
-
+  
   _syncTicker = setInterval(function() {
     var targetPct = _syncProgress.total > 0 ? (_syncProgress.done / _syncProgress.total) * 100 : 0;
     if (_syncProgress.done >= _syncProgress.total) targetPct = 100;
-
     if (_syncProgress.done === 0 && _syncProgress.active) {
       var elapsed = Date.now() - _syncProgress.startAt;
       var fakeTarget = Math.min(15, Math.floor(elapsed / 1000) * 2);
       if (fakeTarget > targetPct) targetPct = fakeTarget;
     }
-
     targetPct = Math.min(100, Math.round(targetPct));
-
     var diff = targetPct - _syncProgress.visualPct;
     if (diff > 0) {
-      var step = Math.min(diff, 2.5);
+      var step = Math.min(diff, 2.5); 
       _syncProgress.visualPct += step;
       if (_syncProgress.visualPct > targetPct) _syncProgress.visualPct = targetPct;
       _renderSyncProgress();
@@ -48,22 +43,17 @@ function _showSyncProgress(total, title) {
       _syncProgress.visualPct = targetPct;
       _renderSyncProgress();
     }
-
     if (!_syncProgress.active && _syncProgress.visualPct >= 100) {
       clearInterval(_syncTicker);
       _syncTicker = null;
       _syncHideTimer = setTimeout(function() {
         var el = document.getElementById('syncProgressPanel');
-        if (el) {
-          el.style.opacity = '0';
-          setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
-        }
+        if (el) { el.style.opacity = '0'; setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 300); }
       }, 1200);
     }
   }, 60);
 }
 
-function _updateSyncProgress() {}
 function _hideSyncProgress() { _syncProgress.active = false; }
 
 function _renderSyncProgress() {
@@ -74,30 +64,20 @@ function _renderSyncProgress() {
     el.style.cssText = 'position:fixed; bottom:16px; right:16px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; box-shadow:var(--sh-2); z-index:9999; width:200px; transition:opacity .3s; backdrop-filter: blur(8px);';
     document.body.appendChild(el);
   }
-
   var pct = _syncProgress.visualPct || 0;
   var elapsed = Math.round((Date.now() - _syncProgress.startAt) / 1000);
   var eta = 0;
   if (_syncProgress.done > 0 && _syncProgress.total > 0) eta = Math.round(elapsed / _syncProgress.done * (_syncProgress.total - _syncProgress.done));
-
   var hasFailed = _syncProgress.failed > 0;
-
-  var barBg = hasFailed
-    ? 'linear-gradient(90deg, #ef4444, #f59e0b, #ef4444)'
-    : 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899, #8b5cf6, #6366f1)';
-
+  var barBg = hasFailed ? 'linear-gradient(90deg, #ef4444, #f59e0b, #ef4444)' : 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899, #8b5cf6, #6366f1)';
+  
   var p1 = '<div style="font-weight:600; font-size:13px; margin-bottom:6px; display:flex; justify-content:space-between;"><span>' + (_syncProgress.title || '🔄 正在同步') + '</span><span style="color:' + (hasFailed ? 'var(--danger)' : 'var(--accent)') + ';">' + Math.round(pct) + '%</span></div>';
-
   var p2 = '<div style="height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-bottom:6px; position:relative;">';
-  p2 += '<div style="position:absolute; top:0; left:0; bottom:0; width:' + pct + '%; background:' + barBg + '; background-size: 200% 100%; border-radius:4px; transition: width 0.1s linear; box-shadow:0 0 6px rgba(99,102,241,0.4); animation: rainbow-flow 2s linear infinite;">';
-  p2 += '</div></div>';
-
+  p2 += '<div style="position:absolute; top:0; left:0; bottom:0; width:' + pct + '%; background:' + barBg + '; background-size: 200% 100%; border-radius:4px; transition: width 0.1s linear; box-shadow:0 0 6px rgba(99,102,241,0.4); animation: rainbow-flow 2s linear infinite;"></div></div>';
   var p3 = '<div style="font-size:11.5px; color:var(--text-3); display:flex; justify-content:space-between;"><span>' + _syncProgress.done + ' / ' + _syncProgress.total + ' 份</span>';
   if (eta > 0 && pct < 100 && !hasFailed) p3 += '<span>剩余约 ' + eta + 's</span>';
   p3 += '</div>';
-
-  var p4 = '';
-  if (hasFailed) p4 = '<div style="font-size:11px; color:var(--danger); margin-top:4px; font-weight:600;">⚠️ 失败 ' + _syncProgress.failed + ' 个</div>';
+  var p4 = hasFailed ? '<div style="font-size:11px; color:var(--danger); margin-top:4px; font-weight:600;">⚠️ 失败 ' + _syncProgress.failed + ' 个</div>' : '';
 
   if (!document.getElementById('syncProgressStyle')) {
     var style = document.createElement('style');
@@ -105,10 +85,12 @@ function _renderSyncProgress() {
     style.innerHTML = '@keyframes rainbow-flow { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }';
     document.head.appendChild(style);
   }
-
   el.innerHTML = p1 + p2 + p3 + p4;
 }
 
+// ============================================================
+// 推送限速器
+// ============================================================
 var _pushLimiter = {
   pausedUntil: 0, nextAllowedAt: 0, minInterval: 1000, maxInflight: 1, inflight: 0,
   wait: function () {
@@ -314,9 +296,7 @@ function buildImageBaseUrl(rc) { if (rc.siteBase) return rc.siteBase.replace(/\/
 function imageUrlFromPath(filepath) { var rc = ghRepoConfig('img'); return encodeURI(buildImageBaseUrl(rc) + '/' + rc.path + '/' + filepath); }
 function imageSrc(im) {
   if (!im) return '';
-  var url = '';
-  if (im.path) url = imageUrlFromPath(im.path);
-  else url = im.url || '';
+  var url = im.path ? imageUrlFromPath(im.path) : (im.url || '');
   if (!/^(https?:|data:image\/|blob:)/i.test(url)) return '';
   return url;
 }
@@ -326,25 +306,19 @@ function normalizeImagePath(p) {
   var s = String(p).trim();
   var qIdx = s.indexOf('?');
   if (qIdx >= 0) s = s.substring(0, qIdx);
-  s = s.replace(/^\/+|\/+$/g, '');
-  return s;
+  return s.replace(/^\/+|\/+$/g, '');
 }
 function imagePathMatches(a, b) {
-  var na = normalizeImagePath(a);
-  var nb = normalizeImagePath(b);
+  var na = normalizeImagePath(a); var nb = normalizeImagePath(b);
   if (!na || !nb) return false;
   if (na === nb) return true;
-  var aParts = na.split('/');
-  var bParts = nb.split('/');
-  var aFn = aParts[aParts.length - 1];
-  var bFn = bParts[bParts.length - 1];
+  var aParts = na.split('/'); var bParts = nb.split('/');
+  var aFn = aParts[aParts.length - 1]; var bFn = bParts[bParts.length - 1];
   if (aFn !== bFn) return false;
-  var aDir = aParts.slice(0, -1).join('/');
-  var bDir = bParts.slice(0, -1).join('/');
+  var aDir = aParts.slice(0, -1).join('/'); var bDir = bParts.slice(0, -1).join('/');
   if (aDir === bDir) return true;
   if (!aDir || !bDir) return true;
-  if (aDir.endsWith('/' + bDir) || bDir.endsWith('/' + aDir)) return true;
-  return false;
+  return aDir.endsWith('/' + bDir) || bDir.endsWith('/' + aDir);
 }
 
 var imgBlobCache = new Map(); var IMG_BLOB_CACHE_MAX = 300;
@@ -366,13 +340,8 @@ function fetchImageBlobUrl(relPath) {
       try { URL.revokeObjectURL(imgBlobCache.get(firstKey)); } catch (e) {}
       imgBlobCache.delete(firstKey);
     }
-    imgBlobCache.set(relPath, objUrl);
-    _imgBlobInflight.delete(relPath);
-    return objUrl;
-  }).catch(function (e) {
-    _imgBlobInflight.delete(relPath);
-    throw e;
-  });
+    imgBlobCache.set(relPath, objUrl); _imgBlobInflight.delete(relPath); return objUrl;
+  }).catch(function (e) { _imgBlobInflight.delete(relPath); throw e; });
   _imgBlobInflight.set(relPath, p);
   return p;
 }
@@ -380,13 +349,8 @@ function clearImageBlobCache(relPath) {
   if (!relPath) return;
   var norm = normalizeImagePath(relPath);
   var keysToDelete = [];
-  imgBlobCache.forEach(function (_, k) {
-    if (normalizeImagePath(k) === norm) keysToDelete.push(k);
-  });
-  keysToDelete.forEach(function (k) {
-    try { URL.revokeObjectURL(imgBlobCache.get(k)); } catch (e) {}
-    imgBlobCache.delete(k);
-  });
+  imgBlobCache.forEach(function (_, k) { if (normalizeImagePath(k) === norm) keysToDelete.push(k); });
+  keysToDelete.forEach(function (k) { try { URL.revokeObjectURL(imgBlobCache.get(k)); } catch (e) {} imgBlobCache.delete(k); });
 }
 
 function ghSetStatus(msg) { var el = $('ghStatus'); if (el) el.textContent = msg || ''; }
@@ -433,6 +397,58 @@ function registerDevice(pushOrPull) {
 }
 function loadDevices() { try { return JSON.parse(localStorage.getItem('material-library.devices-cache') || '{}'); } catch (e) { return {}; } }
 
+// ★ 新增：弹窗展示同步明细
+function showSyncReport(details) {
+  var newItems = details.filter(function(d){ return d.type === 'new'; });
+  var conflicts = details.filter(function(d){ return d.type === 'conflict-local' || d.type === 'conflict-remote'; });
+  var locals = details.filter(function(d){ return d.type === 'local-only'; });
+  
+  if (newItems.length === 0 && conflicts.length === 0 && locals.length === 0) return;
+  
+  var html = '<div class="modal-mask show" id="syncReportMask" style="z-index:1000;"><div class="modal" style="max-width: 500px;">'
+    + '<div class="modal-icon export-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85 1 6.54 2.66L21 8"/><path d="M21 3v5h-5"/></svg></div>'
+    + '<h3 class="modal-title">云端同步报告</h3>'
+    + '<p class="modal-desc">本地与云端数据已合并，以下是本次同步的差异明细：</p>'
+    + '<div style="max-height: 50vh; overflow-y: auto; margin-bottom: 20px; font-size: 13.5px;">';
+    
+  if (newItems.length > 0) {
+    html += '<div style="margin-bottom:12px;"><b style="color:var(--accent);">📥 云端新增素材（' + newItems.length + ' 条）</b>';
+    newItems.slice(0, 10).forEach(function(i){
+      html += '<div style="padding:6px 10px; margin-top:4px; background:var(--bg); border-radius:6px; border-left:3px solid var(--accent);">' + esc(i.text.slice(0, 50)) + (i.text.length > 50 ? '...' : '') + '</div>';
+    });
+    if (newItems.length > 10) html += '<div style="font-size:12px; color:var(--text-3); margin-top:4px;">还有 ' + (newItems.length - 10) + ' 条未显示...</div>';
+    html += '</div>';
+  }
+  
+  if (conflicts.length > 0) {
+    html += '<div style="margin-bottom:12px;"><b style="color:var(--danger);">⚠️ 冲突素材（' + conflicts.length + ' 条）</b>';
+    conflicts.slice(0, 10).forEach(function(i){
+      var winText = i.type === 'conflict-remote' ? '（已采用云端版本）' : '（已采用本地版本）';
+      html += '<div style="padding:6px 10px; margin-top:4px; background:var(--danger-soft); border-radius:6px; border-left:3px solid var(--danger);">' 
+        + '<div style="font-size:11px; color:var(--danger); margin-bottom:2px;">' + winText + '</div>'
+        + esc(i.text.slice(0, 50)) + (i.text.length > 50 ? '...' : '') + '</div>';
+    });
+    if (conflicts.length > 10) html += '<div style="font-size:12px; color:var(--text-3); margin-top:4px;">还有 ' + (conflicts.length - 10) + ' 条未显示...</div>';
+    html += '</div>';
+  }
+  
+  if (locals.length > 0) {
+    html += '<div style="margin-bottom:12px;"><b style="color:#059669;">📤 本地独有（' + locals.length + ' 条）</b><span style="font-size:12px; color:var(--text-3);">（等待下次推送）</span>';
+    locals.slice(0, 5).forEach(function(i){
+      html += '<div style="padding:6px 10px; margin-top:4px; background:var(--bg); border-radius:6px; border-left:3px solid #059669;">' + esc(i.text.slice(0, 50)) + (i.text.length > 50 ? '...' : '') + '</div>';
+    });
+    if (locals.length > 5) html += '<div style="font-size:12px; color:var(--text-3); margin-top:4px;">还有 ' + (locals.length - 5) + ' 条未显示...</div>';
+    html += '</div>';
+  }
+  
+  html += '</div><div class="modal-actions"><button class="primary" id="syncReportConfirm" style="width:100%;">我知道了，继续使用</button></div></div></div>';
+  
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('syncReportConfirm').addEventListener('click', function() {
+    document.getElementById('syncReportMask').remove();
+  });
+}
+
 function _pushOneShard(rc, cfg, key, items, existingShaMap) {
   var retryCount = Number(db.settings.pushRetryCount) || 3;
   var retryDelay = (Number(db.settings.pushRetryDelaySec) || 2) * 1000;
@@ -450,38 +466,31 @@ function _pushOneShard(rc, cfg, key, items, existingShaMap) {
       var attempt = 0;
 
       function tryOnce() {
-        return _pushLimiter.wait().then(function () {
-          return ghPutRaw(rc, path, b64, existingSha, 'sync ' + path);
-        }).then(function () {
-          _pushLimiter.done();
-          return true;
-        }).catch(function (e) {
-          _pushLimiter.done();
-          if (e.status === 429 || e.status === 403) {
-            var waitMs = e.retryAfterMs || (60 * 1000);
-            _pushLimiter.pause(waitMs);
-            attempt++;
-            if (attempt <= retryCount) return tryOnce();
-            return false;
-          }
-          var isConflict = e.message && (e.message.indexOf('422') >= 0 || e.message.indexOf('409') >= 0);
-          if (isConflict) {
-            return ghGetRaw(rc, path).then(function (file) {
-              if (file && file.sha && file.sha !== existingSha) {
-                existingSha = file.sha;
-                return tryOnce();
-              }
-              throw e;
-            }).catch(function () {
-              attempt++;
-              if (attempt <= retryCount) return new Promise(function (r) { setTimeout(r, retryDelay); }).then(tryOnce);
+        return _pushLimiter.wait().then(function () { return ghPutRaw(rc, path, b64, existingSha, 'sync ' + path); })
+          .then(function () { _pushLimiter.done(); return true; })
+          .catch(function (e) {
+            _pushLimiter.done();
+            if (e.status === 429 || e.status === 403) {
+              var waitMs = e.retryAfterMs || (60 * 1000);
+              _pushLimiter.pause(waitMs); attempt++;
+              if (attempt <= retryCount) return tryOnce();
               return false;
-            });
-          }
-          attempt++;
-          if (attempt <= retryCount) return new Promise(function (r) { setTimeout(r, retryDelay); }).then(tryOnce);
-          return false;
-        });
+            }
+            var isConflict = e.message && (e.message.indexOf('422') >= 0 || e.message.indexOf('409') >= 0);
+            if (isConflict) {
+              return ghGetRaw(rc, path).then(function (file) {
+                if (file && file.sha && file.sha !== existingSha) { existingSha = file.sha; return tryOnce(); }
+                throw e;
+              }).catch(function () {
+                attempt++;
+                if (attempt <= retryCount) return new Promise(function (r) { setTimeout(r, retryDelay); }).then(tryOnce);
+                return false;
+              });
+            }
+            attempt++;
+            if (attempt <= retryCount) return new Promise(function (r) { setTimeout(r, retryDelay); }).then(tryOnce);
+            return false;
+          });
       }
       return tryOnce().then(function (ok) { if (!ok) allOk = false; });
     });
@@ -497,9 +506,8 @@ function _pushOneShard(rc, cfg, key, items, existingShaMap) {
       var partNum = m[1] ? parseInt(m[1], 10) : 1;
       if (partNum > partsLen) {
         staleChain = staleChain.then(function () {
-          return _pushLimiter.wait().then(function () {
-            return ghDeleteRaw(rc, path, existingShaMap[path], 'cleanup stale part ' + path);
-          }).then(function () { _pushLimiter.done(); }).catch(function (e) { _pushLimiter.done(); console.warn('清理旧 part 失败', path, e); });
+          return _pushLimiter.wait().then(function () { return ghDeleteRaw(rc, path, existingShaMap[path], 'cleanup stale part ' + path); })
+            .then(function () { _pushLimiter.done(); }).catch(function (e) { _pushLimiter.done(); console.warn('清理旧 part 失败', path, e); });
         });
       }
     });
@@ -551,14 +559,9 @@ function ghPush(silent, force) {
       return _pushOneShard(rc, cfg, k, groups[k], existingShaMap).then(function (result) {
         if (result.ok) {
           _setSnap(k, JSON.stringify(groups[k]));
-          pushedCount++;
-          yearIndexDirty[getYearFromKey(k)] = true;
-          shardPartsMap[k] = result.parts || 1;
-          _syncProgress.done++;
-        } else {
-          failedShards.push(k);
-          _syncProgress.failed++;
-        }
+          pushedCount++; yearIndexDirty[getYearFromKey(k)] = true;
+          shardPartsMap[k] = result.parts || 1; _syncProgress.done++;
+        } else { failedShards.push(k); _syncProgress.failed++; }
         return pushWorker();
       });
     }
@@ -626,7 +629,7 @@ function ghPush(silent, force) {
     return yearChain.then(function () { return existingShaMap; });
   }).then(function (existingShaMap) {
     var yearSummary = {};
-    Object.keys(_collectYears(currentKeys)).forEach(function (cy) {
+    Object.keys(currentYears_helper(currentKeys)).forEach(function (cy) {
       var count = 0; var shardCount = 0;
       currentKeys.forEach(function (ck) { if (getYearFromKey(ck) === cy) { count += groups[ck].length; shardCount++; } });
       yearSummary[cy] = { count: count, shardCount: shardCount };
@@ -634,32 +637,20 @@ function ghPush(silent, force) {
     var meta = { cats: db.cats, colors: db.colors, sources: db.sources, fixedSource: db.fixedSource, fixedTags: db.fixedTags, imageCategories: db.imageCategories, settings: db.settings, tagColors: db.tagColors || {}, catVersion: db.catVersion || 0 };
     var metaSig = JSON.stringify(meta) + JSON.stringify(yearSummary);
 
-    // ★ 核心修复：只要有任何分片被推送或删除（pushedCount > 0 或 toDelete.length > 0），
-    //   说明底层数据有变动，即使 meta 没变，也必须强制重写 index.json，让它的 SHA 发生改变。
-    var hasShardChanges = pushedCount > 0 || toDelete.length > 0;
-
-    if (!force && _metaSnapshot === metaSig && !hasShardChanges) { _syncProgress.done++; return; }
-    
+    if (!force && _metaSnapshot === metaSig) { _syncProgress.done++; return; }
     return loadIndex(rc).then(function (oldIndex) {
       var oldRev = (oldIndex && oldIndex.data) ? (oldIndex.data._rev || 0) : 0;
       var newIndex = { _rev: oldRev + 1, version: STORE_VERSION, updatedAt: new Date().toISOString(), indexShards: yearSummary, meta: meta };
       var iContent = JSON.stringify(newIndex, null, 2);
       var iSha = existingShaMap[_pathForIndex(cfg)] || null;
       return _pushLimiter.wait().then(function () { return ghPutRaw(rc, _pathForIndex(cfg), utf8ToBase64(iContent), iSha, 'sync index'); })
-        .then(function (res) { 
-            _pushLimiter.done(); 
-            _setMeta(metaSig); 
-            _syncProgress.done++; 
-            if (res && res.content && res.content.sha) {
-               try { localStorage.setItem('material-library.last-index-sha', res.content.sha); } catch(e){}
-            }
-        })
+        .then(function () { _pushLimiter.done(); _setMeta(metaSig); _syncProgress.done++; })
         .catch(function (e) { _pushLimiter.done(); throw e; });
     });
   }).then(function () {
     registerDevice('push');
     appendLog({ action: 'push', status: failedShards.length === 0 ? 'success' : 'error', summary: pushedCount > 0 ? ('推送 ' + pushedCount + ' 个分片' + (failedShards.length ? '，失败 ' + failedShards.length : '')) : '无变化', shards: toPush, itemCount: db.items.length, duration: Date.now() - startTime });
-    failedShards.forEach(function (k) { if (typeof markShardDirty === 'function') markShardDirty(k); });
+    failedShards.forEach(function (k) { _dirtyShards.add(k); });
 
     _syncProgress.failed = failedShards.length;
     _syncProgress.done = _syncProgress.total;
@@ -668,6 +659,9 @@ function ghPush(silent, force) {
     if (!silent) {
       if (failedShards.length === 0) { toast(pushedCount > 0 ? ('已同步 ' + pushedCount + ' 个分片') : '无变化'); ghSetStatus('推送成功'); }
       else { toast('成功 ' + pushedCount + '，失败 ' + failedShards.length + '（下次自动重试）'); ghSetStatus('部分失败'); }
+    } else {
+      if (failedShards.length === 0 && pushedCount > 0) toast('✅ 已自动同步至云端');
+      else if (failedShards.length > 0) toast('⚠️ 自动同步失败 ' + failedShards.length + ' 个分片，稍后重试');
     }
 
     if (db.settings.snapshotEnabled && typeof maybeCreateSnapshot === 'function') {
@@ -677,7 +671,7 @@ function ghPush(silent, force) {
   }).catch(function (err) {
     console.error('[ghPush] 失败', err);
     appendLog({ action: 'push', status: 'error', summary: '推送失败：' + err.message });
-    failedShards.forEach(function (k) { if (typeof markShardDirty === 'function') markShardDirty(k); });
+    failedShards.forEach(function (k) { _dirtyShards.add(k); });
     _hideSyncProgress();
     if (err.message && err.message.indexOf('409') >= 0 && !force) {
       if (silent) return false;
@@ -685,6 +679,7 @@ function ghPush(silent, force) {
       return false;
     }
     if (!silent) toast('推送失败：' + err.message);
+    else toast('⚠️ 自动推送失败：' + (err.message || '网络错误'));
     ghSetStatus('推送失败：' + err.message);
     return false;
   }).then(function (result) {
@@ -698,7 +693,7 @@ function ghPush(silent, force) {
   });
 }
 
-function _collectYears(keys) {
+function currentYears_helper(keys) {
   var m = {};
   keys.forEach(function (k) { m[getYearFromKey(k)] = true; });
   return m;
@@ -759,16 +754,12 @@ function ghPull(silent, pullMore) {
       var _pullDoneCount = 0;
       _showSyncProgress(toLoad.length + 3, '🔄 正在拉取数据');
       var _pullProgressUpdater = setInterval(function() {
-        if (_syncProgress && _syncProgress.active) {
-          _syncProgress.done = Math.min(_syncProgress.total, _pullDoneCount + 1);
-        }
+        if (_syncProgress && _syncProgress.active) { _syncProgress.done = Math.min(_syncProgress.total, _pullDoneCount + 1); }
       }, 200);
 
       return fetchShardsBatch(rc, toLoad, allShards, function() {
         _pullDoneCount++;
-        if (_syncProgress && _syncProgress.active) {
-          _syncProgress.done = Math.min(_syncProgress.total, _pullDoneCount + 1);
-        }
+        if (_syncProgress && _syncProgress.active) { _syncProgress.done = Math.min(_syncProgress.total, _pullDoneCount + 1); }
       }).then(function (dataMap) {
         clearInterval(_pullProgressUpdater);
         if (_syncProgress && _syncProgress.active) {
@@ -788,9 +779,10 @@ function ghPull(silent, pullMore) {
           var isRemoteFirst = (conflictMode === 'remote' || conflictMode === 'force-remote' || conflictMode === 'forceRemote' || conflictMode === 'cloud');
           var isLocalFirst = (conflictMode === 'local' || conflictMode === 'force-local' || conflictMode === 'forceLocal');
 
+          var conflictDetails = []; // ★ 记录差异明细
+
           if (isRemoteFirst) {
             db.items = dedupeItems(newItems);
-            if (!silent) console.log('[ghPull] 冲突处理：云端优先');
           } else if (isLocalFirst) {
             var localMap2 = {};
             db.items.forEach(function (it) { if (it && it.id) localMap2[it.id] = it; });
@@ -800,11 +792,11 @@ function ghPull(silent, pullMore) {
               if (!remote || !remote.id) return;
               remoteIds2.add(remote.id);
               var local = localMap2[remote.id];
-              if (!local) { merged2.push(remote); } else { merged2.push(local); }
+              if (!local) { merged2.push(remote); conflictDetails.push({ id: remote.id, type: 'new', text: remote.text || '' }); } 
+              else { merged2.push(local); }
             });
             db.items.forEach(function (local) { if (local && local.id && !remoteIds2.has(local.id)) { merged2.push(local); } });
             db.items = dedupeItems(merged2);
-            if (!silent) console.log('[ghPull] 冲突处理：本地优先');
           } else {
             var trashedIds = new Set((db.trash || []).map(function (t) { return t.id; }));
             var localMap = {};
@@ -812,40 +804,44 @@ function ghPull(silent, pullMore) {
             var remoteIds = new Set();
             var merged = [];
             var keptLocal = 0, keptRemote = 0, conflicts = 0;
+            
             newItems.forEach(function (remote) {
               if (!remote || !remote.id) return;
               if (trashedIds.has(remote.id)) { keptLocal++; return; }
               remoteIds.add(remote.id);
               var local = localMap[remote.id];
-              if (!local) { merged.push(remote); keptRemote++; return; }
+              if (!local) { 
+                merged.push(remote); keptRemote++; 
+                conflictDetails.push({ id: remote.id, type: 'new', text: remote.text || '' });
+                return; 
+              }
               var lt = local.updatedAt || local.createdAt || 0;
               var rt = remote.updatedAt || remote.createdAt || 0;
-              if (rt > lt) { merged.push(remote); keptRemote++; conflicts++; }
-              else if (lt > rt) { merged.push(local); keptLocal++; conflicts++; }
+              if (rt > lt) { 
+                merged.push(remote); keptRemote++; conflicts++; 
+                conflictDetails.push({ id: remote.id, type: 'conflict-remote', text: remote.text || '' });
+              }
+              else if (lt > rt) { 
+                merged.push(local); keptLocal++; conflicts++; 
+                conflictDetails.push({ id: local.id, type: 'conflict-local', text: local.text || '' });
+              }
               else { merged.push(remote); }
             });
-            db.items.forEach(function (local) { if (local && local.id && !remoteIds.has(local.id) && !trashedIds.has(local.id)) { merged.push(local); keptLocal++; } });
+            db.items.forEach(function (local) { 
+              if (local && local.id && !remoteIds.has(local.id) && !trashedIds.has(local.id)) { 
+                merged.push(local); keptLocal++; 
+                conflictDetails.push({ id: local.id, type: 'local-only', text: local.text || '' });
+              } 
+            });
             db.items = dedupeItems(merged);
-            if (conflicts > 0) {
-              console.log('[ghPull] 冲突合并：本地保留 ' + keptLocal + '，远程采用 ' + keptRemote + '，冲突 ' + conflicts + ' 条');
-              if (!silent) toast('检测到 ' + conflicts + ' 条冲突，已按修改时间合并');
-            }
+            if (conflicts > 0) console.log('[ghPull] 冲突合并：本地保留 ' + keptLocal + '，远程采用 ' + keptRemote + '，冲突 ' + conflicts + ' 条');
+            window._lastSyncDetails = conflictDetails; // ★ 保存明细
           }
         }
         if (!pullMore) {
           return ghGetRaw(rc, _pathForTrash(cfg)).catch(function () { return null; }).then(function (trashFile) {
-            var trashItems = Array.isArray(db.trash) ? db.trash.slice() : [];
-            var trashSnap = JSON.stringify(trashItems);
-            var cloudHasTrash = false;
-            if (trashFile) {
-              try {
-                var td = JSON.parse(base64ToUtf8(trashFile.content.replace(/\n/g, '')));
-                trashItems = td.trash || [];
-                trashSnap = JSON.stringify(trashItems);
-                cloudHasTrash = true;
-              } catch (e) {}
-            }
-            var trashSnapForPush = (!cloudHasTrash && trashItems.length > 0) ? '' : trashSnap;
+            var trashItems = []; var trashSnap = '';
+            if (trashFile) { try { var td = JSON.parse(base64ToUtf8(trashFile.content.replace(/\n/g, ''))); trashItems = td.trash || []; trashSnap = JSON.stringify(trashItems); } catch (e) {} }
             return ghGetRaw(rc, _pathForDevices(cfg)).catch(function () { return null; }).then(function (devFile) {
               if (devFile) { try { var dd = JSON.parse(base64ToUtf8(devFile.content.replace(/\n/g, ''))); if (dd.devices) localStorage.setItem('material-library.devices-cache', JSON.stringify(dd.devices)); } catch (e) {} }
               return ghGetRaw(rc, _pathForLog(cfg)).catch(function () { return null; }).then(function (logFile) {
@@ -853,12 +849,23 @@ function ghPull(silent, pullMore) {
                 suppressPush = true;
                 applyLoadedData({ items: dedupeItems(db.items), cats: meta.cats || DEFAULT_CATS, colors: meta.colors || {}, sources: meta.sources || [], fixedSource: meta.fixedSource || '', fixedTags: meta.fixedTags || [], imageCategories: meta.imageCategories || DEFAULT_IMG_CATS, settings: meta.settings || {}, tagColors: meta.tagColors || {}, trash: trashItems, _rev: index._rev || 0, catVersion: meta.catVersion || 0, _loadedShardKeys: db._loadedShardKeys, _allShardKeys: db._allShardKeys });
                 _shardSnapshots = newSnapshots; db._shardSnapshots = {}; Object.keys(newSnapshots).forEach(function (k) { db._shardSnapshots[k] = newSnapshots[k]; });
-                _trashSnapshot = trashSnapForPush; db._trashSnapshot = trashSnapForPush;
+                _trashSnapshot = trashSnap; db._trashSnapshot = trashSnap;
                 _metaSnapshot = JSON.stringify(meta) + JSON.stringify(yearSummary); db._metaSnapshot = _metaSnapshot;
                 if (typeof markSyncDirty === 'function') markSyncDirty();
                 db.items.forEach(function (i) { i.images = normalizeImages(i.images); });
                 saveSettings(); markNeedNormalize(); normalize();
-                return saveImmediate().then(function () { suppressPush = false; registerDevice('pull'); render(); updateTinyUsageUI(); applySettingsToUI(); if (!silent) toast('已拉取 ' + db.items.length + ' 条素材'); ghSetStatus('拉取成功'); return true; });
+                return saveImmediate().then(function () { 
+                  suppressPush = false; registerDevice('pull'); render(); updateTinyUsageUI(); applySettingsToUI(); 
+                  
+                  // ★ 核心：判断是否有差异，有的话弹报告
+                  if (window._lastSyncDetails && window._lastSyncDetails.length > 0) {
+                    showSyncReport(window._lastSyncDetails);
+                    window._lastSyncDetails = null;
+                  } else if (!silent) {
+                    toast('已拉取 ' + db.items.length + ' 条素材，无变化');
+                  }
+                  ghSetStatus('拉取成功'); return true; 
+                });
               });
             });
           });
@@ -1044,7 +1051,8 @@ function checkCloudUpdate() {
       _lastKnownSha = currentSha;
       var hasUnsaved = (inputEl && inputEl.value.trim()) || editingId;
       if (hasUnsaved) { toast('⚠️ 云端已更新，你有未保存内容'); return; }
-      if (confirm('⚠️ 检测到另一台设备更新了数据！点击确定刷新。')) window.location.reload();
+      // 不再强刷页面，改为自动静默拉取
+      ghPull(true);
     }
     _lastKnownSha = currentSha;
   }).catch(function () {});
