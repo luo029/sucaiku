@@ -1,6 +1,6 @@
 // js/bind-core.js · 完整文件
-// ★ 本次改动：删掉搜索输入防抖回调里多余的 clearFilterCache()
-//   getFilteredItems() 的 cacheKey 已包含 keyword，关键词变了 key 自然会变，不需要手动清
+// ★ 本次改动：优化了“固定来源/标签”的交互体验。
+//   点击右侧的小图钉固定后，会立刻同步到输入框，让你肉眼立刻看到变化，不再产生“固定没生效”的错觉。
 
 addBtn.addEventListener('click', addOrUpdate);
 cancelBtn.addEventListener('click', cancelEdit);
@@ -84,6 +84,7 @@ pendingImgsEl.addEventListener('click', function (e) {
   if (idx >= 0 && idx < pendingImages.length) { pendingImages.splice(idx, 1); renderPendingImgs(); }
 });
 
+// ★ 优化：点击小图钉固定来源时，同步更新输入框
 $('sourceToggle').addEventListener('click', function (e) {
   e.stopPropagation(); closeTagPanel();
   if (sourcePanel.hidden) openSourcePanel(); else closeSourcePanel();
@@ -92,12 +93,25 @@ spSearch.addEventListener('input', function () { renderSourcePanelList(spSearch.
 spSearch.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSourcePanel(); });
 spList.addEventListener('click', function (e) {
   var pinEl = e.target.closest('.sp-pin');
-  if (pinEl) { e.stopPropagation(); setFixedSource(pinEl.dataset.pin); return; }
+  if (pinEl) { 
+    e.stopPropagation(); 
+    var s = pinEl.dataset.pin;
+    setFixedSource(s); 
+    // ★ 补丁：如果固定了，立刻显示在输入框里；如果取消了，且输入框是它，就清空
+    if (db.fixedSource === s) {
+      sourceEl.value = s;
+    } else if (sourceEl.value === s) {
+      sourceEl.value = '';
+    }
+    updateSourcePickerUI();
+    return; 
+  }
   var item = e.target.closest('.sp-item'); if (!item) return;
   var s = item.dataset.pick || '';
   sourceEl.value = s; updateSourcePickerUI(); closeSourcePanel(); sourceEl.focus();
 });
 
+// ★ 优化：点击小图钉固定标签时，同步更新输入框
 $('tagToggle').addEventListener('click', function (e) {
   e.stopPropagation(); closeSourcePanel();
   if (tagPanel.hidden) openTagPanel(); else closeTagPanel();
@@ -106,7 +120,20 @@ tpSearch.addEventListener('input', function () { renderTagPanelList(tpSearch.val
 tpSearch.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeTagPanel(); });
 tpList.addEventListener('click', function (e) {
   var pinEl = e.target.closest('.sp-pin');
-  if (pinEl) { e.stopPropagation(); toggleFixedTag(pinEl.dataset.pin); return; }
+  if (pinEl) { 
+    e.stopPropagation(); 
+    var t = pinEl.dataset.pin;
+    toggleFixedTag(t); 
+    // ★ 补丁：固定标签后，直接把标签加进输入框
+    var cur = tagsEl.value.trim().split(/[,，\s]+/).filter(Boolean);
+    if (db.fixedTags.indexOf(t) >= 0) {
+      if (cur.indexOf(t) < 0) { cur.push(t); tagsEl.value = cur.join(', '); }
+    } else {
+      if (cur.indexOf(t) >= 0) { cur = cur.filter(function(x){return x !== t;}); tagsEl.value = cur.join(', '); }
+    }
+    updateTagPickerUI();
+    return; 
+  }
   var item = e.target.closest('.sp-item'); if (!item) return;
   var t = item.dataset.pick || '';
   var cur = tagsEl.value.trim().split(/[,，\s]+/).filter(Boolean);
@@ -152,7 +179,6 @@ searchEl.addEventListener('input', function () {
   clearTimeout(searchDebounceTimer);
   var delay = Math.max(80, Math.min(500, Number(db.settings.searchDebounceMs) || 180));
   searchDebounceTimer = setTimeout(function () {
-    // ★ 无需 clearFilterCache()，getFilteredItems 的 cacheKey 已包含 keyword
     keyword = searchEl.value; currentPage = 1; renderList(); renderHeader();
   }, delay);
 });
