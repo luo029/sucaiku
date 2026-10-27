@@ -1,5 +1,47 @@
 // js/tools.js · 完整文件
-// 【改动】1) checkDuplicates 加超量抽检提示  2) 其他保持
+// ★ 本次改动：
+//   1. 引入 LCS 算法实现红绿差异高亮。
+//   2. 弹窗界面左右分栏，更直观。
+//   3. 生成“就地编辑”所需的基础结构。
+
+function getDiffHtml(str1, str2) {
+  var MAX_LEN = 800;
+  var s1 = str1.slice(0, MAX_LEN);
+  var s2 = str2.slice(0, MAX_LEN);
+  var suffix1 = str1.length > MAX_LEN ? '...' : '';
+  var suffix2 = str2.length > MAX_LEN ? '...' : '';
+  
+  var n = s1.length, m = s2.length;
+  if (n === 0 && m === 0) return { html1: '', html2: '' };
+  if (n === 0) return { html1: '', html2: '<ins>' + esc(s2) + '</ins>' + suffix2 };
+  if (m === 0) return { html1: '<del>' + esc(s1) + '</del>' + suffix1, html2: '' };
+
+  var dp = [];
+  for (var i = 0; i <= n; i++) dp[i] = new Array(m + 1).fill(0);
+  for (var i = 1; i <= n; i++) {
+    for (var j = 1; j <= m; j++) {
+      if (s1[i - 1] === s2[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1;
+      else dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+
+  var res1 = [], res2 = [];
+  var i = n, j = m;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && s1[i - 1] === s2[j - 1]) {
+      res1.push(esc(s1[i - 1])); res2.push(esc(s2[j - 1])); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      res2.push('<ins>' + esc(s2[j - 1]) + '</ins>'); j--;
+    } else if (i > 0 && (j === 0 || dp[i][j - 1] < dp[i - 1][j])) {
+      res1.push('<del>' + esc(s1[i - 1]) + '</del>'); i--;
+    }
+  }
+
+  function mergeTags(arr) {
+    return arr.reverse().join('').replace(/<\/ins><ins>/g, '').replace(/<\/del><del>/g, '');
+  }
+  return { html1: mergeTags(res1) + suffix1, html2: mergeTags(res2) + suffix2 };
+}
 
 function calculateSimilarity(str1, str2) {
   if (!str1 || !str2) return 0;
@@ -19,6 +61,24 @@ function calculateSimilarity(str1, str2) {
 function checkDuplicates() {
   const listEl = $('dupList');
   listEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-3);font-size:14px;">正在检测相似素材…</div>';
+  
+  if (!document.getElementById('diffStyles')) {
+    var st = document.createElement('style');
+    st.id = 'diffStyles';
+    st.innerHTML = `
+      .diff-panel { display: flex; gap: 12px; margin-top: 10px; }
+      @media (max-width: 600px) { .diff-panel { flex-direction: column; } }
+      .diff-col { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; position: relative; font-size: 14px; line-height: 1.6; color: var(--text-2); white-space: pre-wrap; word-break: break-all; }
+      .diff-col del { text-decoration: line-through; background: rgba(239, 68, 68, 0.15); color: var(--danger); padding: 1px 2px; border-radius: 3px; }
+      .diff-col ins { text-decoration: none; background: rgba(16, 185, 129, 0.15); color: #10b981; padding: 1px 2px; border-radius: 3px; }
+      .diff-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
+      .diff-col:hover .diff-actions { opacity: 1; }
+      @media (hover: none) { .diff-actions { opacity: 1; } }
+      .diff-badge { font-size: 11px; font-weight: bold; color: var(--text-3); margin-bottom: 8px; display: inline-block; }
+    `;
+    document.head.appendChild(st);
+  }
+
   setTimeout(() => {
     const items = db.items.filter(i => i.text && i.text.trim());
     const exactMap = new Map();
@@ -74,7 +134,6 @@ function checkDuplicates() {
       }
     }
 
-    // ★ 超量提示
     var noticeHtml = '';
     if (items.length > MAX_ITEMS_FOR_LOOP) {
       noticeHtml = '<div style="padding:10px 12px; background:var(--accent-soft); color:var(--accent); border-radius:8px; font-size:13px; margin-bottom:12px;">⚠️ 当前 ' + items.length + ' 条素材超过 ' + MAX_ITEMS_FOR_LOOP + ' 条，仅对前 ' + MAX_ITEMS_FOR_LOOP + ' 条做了相似度检测（完全重复依然全量检查）。</div>';
@@ -85,9 +144,28 @@ function checkDuplicates() {
     } else {
       pairs.sort((a, b) => b.sim - a.sim);
       const truncated = pairs.length >= MAX_PAIRS;
-      listEl.innerHTML = noticeHtml + pairs.map(p => {
+      
+      listEl.innerHTML = noticeHtml + pairs.map((p, index) => {
         const percent = Math.round(p.sim * 100);
-        return '<div class="dup-pair"><div class="dup-percent">相似度 ' + percent + '%</div><div class="dup-text">' + esc(p.item1.text) + '</div><div class="dup-text">' + esc(p.item2.text) + '</div><div class="dup-actions"><button class="btn tiny danger" data-del-dup="' + p.item2.id + '">删除下方</button><button class="btn tiny danger" data-del-dup="' + p.item1.id + '">删除上方</button></div></div>';
+        const diff = getDiffHtml(p.item1.text, p.item2.text);
+        
+        return '<div class="dup-pair" style="padding: 16px; margin-bottom: 16px; border-radius: 12px;">' + 
+          '<div class="dup-percent" style="margin-bottom: 12px;"><span>相似度 ' + percent + '%</span> <span style="font-size:12px;font-weight:normal;color:var(--text-3)">红底删除线为缺失，绿底为新增</span></div>' +
+          
+          '<div class="diff-panel" id="diffPanel_' + index + '">' +
+            '<div class="diff-col" data-diff-index="' + index + '" data-item-id="' + p.item1.id + '">' +
+              '<div class="diff-actions"><button class="btn tiny" data-inline-edit>编辑</button><button class="btn tiny danger" data-del-dup="' + p.item1.id + '">删除</button></div>' +
+              '<div class="diff-badge">版本 A</div>' +
+              '<div class="diff-content">' + diff.html1 + '</div>' +
+            '</div>' +
+            
+            '<div class="diff-col" data-diff-index="' + index + '" data-item-id="' + p.item2.id + '">' +
+              '<div class="diff-actions"><button class="btn tiny" data-inline-edit>编辑</button><button class="btn tiny danger" data-del-dup="' + p.item2.id + '">删除</button></div>' +
+              '<div class="diff-badge">版本 B</div>' +
+              '<div class="diff-content">' + diff.html2 + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
       }).join('') + (truncated ? '<div style="text-align:center;padding:12px;color:var(--text-3);font-size:13px;">仅显示前 ' + MAX_PAIRS + ' 对，清理后可再次检测</div>' : '');
     }
     $('dupMask').classList.add('show');

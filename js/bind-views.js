@@ -1,5 +1,5 @@
 // js/bind-views.js · 完整文件
-// ★ 本次更新：移除了底部的 importNoteBtn 和 noteFileInput 绑定（已移入 js/readest.js）。
+// ★ 本次改动：新增了查重弹窗的“就地编辑”逻辑。
 
 var safeBind = function (id, event, fn) { var el = document.getElementById(id); if (el) el.addEventListener(event, fn); };
 
@@ -144,7 +144,69 @@ safeBind('randomMask', 'click', function (e) { if (e.target === $('randomMask'))
 safeBind('menuDupBtn', 'click', checkDuplicates);
 safeBind('dupCloseBtn', 'click', function () { $('dupMask').classList.remove('show'); });
 safeBind('dupMask', 'click', function (e) { if (e.target === $('dupMask')) $('dupMask').classList.remove('show'); });
-safeBind('dupList', 'click', function (e) { var btn = e.target.closest('[data-del-dup]'); if (btn) { moveToTrash([btn.dataset.delDup]); save(); render(); toast('已移入回收站'); checkDuplicates(); } });
+
+// ★ 接管查重弹窗点击事件
+safeBind('dupList', 'click', function (e) { 
+  // 1. 删除逻辑
+  var delBtn = e.target.closest('[data-del-dup]'); 
+  if (delBtn) { 
+    moveToTrash([delBtn.dataset.delDup]); save(); render(); toast('已移入回收站'); checkDuplicates(); 
+    return;
+  }
+  
+  // 2. 就地编辑逻辑
+  var editBtn = e.target.closest('[data-inline-edit]');
+  if (editBtn) {
+    var col = editBtn.closest('.diff-col');
+    if (!col || col.querySelector('textarea')) return; // 已经在编辑中
+    
+    var itemId = col.dataset.itemId;
+    var item = db.items.find(function(i) { return i.id === itemId; });
+    if (!item) return;
+    
+    // 备份原 HTML
+    var originalHtml = col.innerHTML;
+    
+    // 构造编辑界面
+    col.innerHTML = '<div class="diff-badge">' + (editBtn.closest('.diff-col').dataset.itemId === itemId ? '编辑中' : '') + '</div>' +
+      '<textarea class="modal-input" style="width:100%; height:120px; margin-top:8px; font-size:14px; line-height:1.6; resize:vertical;" spellcheck="false"></textarea>' +
+      '<div style="margin-top:8px; display:flex; gap:8px; justify-content:flex-end;">' +
+        '<button class="btn tiny" data-cancel-edit>取消</button>' +
+        '<button class="btn tiny primary" data-save-edit>保存</button>' +
+      '</div>';
+      
+    var textarea = col.querySelector('textarea');
+    textarea.value = item.text;
+    textarea.focus();
+    
+    // 取消
+    col.querySelector('[data-cancel-edit]').addEventListener('click', function(e2) {
+      e2.stopPropagation();
+      col.innerHTML = originalHtml;
+    });
+    
+    // 保存
+    col.querySelector('[data-save-edit]').addEventListener('click', function(e2) {
+      e2.stopPropagation();
+      var newText = textarea.value.trim();
+      if (!newText) { toast('内容不能为空'); return; }
+      
+      var oldCopy = JSON.parse(JSON.stringify(item));
+      item.text = newText;
+      item.updatedAt = Date.now();
+      markItemDirty(item);
+      if (typeof _indexUpdateItem === 'function') _indexUpdateItem(oldCopy, item);
+      
+      save();
+      render();
+      toast('已保存修改');
+      
+      // 重新计算查重结果，刷新弹窗
+      checkDuplicates();
+    });
+  }
+});
+
 safeBind('menuStatsBtn', 'click', openStats);
 safeBind('statsCloseBtn', 'click', function () { $('statsMask').classList.remove('show'); });
 safeBind('statsMask', 'click', function (e) { if (e.target === $('statsMask')) $('statsMask').classList.remove('show'); });
@@ -181,18 +243,12 @@ safeBind('imgMgrSelectBtn', 'click', function () { imgMgrSelectMode = !imgMgrSel
 safeBind('imgMgrBatchExit', 'click', function () { exitImgMgrSelectMode(); });
 
 safeBind('imgMgrSelectAllBtn', 'click', function () {
-  if (typeof window.getImgMgrFilteredFiles !== 'function') {
-    toast('图床模块未就绪，请刷新页面');
-    return;
-  }
+  if (typeof window.getImgMgrFilteredFiles !== 'function') { toast('图床模块未就绪，请刷新页面'); return; }
   var files = window.getImgMgrFilteredFiles() || [];
   if (!files.length) return;
   var allSel = files.every(function (f) { return imgMgrSelectedIds.has(f.relPath); });
-  if (allSel) {
-    files.forEach(function (f) { imgMgrSelectedIds.delete(f.relPath); });
-  } else {
-    files.forEach(function (f) { imgMgrSelectedIds.add(f.relPath); });
-  }
+  if (allSel) { files.forEach(function (f) { imgMgrSelectedIds.delete(f.relPath); }); }
+  else { files.forEach(function (f) { imgMgrSelectedIds.add(f.relPath); }); }
   renderImgMgrUI();
 });
 
@@ -240,9 +296,7 @@ safeBind('imgMgrBatchDelBtn', 'click', function () {
     try {
       var idx = 0; async function worker() { while (idx < toDelete.length) { var i = idx++; await deleteOne(toDelete[i]); await new Promise(function (r) { setTimeout(r, 200); }); } }
       await Promise.all(Array.from({ length: Math.min(3, toDelete.length) }, function () { return worker(); }));
-      if (typeof clearImageBlobCache === 'function') {
-        toDelete.forEach(function (f) { clearImageBlobCache(f.relPath); });
-      }
+      if (typeof clearImageBlobCache === 'function') { toDelete.forEach(function (f) { clearImageBlobCache(f.relPath); }); }
       var affected = new Set();
       db.items.forEach(function (item) { if (item.images) { var before = item.images.length; item.images = item.images.filter(function (im) { if (!im.path) return true; return !toDelete.some(function (f) { return imagePathMatches(im.path, f.relPath); }); }); if (item.images.length !== before) { affected.add(item.id); markItemDirty(item); } } });
       if (affected.size > 0) { db.items = db.items.filter(function (i) { if (!affected.has(i.id)) return true; return i.text || (i.images && i.images.length > 0); }); markIndexDirty(); save(); render(); }
