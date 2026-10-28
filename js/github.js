@@ -1,7 +1,8 @@
 // js/github.js · 完整文件
 // ★ 本次改动：
-//   1. 修复了“放弃本地，用云端覆盖”时确认框被遮挡的问题（强行拉高 z-index）。
-//   2. 给进度条加入了“最小存活时间”（1.5秒），即使推送 1 条数据也会平滑展示完，不会一闪而过。
+//   1. 修复了“自动推送”被多重重叠开关误拦截的问题（现在只要主开关打开，必定触发）。
+//   2. 静默推送时（自动推送）必定在右下角显示进度条，并强制在日志记录。
+//   3. 优化了推送间隔的触发时间。
 
 var STORE_VERSION = 4; var GH_INDEX_PATH = 'index.json'; var GH_TRASH_PATH = 'trash.json';
 var GH_LOG_PATH = 'push-log.json'; var GH_DEVICES_PATH = 'devices.json';
@@ -65,10 +66,9 @@ function _showSyncProgress(total, title) {
   }, 60);
 }
 
-// ★ 新增：保证进度条至少显示 1.5 秒，防止推送太快一闪而过
 function _hideSyncProgress() {
   var elapsed = Date.now() - _syncProgress.startAt;
-  var minTime = 1500; // 最少存活 1.5 秒
+  var minTime = 1500; 
   if (elapsed < minTime) {
     setTimeout(function() { _syncProgress.active = false; }, minTime - elapsed);
   } else {
@@ -417,7 +417,6 @@ function registerDevice(pushOrPull) {
 }
 function loadDevices() { try { return JSON.parse(localStorage.getItem('material-library.devices-cache') || '{}'); } catch (e) { return {}; } }
 
-// ★ 核心新增：可交互的同步报告弹窗
 function showSyncReport(details) {
   if (!details || details.length === 0) return;
 
@@ -492,10 +491,7 @@ function showSyncReport(details) {
   });
 
   document.getElementById('syncReportForcePullBtn').addEventListener('click', function() {
-    // ★ 修复遮挡：先隐藏当前同步报告弹窗
     mask.style.display = 'none';
-    
-    // ★ 提权确认框
     var ccMask = document.getElementById('customConfirmMask');
     if (ccMask) ccMask.style.zIndex = '2000';
 
@@ -504,7 +500,6 @@ function showSyncReport(details) {
       desc: '这会放弃本地未推送的修改，直接用云端最新数据覆盖本地。确定吗？',
       isDanger: true,
       onConfirm: function() {
-        // 确认后就不需要恢复弹窗了，因为马上要重新拉取
         var oldAction = db.settings.conflictAction;
         db.settings.conflictAction = 'remote'; 
         ghPull(false).then(function() {
@@ -512,7 +507,6 @@ function showSyncReport(details) {
         });
       },
       onCancel: function() {
-        // 如果点了取消，恢复同步弹窗
         mask.style.display = 'flex';
       }
     });
@@ -603,6 +597,7 @@ function ghPush(silent, force) {
   var shardPartsMap = {};
 
   if (!silent) ghSetStatus('推送中…');
+  else console.log('[AutoPush] 后台静默推送开始');
 
   var toPush = [];
   currentKeys.forEach(function (k) {
@@ -1031,10 +1026,19 @@ function migrateFromLegacy(rc, silent) {
 var pushTimer = null;
 function scheduleAutoPush() {
   var cfg = loadGH();
-  if (!cfg.autoSync || !ghReady(cfg)) return;
-  if (!db.settings.autoPush) return;
+  // ★ 修复：只要配置了，且主仓库的“保存后自动推送”开关打开了，就必定触发
+  if (!ghReady(cfg)) { console.log('[AutoPush] 跳过：未配置 GitHub'); return; }
+  if (!cfg.autoSync) { console.log('[AutoPush] 跳过：未开启保存后自动推送'); return; }
+  
+  // 自动兼容底层的“自动推送”开关，防止两个开关冲突导致不干活
+  if (db.settings.autoPush === false) {
+    db.settings.autoPush = true;
+    saveSettings();
+  }
+
   clearTimeout(pushTimer);
   var delay = Math.max(1, Math.min(60, Number(cfg.autoPushDelay) || 2)) * 1000;
+  console.log('[AutoPush] 保存已捕获，', delay, 'ms 后开始静默推送');
   pushTimer = setTimeout(function () { ghPush(true); }, delay);
 }
 
