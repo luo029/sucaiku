@@ -1,6 +1,7 @@
 // js/github.js · 完整文件
-// ★ 本次改动：拉取云端数据时，记录“云端新增”、“冲突”、“本地独有”的详细素材内容。
-//   如果有差异，会弹出一个非常清晰的“同步报告”页面，让用户一目了然。
+// ★ 本次改动：
+//   1. 修复了“放弃本地，用云端覆盖”时确认框被遮挡的问题（强行拉高 z-index）。
+//   2. 给进度条加入了“最小存活时间”（1.5秒），即使推送 1 条数据也会平滑展示完，不会一闪而过。
 
 var STORE_VERSION = 4; var GH_INDEX_PATH = 'index.json'; var GH_TRASH_PATH = 'trash.json';
 var GH_LOG_PATH = 'push-log.json'; var GH_DEVICES_PATH = 'devices.json';
@@ -19,20 +20,26 @@ function _showSyncProgress(total, title) {
   if (!db.settings.showSyncProgress || total <= 0) return;
   if (_syncHideTimer) { clearTimeout(_syncHideTimer); _syncHideTimer = null; }
   if (_syncTicker) { clearInterval(_syncTicker); _syncTicker = null; }
+  
   _syncProgress = { active: true, total: total, done: 0, failed: 0, startAt: Date.now(), visualPct: 0, title: title || '🔄 正在同步' };
+  
   var el = document.getElementById('syncProgressPanel');
   if (el) el.style.opacity = '1';
+  
   _renderSyncProgress();
   
   _syncTicker = setInterval(function() {
     var targetPct = _syncProgress.total > 0 ? (_syncProgress.done / _syncProgress.total) * 100 : 0;
     if (_syncProgress.done >= _syncProgress.total) targetPct = 100;
+    
     if (_syncProgress.done === 0 && _syncProgress.active) {
       var elapsed = Date.now() - _syncProgress.startAt;
       var fakeTarget = Math.min(15, Math.floor(elapsed / 1000) * 2);
       if (fakeTarget > targetPct) targetPct = fakeTarget;
     }
+    
     targetPct = Math.min(100, Math.round(targetPct));
+    
     var diff = targetPct - _syncProgress.visualPct;
     if (diff > 0) {
       var step = Math.min(diff, 2.5); 
@@ -43,18 +50,31 @@ function _showSyncProgress(total, title) {
       _syncProgress.visualPct = targetPct;
       _renderSyncProgress();
     }
+    
     if (!_syncProgress.active && _syncProgress.visualPct >= 100) {
       clearInterval(_syncTicker);
       _syncTicker = null;
       _syncHideTimer = setTimeout(function() {
         var el = document.getElementById('syncProgressPanel');
-        if (el) { el.style.opacity = '0'; setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 300); }
+        if (el) {
+          el.style.opacity = '0';
+          setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+        }
       }, 1200);
     }
   }, 60);
 }
 
-function _hideSyncProgress() { _syncProgress.active = false; }
+// ★ 新增：保证进度条至少显示 1.5 秒，防止推送太快一闪而过
+function _hideSyncProgress() {
+  var elapsed = Date.now() - _syncProgress.startAt;
+  var minTime = 1500; // 最少存活 1.5 秒
+  if (elapsed < minTime) {
+    setTimeout(function() { _syncProgress.active = false; }, minTime - elapsed);
+  } else {
+    _syncProgress.active = false;
+  }
+}
 
 function _renderSyncProgress() {
   var el = document.getElementById('syncProgressPanel');
@@ -397,55 +417,105 @@ function registerDevice(pushOrPull) {
 }
 function loadDevices() { try { return JSON.parse(localStorage.getItem('material-library.devices-cache') || '{}'); } catch (e) { return {}; } }
 
-// ★ 新增：弹窗展示同步明细
+// ★ 核心新增：可交互的同步报告弹窗
 function showSyncReport(details) {
-  var newItems = details.filter(function(d){ return d.type === 'new'; });
-  var conflicts = details.filter(function(d){ return d.type === 'conflict-local' || d.type === 'conflict-remote'; });
-  var locals = details.filter(function(d){ return d.type === 'local-only'; });
-  
-  if (newItems.length === 0 && conflicts.length === 0 && locals.length === 0) return;
-  
+  if (!details || details.length === 0) return;
+
   var html = '<div class="modal-mask show" id="syncReportMask" style="z-index:1000;"><div class="modal" style="max-width: 500px;">'
     + '<div class="modal-icon export-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85 1 6.54 2.66L21 8"/><path d="M21 3v5h-5"/></svg></div>'
     + '<h3 class="modal-title">云端同步报告</h3>'
-    + '<p class="modal-desc">本地与云端数据已合并，以下是本次同步的差异明细：</p>'
-    + '<div style="max-height: 50vh; overflow-y: auto; margin-bottom: 20px; font-size: 13.5px;">';
-    
-  if (newItems.length > 0) {
-    html += '<div style="margin-bottom:12px;"><b style="color:var(--accent);">📥 云端新增素材（' + newItems.length + ' 条）</b>';
-    newItems.slice(0, 10).forEach(function(i){
-      html += '<div style="padding:6px 10px; margin-top:4px; background:var(--bg); border-radius:6px; border-left:3px solid var(--accent);">' + esc(i.text.slice(0, 50)) + (i.text.length > 50 ? '...' : '') + '</div>';
-    });
-    if (newItems.length > 10) html += '<div style="font-size:12px; color:var(--text-3); margin-top:4px;">还有 ' + (newItems.length - 10) + ' 条未显示...</div>';
-    html += '</div>';
-  }
-  
-  if (conflicts.length > 0) {
-    html += '<div style="margin-bottom:12px;"><b style="color:var(--danger);">⚠️ 冲突素材（' + conflicts.length + ' 条）</b>';
-    conflicts.slice(0, 10).forEach(function(i){
-      var winText = i.type === 'conflict-remote' ? '（已采用云端版本）' : '（已采用本地版本）';
-      html += '<div style="padding:6px 10px; margin-top:4px; background:var(--danger-soft); border-radius:6px; border-left:3px solid var(--danger);">' 
-        + '<div style="font-size:11px; color:var(--danger); margin-bottom:2px;">' + winText + '</div>'
-        + esc(i.text.slice(0, 50)) + (i.text.length > 50 ? '...' : '') + '</div>';
-    });
-    if (conflicts.length > 10) html += '<div style="font-size:12px; color:var(--text-3); margin-top:4px;">还有 ' + (conflicts.length - 10) + ' 条未显示...</div>';
-    html += '</div>';
-  }
-  
-  if (locals.length > 0) {
-    html += '<div style="margin-bottom:12px;"><b style="color:#059669;">📤 本地独有（' + locals.length + ' 条）</b><span style="font-size:12px; color:var(--text-3);">（等待下次推送）</span>';
-    locals.slice(0, 5).forEach(function(i){
-      html += '<div style="padding:6px 10px; margin-top:4px; background:var(--bg); border-radius:6px; border-left:3px solid #059669;">' + esc(i.text.slice(0, 50)) + (i.text.length > 50 ? '...' : '') + '</div>';
-    });
-    if (locals.length > 5) html += '<div style="font-size:12px; color:var(--text-3); margin-top:4px;">还有 ' + (locals.length - 5) + ' 条未显示...</div>';
-    html += '</div>';
-  }
-  
-  html += '</div><div class="modal-actions"><button class="primary" id="syncReportConfirm" style="width:100%;">我知道了，继续使用</button></div></div></div>';
-  
+    + '<p class="modal-desc">本地与云端数据已合并，以下是差异明细：</p>'
+    + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:0 4px;">'
+    +   '<label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="syncReportSelectAll" style="width:16px; height:16px; accent-color:var(--accent);" checked> 全选</label>'
+    +   '<button class="btn tiny danger" id="syncReportDelBtn">删除选中</button>'
+    + '</div>'
+    + '<div style="max-height: 45vh; overflow-y: auto; margin-bottom: 20px; font-size: 13.5px;" id="syncReportList">';
+
+  details.forEach(function(d) {
+    var color, label;
+    if (d.type === 'new') { color = 'var(--accent)'; label = '云端新增'; }
+    else if (d.type === 'conflict-remote') { color = '#f59e0b'; label = '冲突(采用云端)'; }
+    else if (d.type === 'conflict-local') { color = '#f59e0b'; label = '冲突(采用本地)'; }
+    else if (d.type === 'local-only') { color = '#10b981'; label = '本地独有(未推送)'; }
+
+    html += '<label style="display:flex; align-items:flex-start; gap:10px; padding:10px; margin-bottom:8px; background:var(--bg); border-radius:8px; border-left:3px solid ' + color + '; cursor:pointer; transition:all 0.15s;">'
+      + '<input type="checkbox" class="sync-report-check" data-id="' + d.id + '" checked style="margin-top:4px; width:16px; height:16px; accent-color:var(--accent); flex-shrink:0;">'
+      + '<div style="flex:1; min-width:0;">'
+      +   '<div style="font-size:11px; color:' + color + '; margin-bottom:4px; font-weight:bold;">' + label + '</div>'
+      +   '<div style="word-break:break-word; color:var(--text-2); line-height:1.5;">' + esc(d.text) + '</div>'
+      + '</div>'
+      + '</label>';
+  });
+
+  html += '</div>'
+    + '<div class="modal-actions" style="flex-direction:column; gap:10px;">'
+    +   '<button class="primary" id="syncReportConfirm" style="width:100%;">我知道了，继续使用</button>'
+    +   '<div style="display:flex; gap:10px; width:100%;">'
+    +     '<button class="btn danger" id="syncReportForcePullBtn" style="flex:1; font-size:12.5px;">放弃本地，用云端覆盖</button>'
+    +   '</div>'
+    + '</div>'
+    + '</div></div>';
+
   document.body.insertAdjacentHTML('beforeend', html);
+  var mask = document.getElementById('syncReportMask');
+  
+  var checkAll = document.getElementById('syncReportSelectAll');
+  var checkboxes = mask.querySelectorAll('.sync-report-check');
+
+  checkAll.addEventListener('change', function() {
+    checkboxes.forEach(function(cb) { cb.checked = checkAll.checked; });
+  });
+
+  document.getElementById('syncReportDelBtn').addEventListener('click', function() {
+    var toDel = [];
+    checkboxes.forEach(function(cb) { if (cb.checked) toDel.push(cb.dataset.id); });
+    if (toDel.length === 0) { toast('没有选中任何项'); return; }
+    
+    window.showCustomConfirm({
+      title: '删除选中项',
+      desc: '确定要彻底删除这 ' + toDel.length + ' 条数据吗？这也会同步从云端删除。',
+      isDanger: true,
+      onConfirm: function() {
+        var set = new Set(toDel);
+        db.items = db.items.filter(function(i) { return !set.has(i.id); });
+        markAllShardsDirty();
+        save(); render();
+        toast('已删除选中数据');
+        mask.remove();
+        if (typeof ghPush === 'function') ghPush(false, true);
+      }
+    });
+  });
+
   document.getElementById('syncReportConfirm').addEventListener('click', function() {
-    document.getElementById('syncReportMask').remove();
+    mask.remove();
+  });
+
+  document.getElementById('syncReportForcePullBtn').addEventListener('click', function() {
+    // ★ 修复遮挡：先隐藏当前同步报告弹窗
+    mask.style.display = 'none';
+    
+    // ★ 提权确认框
+    var ccMask = document.getElementById('customConfirmMask');
+    if (ccMask) ccMask.style.zIndex = '2000';
+
+    window.showCustomConfirm({
+      title: '云端覆盖本地',
+      desc: '这会放弃本地未推送的修改，直接用云端最新数据覆盖本地。确定吗？',
+      isDanger: true,
+      onConfirm: function() {
+        // 确认后就不需要恢复弹窗了，因为马上要重新拉取
+        var oldAction = db.settings.conflictAction;
+        db.settings.conflictAction = 'remote'; 
+        ghPull(false).then(function() {
+          db.settings.conflictAction = oldAction;
+        });
+      },
+      onCancel: function() {
+        // 如果点了取消，恢复同步弹窗
+        mask.style.display = 'flex';
+      }
+    });
   });
 }
 
@@ -779,7 +849,7 @@ function ghPull(silent, pullMore) {
           var isRemoteFirst = (conflictMode === 'remote' || conflictMode === 'force-remote' || conflictMode === 'forceRemote' || conflictMode === 'cloud');
           var isLocalFirst = (conflictMode === 'local' || conflictMode === 'force-local' || conflictMode === 'forceLocal');
 
-          var conflictDetails = []; // ★ 记录差异明细
+          var conflictDetails = [];
 
           if (isRemoteFirst) {
             db.items = dedupeItems(newItems);
@@ -835,7 +905,7 @@ function ghPull(silent, pullMore) {
             });
             db.items = dedupeItems(merged);
             if (conflicts > 0) console.log('[ghPull] 冲突合并：本地保留 ' + keptLocal + '，远程采用 ' + keptRemote + '，冲突 ' + conflicts + ' 条');
-            window._lastSyncDetails = conflictDetails; // ★ 保存明细
+            window._lastSyncDetails = conflictDetails;
           }
         }
         if (!pullMore) {
@@ -857,7 +927,6 @@ function ghPull(silent, pullMore) {
                 return saveImmediate().then(function () { 
                   suppressPush = false; registerDevice('pull'); render(); updateTinyUsageUI(); applySettingsToUI(); 
                   
-                  // ★ 核心：判断是否有差异，有的话弹报告
                   if (window._lastSyncDetails && window._lastSyncDetails.length > 0) {
                     showSyncReport(window._lastSyncDetails);
                     window._lastSyncDetails = null;
@@ -1051,7 +1120,6 @@ function checkCloudUpdate() {
       _lastKnownSha = currentSha;
       var hasUnsaved = (inputEl && inputEl.value.trim()) || editingId;
       if (hasUnsaved) { toast('⚠️ 云端已更新，你有未保存内容'); return; }
-      // 不再强刷页面，改为自动静默拉取
       ghPull(true);
     }
     _lastKnownSha = currentSha;
@@ -1089,3 +1157,4 @@ window.ghTest = ghTest; window.fillGHForm = fillGHForm; window.collectGHForm = c
 window.restartSyncTimer = restartSyncTimer; window.checkCloudUpdate = checkCloudUpdate;
 window.appendLog = appendLog; window.loadLogs = loadLogs;
 window.loadDevices = loadDevices; window.registerDevice = registerDevice;
+window.showSyncReport = showSyncReport;
