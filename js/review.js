@@ -1,7 +1,36 @@
 // js/review.js · 完整文件
-// ★ 本次修复：彻底解除 textarea 的 flex 限制，同时将字数统计和快捷键提示重新纳入常规文档流（去除绝对定位），让它们跟着文字滚动到最底部。
+// ★ 回退到带米黄纸张背景、卡片边框的 UI 版本，保留【展开全文】的精准测量修复。
 
 (function() {
+  // 注入合并弹窗的专属 CSS（米黄纸张复古版）
+  var mergeStyles = ''
+    + '<style>'
+    + '#rvMergeOverlay { display:none; position:fixed; inset:0; z-index:900; background:rgba(10,8,6,0.65); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:20px; }'
+    + '.rv-merge-box { width:600px; max-width:100%; max-height:85vh; background:#fdf9ec; border-radius:16px; border:1px solid #ecc5c5; box-shadow:0 24px 64px rgba(0,0,0,0.4); display:flex; flex-direction:column; overflow:hidden; }'
+    + '.rv-merge-header { padding:24px 28px 20px; border-bottom:1px dashed #d4a59a; display:flex; justify-content:space-between; align-items:flex-end; }'
+    + '.rv-merge-title { margin:0; font-size:22px; color:#b92b27; font-weight:800; letter-spacing:2px; }'
+    + '.rv-merge-subtitle { font-size:13px; color:#8e7962; margin-top:6px; }'
+    + '.rv-merge-list { flex:1; overflow-y:auto; padding:20px 28px; display:flex; flex-direction:column; gap:12px; scrollbar-width:thin; scrollbar-color:#d4a59a transparent; }'
+    + '.rv-merge-list::-webkit-scrollbar { width:6px; }'
+    + '.rv-merge-list::-webkit-scrollbar-thumb { background:#d4a59a; border-radius:3px; }'
+    + '.rv-merge-card { display:flex; gap:14px; padding:16px; background:#fff; border:1px solid #e6dccb; border-radius:12px; cursor:pointer; transition:all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); position:relative; }'
+    + '.rv-merge-card:hover { border-color:#b92b27; box-shadow:0 4px 12px rgba(185,43,39,0.08); transform:translateY(-1px); }'
+    + '.rv-merge-card.selected { border-color:#b92b27; background:#fdf0f0; box-shadow:0 0 0 1px #b92b27; }'
+    + '.rv-merge-checkbox { margin-top:4px; width:18px; height:18px; accent-color:#b92b27; cursor:pointer; flex-shrink:0; pointer-events:none; }'
+    + '.rv-merge-content { flex:1; min-width:0; font-size:15px; color:#3e2723; line-height:1.6; word-break:break-word; }'
+    + '.rv-merge-text { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }'
+    + '.rv-merge-text.expanded { display:block; -webkit-line-clamp:unset; overflow:visible; }'
+    + '.rv-merge-expand { display:none; font-size:12.5px; color:#b92b27; cursor:pointer; margin-top:6px; font-weight:bold; user-select:none; }'
+    + '.rv-merge-expand:hover { text-decoration:underline; }'
+    + '.rv-merge-footer { padding:16px 28px; border-top:1px dashed #d4a59a; display:flex; justify-content:flex-end; gap:12px; background:rgba(0,0,0,0.02); }'
+    + '.rv-merge-btn { padding:10px 24px; border-radius:8px; font-size:15px; cursor:pointer; font-family:inherit; border:1px solid transparent; font-weight:bold; letter-spacing:1px; transition:all 0.2s; }'
+    + '.rv-merge-btn.cancel { background:#fff; border-color:#d4a59a; color:#8e7962; }'
+    + '.rv-merge-btn.cancel:hover { background:#f4eee0; border-color:#b92b27; color:#b92b27; }'
+    + '.rv-merge-btn.confirm { background:#b92b27; color:#fff; border-color:#8a1f1c; box-shadow:0 4px 12px rgba(185,43,39,0.3); }'
+    + '.rv-merge-btn.confirm:hover { background:#c9302c; transform:translateY(-1px); }'
+    + '</style>';
+  document.head.insertAdjacentHTML('beforeend', mergeStyles);
+
   var reviewHTML = ''
     + '<div class="review-mask" id="reviewMask"><div class="review-paper" id="reviewPaper">'
     + '<div class="review-custom-overlay" id="rvCustomOverlay"><div class="review-custom-panel" id="rvCustomPanel">'
@@ -19,41 +48,35 @@
     + '<div class="review-main">'
     + '<div class="review-header"><div class="review-title">今日奏折 <span class="review-stamp" id="rvStamp">御览</span><button class="review-settings-btn" id="rvSettingsBtn">⚙ 陈设</button></div><div class="review-progress"><span id="reviewProgress">剩 0 条</span><button class="review-close-btn" id="rvCloseBtn" title="退出批阅 (Esc)">✕</button></div></div>'
     + '<div class="review-body" id="rvBody"><textarea class="review-textarea" id="reviewText" placeholder="在此写下批注..."></textarea><div class="review-imgs" id="reviewImgs"></div><div class="rv-countdown" id="rvCountdown"></div><div class="rv-corner-stamp" id="rvCornerStamp">准奏</div><div class="rv-word-count" id="rvWordCount"></div><div class="rv-shortcut-hint" id="rvShortcutHint"></div></div>'
-    + '<div class="review-footer"><button class="review-btn undo-btn" id="rvUndoBtn">撤销</button><button class="review-btn skip" id="rvSkipBtn">留中</button><button class="review-btn del" id="rvDelBtn">焚毁</button><button class="review-btn approve" id="rvApproveBtn">准奏</button></div>'
+    + '<div class="review-footer"><button class="review-btn undo-btn" id="rvUndoBtn">撤销</button><button class="review-btn skip" id="rvMergeBtn">合并</button><button class="review-btn skip" id="rvSkipBtn">留中</button><button class="review-btn del" id="rvDelBtn">焚毁</button><button class="review-btn approve" id="rvApproveBtn">准奏</button></div>'
     + '</div>'
     + '<div class="review-sidebar" id="rvSidebar"><div class="review-col"><div class="review-col-title">落款</div><button class="review-search-btn" data-search="source" title="搜索或新建">🔍</button><div class="review-opt-list" id="listSource"></div></div><div class="review-col"><div class="review-col-title">朱批</div><button class="review-search-btn" data-search="tag" title="搜索或新建">🔍</button><div class="review-opt-list" id="listTag"></div></div><div class="review-col"><div class="review-col-title">分门</div><button class="review-search-btn" data-search="cat" title="搜索或新建">🔍</button><div class="review-opt-list" id="listCat"></div></div></div>'
+    + '</div>'
+    
+    // ================= 合并奏折弹窗 (米黄复古版) =================
+    + '<div id="rvMergeOverlay">'
+    + '  <div class="rv-merge-box">'
+    + '    <div class="rv-merge-header">'
+    + '      <div>'
+    + '        <h3 class="rv-merge-title">合并奏折</h3>'
+    + '        <div class="rv-merge-subtitle">可自由勾选需要合并的素材</div>'
+    + '      </div>'
+    + '      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13.5px; color:#b92b27; font-weight:bold; background:#fdf0f0; padding:6px 12px; border-radius:6px; border:1px solid #ecc5c5; transition:all 0.2s;">'
+    + '        <input type="checkbox" id="rvMergeSelectAll" style="width:15px; height:15px; accent-color:#b92b27; cursor:pointer;"> 全选/全不选'
+    + '      </label>'
+    + '    </div>'
+    + '    <div class="rv-merge-list" id="rvMergeList">'
+    + '    </div>'
+    + '    <div class="rv-merge-footer">'
+    + '      <button class="rv-merge-btn cancel" id="rvMergeCancelBtn">取消</button>'
+    + '      <button class="rv-merge-btn confirm" id="rvMergeConfirmBtn">确认合并</button>'
+    + '    </div>'
+    + '  </div>'
+    + '</div>'
+    
     + '</div></div>';
 
   document.body.insertAdjacentHTML('beforeend', reviewHTML);
-
-  // ★ 关键修复：彻底干掉 textarea 的默认高度限制，同时把字数统计和快捷键提示改为跟随文本滚动
-  var fixStyle = document.createElement('style');
-  fixStyle.innerHTML = `
-    .review-textarea {
-      flex: none !important; 
-      min-height: calc(100% - 20px) !important;
-      overflow-y: hidden !important;
-      padding-bottom: 60px !important; 
-    }
-    .rv-word-count {
-      position: static !important;
-      text-align: right;
-      padding-right: 24px !important;
-      margin-top: -45px !important; 
-      height: 20px;
-      z-index: 10;
-      pointer-events: none;
-    }
-    .rv-shortcut-hint {
-      position: static !important;
-      padding-left: 24px !important;
-      margin-top: -20px !important;
-      height: 20px;
-      z-index: 10;
-      pointer-events: none;
-    }
-  `;
-  document.head.appendChild(fixStyle);
 
   var reviewQueue = [];
   var reviewCurrentId = null;
@@ -63,7 +86,7 @@
   var activeSearchType = null;
   var reviewStartTime = Date.now();
   var isStatsSaved = false;
-
+  
   var rvStyle = db.settings.reviewStyle || {
     size: '28px', line: '1.8', theme: 'default', lines: 'show',
     font: "'KaiTi', 'STKaiti', serif", pulse: 'off', imgs: 'show',
@@ -79,7 +102,6 @@
   };
 
   var pendingNextTimer = null;
-
   var autoApproveInterval = null, autoCloseTimer = null, undoTimer = null, undoCountdownInterval = null;
   var undoData = null;
   var battleStats = { approved: 0, skipped: 0, deleted: 0, chars: 0, tags: new Set() };
@@ -117,17 +139,10 @@
   }
 
   function updateWordCount() {
-    var textarea = document.getElementById('reviewText');
-    var text = textarea.value || '';
+    var text = document.getElementById('reviewText').value || '';
     var count = text.replace(/\s/g, '').length;
     document.getElementById('rvWordCount').textContent = (rvStyle.showWordCount && count > 0) ? '计 ' + count + ' 字' : '';
-
-    if (textarea) {
-      textarea.style.height = '0px';
-      textarea.style.height = textarea.scrollHeight + 'px';
-    }
   }
-
   function updateShortcutHint() {
     if (!rvStyle.enableShortcuts || !rvStyle.showShortcutHint) { document.getElementById('rvShortcutHint').textContent = ''; return; }
     var map = { 'ctrl-enter': 'Ctrl+Enter', 'alt-enter': 'Alt+Enter', 'enter': 'Enter' };
@@ -209,7 +224,7 @@
     if (isDel) { e.preventDefault(); document.getElementById('rvDelBtn').click(); return; }
   });
 
-  function applyReviewStyle(skipSave) {
+  function applyReviewStyle() {
     var paper = document.getElementById('reviewPaper');
     var textarea = document.getElementById('reviewText');
     var imgWrap = document.getElementById('reviewImgs');
@@ -277,11 +292,10 @@
     sidebar.classList.toggle('hidden', rvStyle.sidebar === 'hide');
     document.getElementById('rvApproveBtn').textContent = rvStyle.btnText;
     stampCorner.textContent = rvStyle.btnText;
-    
     updateWordCount();
     updateShortcutHint();
     db.settings.reviewStyle = rvStyle;
-    if (!skipSave && typeof save === 'function') save();
+    if (typeof save === 'function') save();
     resetAutoApproveTimer();
   }
 
@@ -341,7 +355,7 @@
   bindSelect('rvShortcutDel', 'shortcutDel');
   bindSelect('rvStatsRange', 'statsRange');
 
-  setTimeout(function () { applyReviewStyle(true); }, 100);
+  setTimeout(applyReviewStyle, 100);
 
   function getTodayStr() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function getYesterdayStr() { var d = new Date(); d.setDate(d.getDate() - 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -450,34 +464,22 @@
     var item = db.items.find(function (i) { return i.id === reviewCurrentId; });
     if (!item) { reviewNext(); return; }
     document.getElementById('reviewProgress').textContent = '剩 ' + reviewQueue.length + ' 条';
-    
-    var rvTextEl = document.getElementById('reviewText');
-    rvTextEl.value = item.text || '';
-    
+    document.getElementById('reviewText').value = item.text || '';
     updateWordCount();
-
     currentCat = db.settings.reviewFixedCat || item.type;
     var tagsSet = new Set(item.tags || []);
     if (db.settings.reviewFixedTags && db.settings.reviewFixedTags.length) db.settings.reviewFixedTags.forEach(function (t) { tagsSet.add(t); });
     currentTags = tagsSet;
     currentSource = db.settings.reviewFixedSource || item.source || (db.fixedSource || '');
     document.getElementById('rvCornerStamp').classList.remove('active');
-    
-    var rvBody = document.getElementById('rvBody'); 
-    if (rvBody) rvBody.scrollTop = 0;
-    rvTextEl.scrollTop = 0;
-    
+    var rvBody = document.getElementById('rvBody'); if (rvBody) rvBody.scrollTop = 0;
     activeSearchType = null;
     var imgWrap = document.getElementById('reviewImgs');
     if (item.images && item.images.length) {
       imgWrap.innerHTML = item.images.map(function (im) { var src = typeof imageSrc === 'function' ? imageSrc(im) : im.url; return '<img src="' + esc(src) + '" loading="lazy" data-review-img="' + esc(src) + '" data-img-path="' + esc(im.path || '') + '" title="点击查看原图">'; }).join('');
     } else imgWrap.innerHTML = '';
     renderAllPanels();
-    
-    rvTextEl.focus();
-    rvTextEl.scrollTop = 0;
-    if (rvBody) rvBody.scrollTop = 0;
-
+    document.getElementById('reviewText').focus();
     resetAutoApproveTimer();
     if (rvStyle.enableAnim && !isUndo) { rvBody.classList.remove('rv-anim-in'); void rvBody.offsetWidth; rvBody.classList.add('rv-anim-in'); }
   }
@@ -522,7 +524,6 @@
       if (tIdx >= 0) db.trash.splice(tIdx, 1);
       db.items.push(item);
       markItemDirty(item); _indexAddItem(item);
-      if (typeof markTrashDirty === 'function') markTrashDirty();
     } else {
       var existIdx = db.items.findIndex(function (i) { return i.id === item.id; });
       if (existIdx >= 0) {
@@ -562,11 +563,6 @@
 
   function reviewNext() {
     if (pendingNextTimer) { clearTimeout(pendingNextTimer); pendingNextTimer = null; }
-    while (reviewQueue.length > 0) {
-      var nextId = reviewQueue[0];
-      if (db.items.some(function (i) { return i.id === nextId; })) break;
-      reviewQueue.shift();
-    }
     reviewCurrentId = reviewQueue.length > 0 ? reviewQueue[0] : null;
     loadReviewItem();
   }
@@ -643,6 +639,8 @@
 
   function closeReview() {
     document.getElementById('reviewMask').classList.remove('show');
+    var mergeOverlay = document.getElementById('rvMergeOverlay');
+    if (mergeOverlay) mergeOverlay.style.display = 'none';
     reviewQueue = [];
     reviewCurrentId = null;
     isProcessingAction = false;
@@ -660,7 +658,9 @@
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && document.getElementById('reviewMask').classList.contains('show')) {
-      if (document.querySelector('.review-search-overlay')) closeSearchPopup();
+      var mergeOverlay = document.getElementById('rvMergeOverlay');
+      if (mergeOverlay && mergeOverlay.style.display !== 'none') mergeOverlay.style.display = 'none';
+      else if (document.querySelector('.review-search-overlay') && document.querySelector('.review-search-overlay') !== mergeOverlay) closeSearchPopup();
       else if (document.getElementById('rvCustomOverlay').classList.contains('show')) document.getElementById('rvCustomOverlay').classList.remove('show');
       else closeReview();
     }
@@ -677,6 +677,7 @@
 
   function renderColumn(containerId, allItems, fixedItem, currentVal, type) {
     var wrap = document.getElementById(containerId);
+    if (!wrap) return;
     var display = [], base = [];
     if (type === 'tag') {
       if (fixedItem) base.push.apply(base, fixedItem);
@@ -756,7 +757,7 @@
         if (db.settings.reviewFixedSource) currentSource = val;
         else if (currentSource === val) currentSource = '';
       } else if (type === 'tag') {
-        if (!Array.isArray(db.settings.reviewFixedTags)) db.settings.reviewFixedTags = [];
+        if (!db.settings.reviewFixedTags) db.settings.reviewFixedTags = [];
         var idx = db.settings.reviewFixedTags.indexOf(val);
         if (idx >= 0) { db.settings.reviewFixedTags.splice(idx, 1); currentTags.delete(val); }
         else { db.settings.reviewFixedTags.push(val); currentTags.add(val); }
@@ -785,10 +786,7 @@
       if (shouldPin) db.settings.reviewFixedCat = val;
     } else if (type === 'tag') {
       if (currentTags.has(val)) { if (!shouldPin) currentTags.delete(val); } else currentTags.add(val);
-      if (shouldPin) {
-        if (!Array.isArray(db.settings.reviewFixedTags)) db.settings.reviewFixedTags = [];
-        if (db.settings.reviewFixedTags.indexOf(val) < 0) db.settings.reviewFixedTags.push(val);
-      }
+      if (shouldPin && db.settings.reviewFixedTags.indexOf(val) < 0) db.settings.reviewFixedTags.push(val);
     } else if (type === 'source') {
       currentSource = val;
       if (db.sources.indexOf(val) < 0) db.sources.push(val);
@@ -796,6 +794,163 @@
     }
     if (typeof save === 'function') save();
   }
+
+  // ================= 合并逻辑（复古 UI + 完美展开） =================
+  var btnMerge = document.getElementById('rvMergeBtn');
+  if (btnMerge) {
+    btnMerge.addEventListener('click', function() {
+      if (reviewQueue.length < 2) { toast('至少需要 2 条待批阅素材才能合并'); return; }
+      var listWrap = document.getElementById('rvMergeList');
+      if (!listWrap) return;
+      document.getElementById('rvMergeSelectAll').checked = false;
+      var html = '';
+      reviewQueue.forEach(function(id, index) {
+        var item = db.items.find(function(i) { return i.id === id; });
+        if (!item) return;
+        var text = item.text || (item.images && item.images.length ? '【图片素材】' : '');
+        var safeText = esc(text);
+
+        html += '<div class="rv-merge-card" data-id="' + id + '">';
+        html += '  <input type="checkbox" class="rv-merge-checkbox">';
+        html += '  <div class="rv-merge-content">';
+        html += '    <div class="rv-merge-text">' + safeText + '</div>';
+        html += '    <div class="rv-merge-expand">展开全文</div>';
+        html += '  </div>';
+        html += '</div>';
+      });
+      listWrap.innerHTML = html;
+      document.getElementById('rvMergeOverlay').style.display = 'flex';
+
+      // 精准测量是否需要显示“展开全文”
+      setTimeout(function() {
+        var textDivs = document.querySelectorAll('.rv-merge-text');
+        textDivs.forEach(function(div) {
+          if (div.scrollHeight > div.clientHeight) {
+            var expandBtn = div.nextElementSibling;
+            if (expandBtn && expandBtn.classList.contains('rv-merge-expand')) {
+              expandBtn.style.display = 'inline-block';
+            }
+          }
+        });
+      }, 50);
+    });
+  }
+
+  var mergeListWrap = document.getElementById('rvMergeList');
+  if (mergeListWrap) {
+    mergeListWrap.addEventListener('click', function(e) {
+      if (e.target.classList.contains('rv-merge-expand')) {
+        e.stopPropagation();
+        var textDiv = e.target.previousElementSibling;
+        if (textDiv.classList.contains('expanded')) {
+          textDiv.classList.remove('expanded');
+          e.target.textContent = '展开全文';
+        } else {
+          textDiv.classList.add('expanded');
+          e.target.textContent = '收起';
+        }
+        return;
+      }
+
+      var card = e.target.closest('.rv-merge-card');
+      if (!card) return;
+      var cb = card.querySelector('.rv-merge-checkbox');
+      
+      if (e.target !== cb) {
+        cb.checked = !cb.checked;
+      }
+      
+      if (cb.checked) {
+        card.classList.add('selected');
+      } else {
+        card.classList.remove('selected');
+      }
+    });
+  }
+
+  var selectAllBtn = document.getElementById('rvMergeSelectAll');
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener('change', function(e) {
+      var isChecked = e.target.checked;
+      document.querySelectorAll('.rv-merge-card').forEach(function(card) {
+        var cb = card.querySelector('.rv-merge-checkbox');
+        cb.checked = isChecked;
+        if (isChecked) {
+          card.classList.add('selected');
+        } else {
+          card.classList.remove('selected');
+        }
+      });
+    });
+  }
+
+  var btnMergeCancel = document.getElementById('rvMergeCancelBtn');
+  if (btnMergeCancel) {
+    btnMergeCancel.addEventListener('click', function() {
+      document.getElementById('rvMergeOverlay').style.display = 'none';
+    });
+  }
+
+  var btnMergeConfirm = document.getElementById('rvMergeConfirmBtn');
+  if (btnMergeConfirm) {
+    btnMergeConfirm.addEventListener('click', function() {
+      var checks = document.querySelectorAll('.rv-merge-checkbox:checked');
+      if (checks.length < 2) { toast('请至少选择 2 条素材进行合并'); return; }
+      
+      var selectedIds = [];
+      checks.forEach(function(cb) { 
+        var card = cb.closest('.rv-merge-card');
+        if (card) selectedIds.push(card.dataset.id); 
+      });
+
+      selectedIds.sort(function(a, b) { return reviewQueue.indexOf(a) - reviewQueue.indexOf(b); });
+
+      var mainItem = db.items.find(function(i) { return i.id === selectedIds[0]; });
+      if (!mainItem) return;
+
+      var mergedText = [];
+      var mergedTags = new Set(mainItem.tags || []);
+      var mergedImages = (mainItem.images || []).slice();
+      
+      selectedIds.forEach(function(id, index) {
+        var item = db.items.find(function(i) { return i.id === id; });
+        if (!item) return;
+        if (index > 0 && item.text) mergedText.push(item.text);
+        if (index > 0) {
+          (item.tags || []).forEach(function(t) { mergedTags.add(t); });
+          if (item.images) {
+            item.images.forEach(function(im) {
+              var exists = mergedImages.some(function(mi) { return mi.path && mi.path === im.path; });
+              if (!exists) mergedImages.push(im);
+            });
+          }
+        }
+      });
+
+      var oldCopy = JSON.parse(JSON.stringify(mainItem));
+      if (mergedText.length > 0) {
+        mainItem.text = (mainItem.text ? mainItem.text + '\n\n' : '') + mergedText.join('\n\n');
+      }
+      mainItem.tags = Array.from(mergedTags);
+      mainItem.images = mergedImages;
+      mainItem.updatedAt = Date.now();
+      markItemDirty(mainItem);
+      _indexUpdateItem(oldCopy, mainItem);
+
+      var trashIds = selectedIds.slice(1);
+      moveToTrash(trashIds);
+      if (typeof save === 'function') save();
+
+      reviewQueue = reviewQueue.filter(function(id) { return selectedIds.indexOf(id) < 0 || id === mainItem.id; });
+      reviewCurrentId = mainItem.id;
+      
+      document.getElementById('rvMergeOverlay').style.display = 'none';
+      document.getElementById('reviewText').value = mainItem.text;
+      if (typeof toast === 'function') toast('已合并 ' + selectedIds.length + ' 条素材');
+      loadReviewItem();
+    });
+  }
+  // ================= 合并逻辑结束 =================
 
   window.startReview = function () {
     var focusCat = (db.settings && db.settings.focusModeCat) || '收件箱';
