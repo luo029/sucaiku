@@ -1,5 +1,5 @@
 // js/review.js · 完整文件
-// ★ 修复：解决双滚动条问题。文本框自动撑高，只保留外层的一条滚动条，并强制锁定在顶部。
+// ★ 修复：彻底解决右侧栏出现“白块”以及无法向下滑动的问题。
 
 (function() {
   // 注入合并弹窗的专属 CSS（米黄纸张复古版）
@@ -477,11 +477,9 @@
     var rvBody = document.getElementById('rvBody');
     rvTextEl.value = item.text || '';
     
-    // ★ 关键：计算文本框高度，使其完全展开
     rvTextEl.style.height = 'auto';
     rvTextEl.style.height = (rvTextEl.scrollHeight + 10) + 'px';
     
-    // 强制滚回顶部
     if (rvBody) rvBody.scrollTop = 0;
     
     updateWordCount();
@@ -500,7 +498,6 @@
     
     resetAutoApproveTimer();
     
-    // ★ 延迟聚焦，防止浏览器聚焦时把滚动条拉到底部
     setTimeout(function() {
       rvTextEl.focus({ preventScroll: true });
       rvTextEl.setSelectionRange(0, 0);
@@ -692,6 +689,12 @@
     }
   });
 
+  // 辅助函数：清洗不可见字符
+  function cleanText(str) {
+    if (typeof str !== 'string') return '';
+    return str.replace(/[\s\u3000\u200b]/g, '');
+  }
+
   function renderAllPanels() {
     renderColumn('listCat', getCatPool(), db.settings.reviewFixedCat, currentCat, 'cat');
     renderColumn('listTag', getTagPool(), db.settings.reviewFixedTags, Array.from(currentTags), 'tag');
@@ -704,21 +707,38 @@
   function renderColumn(containerId, allItems, fixedItem, currentVal, type) {
     var wrap = document.getElementById(containerId);
     if (!wrap) return;
-    var display = [], base = [];
+    
+    var base = [];
     if (type === 'tag') {
-      if (fixedItem) base.push.apply(base, fixedItem);
-      if (currentVal) base.push.apply(base, Array.isArray(currentVal) ? currentVal : [currentVal]);
+      if (fixedItem && Array.isArray(fixedItem)) base.push.apply(base, fixedItem);
+      if (currentVal && Array.isArray(currentVal)) base.push.apply(base, currentVal);
+      else if (currentVal) base.push(currentVal);
     } else {
       if (fixedItem) base.push(fixedItem);
       if (currentVal) base.push(currentVal);
     }
-    display = Array.from(new Set(base.filter(function (t) { return t && t.trim(); })));
-    if (display.length < 5) {
+
+    var display = [];
+    base.forEach(function(t) {
+      if (cleanText(t) !== '') {
+        var trimmed = t.trim();
+        if (display.indexOf(trimmed) < 0) display.push(trimmed);
+      }
+    });
+
+    if (display.length < 6) {
       for (var i = 0; i < allItems.length; i++) {
         if (display.length >= 6) break;
-        if (display.indexOf(allItems[i]) < 0) display.push(allItems[i]);
+        var item = allItems[i];
+        if (cleanText(item) !== '') {
+          var trimmedItem = item.trim();
+          if (display.indexOf(trimmedItem) < 0) {
+            display.push(trimmedItem);
+          }
+        }
       }
     }
+
     wrap.innerHTML = display.map(function (t) {
       var isActive = Array.isArray(currentVal) ? currentVal.indexOf(t) >= 0 : t === currentVal;
       var isPinned = type === 'tag' ? (fixedItem || []).indexOf(t) >= 0 : fixedItem === t;
@@ -752,7 +772,16 @@
     input.addEventListener('input', updateResults);
     input.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closeSearchPopup();
-      if (e.key === 'Enter') { e.preventDefault(); var val = input.value.trim(); if (val) { applyValue(type, val, true); closeSearchPopup(); } }
+      if (e.key === 'Enter') { 
+        e.preventDefault(); 
+        var val = input.value.trim(); 
+        if (val) { 
+          applyValue(type, val, true); 
+          closeSearchPopup(); 
+        } else {
+          closeSearchPopup();
+        }
+      }
     });
     resultsWrap.addEventListener('click', function (e) {
       var item = e.target.closest('.rv-search-item'); if (!item) return;
@@ -803,6 +832,8 @@
   });
 
   function applyValue(type, val, shouldPin) {
+    if (!val || typeof val !== 'string' || !val.trim()) return;
+
     if (type === 'cat') {
       currentCat = val;
       if (db.cats.indexOf(val) < 0) {
@@ -821,7 +852,7 @@
     if (typeof save === 'function') save();
   }
 
-  // ================= 合并逻辑（复古 UI + 完美展开） =================
+  // ================= 合并逻辑 =================
   var btnMerge = document.getElementById('rvMergeBtn');
   if (btnMerge) {
     btnMerge.addEventListener('click', function() {
@@ -847,7 +878,6 @@
       listWrap.innerHTML = html;
       document.getElementById('rvMergeOverlay').style.display = 'flex';
 
-      // 精准测量是否需要显示“展开全文”
       setTimeout(function() {
         var textDivs = document.querySelectorAll('.rv-merge-text');
         textDivs.forEach(function(div) {

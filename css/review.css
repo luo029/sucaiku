@@ -108,8 +108,8 @@
   padding: 0; margin: 0; letter-spacing: 2px;
   text-shadow: 0.5px 0.5px 1px rgba(0,0,0,0.08);
   white-space: pre-wrap; word-break: break-all; 
-  overflow: hidden !important; /* ★ 关键修复：彻底隐藏文本框自己的滚动条 */
-  min-height: calc(100vh - 200px); /* 保底高度 */
+  overflow: hidden !important; 
+  min-height: calc(100vh - 200px); 
   display: block;
   
   background-image: repeating-linear-gradient(
@@ -189,7 +189,6 @@
 .review-btn.approve:hover { transform: scale(1.03); box-shadow: 0 6px 16px rgba(185, 43, 39, 0.4); }
 .review-btn.approve:active { transform: scale(0.97); }
 
-/* 常驻的撤销按钮（平时隐藏，操作后出现） */
 .review-btn.undo-btn {
   background: #fdf0f0; border-color: #ecc5c5; color: #c0392b;
   display: none; animation: fadeIn 0.2s; margin-right: 8px;
@@ -212,6 +211,8 @@
   flex: 1; display: flex; flex-direction: column; align-items: center;
   border-right: 1px dashed var(--rv-panel-border, #d4a59a);
   height: 100%; padding: 0 4px;
+  min-height: 0; 
+  width: 33.33%;
 }
 .review-col:last-child { border-right: none; }
 
@@ -230,11 +231,26 @@
 }
 .review-search-btn:hover { color: #b92b27; border-color: #b92b27; }
 
+/* 列表容器：强制纵向排列，且溢出滚动 */
 .review-opt-list {
-  display: flex; flex-wrap: wrap; flex-direction: column; align-items: center; justify-content: flex-start;
-  gap: 6px; width: 100%; overflow-y: auto; overflow-x: hidden;
-  padding-bottom: 10px; flex: 1; max-height: calc(100% - 80px);
+  display: flex; 
+  flex-direction: column; /* 垂直往下排 */
+  flex-wrap: nowrap;    /* ★ 关键：绝对不允许折行（拒绝白框） */
+  align-items: center; 
+  justify-content: flex-start;
+  gap: 6px; width: 100%; 
+  overflow-y: auto;     /* ★ 关键：内容过多时垂直滚动 */
+  overflow-x: hidden;
+  padding-bottom: 10px; flex: 1; 
+  min-height: 0; 
+  writing-mode: horizontal-tb; /* ★ 关键：防止滚动条方向错乱 */
 }
+
+/* 针对列内滚动条进行专门的极细美化 */
+.review-opt-list::-webkit-scrollbar { width: 4px; }
+.review-opt-list::-webkit-scrollbar-track { background: transparent; }
+.review-opt-list::-webkit-scrollbar-thumb { background: rgba(185, 43, 39, 0.4); border-radius: 2px; }
+.review-opt-list::-webkit-scrollbar-thumb:hover { background: #b92b27; }
 
 .review-pill {
   writing-mode: vertical-rl; text-orientation: upright; position: relative;
@@ -243,6 +259,7 @@
   background: var(--rv-bg, #fff); border: 1px solid var(--rv-panel-border, #d0c2b0); color: var(--rv-text, #5d3a1a); 
   transition: all 0.15s; user-select: none; box-shadow: 0 1px 3px rgba(0,0,0,0.02);
   display: flex; align-items: center; justify-content: center; letter-spacing: 1px;
+  flex-shrink: 0; /* 防止被挤压变形 */
 }
 .review-pill:hover { border-color: #b92b27; color: #b92b27; }
 .review-pill.active { background: #b92b27; border-color: #8a1f1c; color: #fff; font-weight: bold; }
@@ -357,7 +374,7 @@
 }
 .review-paper.theme-dark .rv-set-select { background: #333; color: #ddd; border-color: #555; }
 
-/* ================= 阅毕画面（防遮挡一屏显示版） ================= */
+/* ================= 阅毕画面 ================= */
 .review-completed {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; z-index: 100;
@@ -381,7 +398,6 @@
   flex: none;
 }
 
-/* ★ 御赐封号徽章 */
 .rv-title-badge {
   font-size: 16px; font-weight: bold; color: #b92b27;
   background: #fdf0f0; border: 2px dashed #ecc5c5;
@@ -408,7 +424,6 @@
   color: #b92b27; font-weight: bold; font-size: 1.15em;
 }
 
-/* 统计列表左右两端对齐 */
 .battle-history-stats {
   display: flex; flex-direction: column; gap: 12px;
 }
@@ -424,7 +439,6 @@
 }
 .battle-history-row .hl-red { color: #b92b27; }
 
-/* ★ 战报左右分栏模式 */
 .battle-card.split-layout {
   display: flex;
   flex-direction: row;
@@ -511,6 +525,7 @@
     align-items: flex-start;
     flex: none;
     min-width: 0;
+    width: auto;
   }
   .review-col:last-child { border-right: none; }
 
@@ -545,6 +560,7 @@
     align-items: center;
     gap: 6px;
     scrollbar-width: thin;
+    writing-mode: horizontal-tb;
   }
 
   .review-pill {
