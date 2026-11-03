@@ -1,5 +1,5 @@
 // js/review.js · 完整文件
-// ★ 回退到带米黄纸张背景、卡片边框的 UI 版本，保留【展开全文】的精准测量修复。
+// ★ 修复：解决双滚动条问题。文本框自动撑高，只保留外层的一条滚动条，并强制锁定在顶部。
 
 (function() {
   // 注入合并弹窗的专属 CSS（米黄纸张复古版）
@@ -185,7 +185,14 @@
     resetAutoApproveTimer();
   });
   document.getElementById('reviewMask').addEventListener('keydown', resetAutoApproveTimer);
-  document.getElementById('reviewText').addEventListener('input', function () { resetAutoApproveTimer(); updateWordCount(); });
+  
+  var rvTextEl = document.getElementById('reviewText');
+  rvTextEl.addEventListener('input', function () { 
+    resetAutoApproveTimer(); 
+    updateWordCount(); 
+    this.style.height = 'auto';
+    this.style.height = (this.scrollHeight + 10) + 'px'; 
+  });
 
   document.getElementById('reviewImgs').addEventListener('click', function (e) {
     var img = e.target.closest('img[data-review-img]');
@@ -202,7 +209,7 @@
     else if (e.shiftKey && e.altKey && !e.ctrlKey) { e.preventDefault(); var it = document.querySelectorAll('#listTag .review-pill'); if (it[num - 1]) it[num - 1].click(); }
   });
 
-  document.getElementById('reviewText').addEventListener('keydown', function (e) {
+  rvTextEl.addEventListener('keydown', function (e) {
     if (!rvStyle.enableShortcuts || isProcessingAction) return;
     var isApprove = rvStyle.shortcutApprove && (
       (rvStyle.shortcutApprove === 'ctrl-enter' && (e.ctrlKey || e.metaKey) && e.key === 'Enter') ||
@@ -226,7 +233,6 @@
 
   function applyReviewStyle() {
     var paper = document.getElementById('reviewPaper');
-    var textarea = document.getElementById('reviewText');
     var imgWrap = document.getElementById('reviewImgs');
     var stamp = document.getElementById('rvStamp');
     var sidebar = document.getElementById('rvSidebar');
@@ -286,7 +292,7 @@
     paper.classList.remove('theme-dark', 'theme-aged');
     if (rvStyle.theme === 'dark') paper.classList.add('theme-dark');
     if (rvStyle.theme === 'aged') paper.classList.add('theme-aged');
-    textarea.classList.toggle('hide-lines', rvStyle.lines === 'hide');
+    rvTextEl.classList.toggle('hide-lines', rvStyle.lines === 'hide');
     imgWrap.classList.toggle('hide-imgs', rvStyle.imgs === 'hide');
     stamp.classList.toggle('pulse', rvStyle.pulse === 'on');
     sidebar.classList.toggle('hidden', rvStyle.sidebar === 'hide');
@@ -297,6 +303,9 @@
     db.settings.reviewStyle = rvStyle;
     if (typeof save === 'function') save();
     resetAutoApproveTimer();
+    
+    rvTextEl.style.height = 'auto';
+    rvTextEl.style.height = (rvTextEl.scrollHeight + 10) + 'px';
   }
 
   document.getElementById('rvSettingsBtn').addEventListener('click', function (e) { e.stopPropagation(); document.getElementById('rvCustomOverlay').classList.add('show'); });
@@ -464,7 +473,17 @@
     var item = db.items.find(function (i) { return i.id === reviewCurrentId; });
     if (!item) { reviewNext(); return; }
     document.getElementById('reviewProgress').textContent = '剩 ' + reviewQueue.length + ' 条';
-    document.getElementById('reviewText').value = item.text || '';
+    
+    var rvBody = document.getElementById('rvBody');
+    rvTextEl.value = item.text || '';
+    
+    // ★ 关键：计算文本框高度，使其完全展开
+    rvTextEl.style.height = 'auto';
+    rvTextEl.style.height = (rvTextEl.scrollHeight + 10) + 'px';
+    
+    // 强制滚回顶部
+    if (rvBody) rvBody.scrollTop = 0;
+    
     updateWordCount();
     currentCat = db.settings.reviewFixedCat || item.type;
     var tagsSet = new Set(item.tags || []);
@@ -472,15 +491,22 @@
     currentTags = tagsSet;
     currentSource = db.settings.reviewFixedSource || item.source || (db.fixedSource || '');
     document.getElementById('rvCornerStamp').classList.remove('active');
-    var rvBody = document.getElementById('rvBody'); if (rvBody) rvBody.scrollTop = 0;
     activeSearchType = null;
     var imgWrap = document.getElementById('reviewImgs');
     if (item.images && item.images.length) {
       imgWrap.innerHTML = item.images.map(function (im) { var src = typeof imageSrc === 'function' ? imageSrc(im) : im.url; return '<img src="' + esc(src) + '" loading="lazy" data-review-img="' + esc(src) + '" data-img-path="' + esc(im.path || '') + '" title="点击查看原图">'; }).join('');
     } else imgWrap.innerHTML = '';
     renderAllPanels();
-    document.getElementById('reviewText').focus();
+    
     resetAutoApproveTimer();
+    
+    // ★ 延迟聚焦，防止浏览器聚焦时把滚动条拉到底部
+    setTimeout(function() {
+      rvTextEl.focus({ preventScroll: true });
+      rvTextEl.setSelectionRange(0, 0);
+      if (rvBody) rvBody.scrollTop = 0;
+    }, 50);
+
     if (rvStyle.enableAnim && !isUndo) { rvBody.classList.remove('rv-anim-in'); void rvBody.offsetWidth; rvBody.classList.add('rv-anim-in'); }
   }
 
@@ -571,7 +597,7 @@
     if (!reviewCurrentId) return false;
     var item = db.items.find(function (i) { return i.id === reviewCurrentId; });
     if (!item) return false;
-    var newText = document.getElementById('reviewText').value.trim();
+    var newText = rvTextEl.value.trim();
     var hasText = newText.length > 0;
     var hasImgs = item.images && item.images.length > 0;
 
@@ -945,7 +971,7 @@
       reviewCurrentId = mainItem.id;
       
       document.getElementById('rvMergeOverlay').style.display = 'none';
-      document.getElementById('reviewText').value = mainItem.text;
+      rvTextEl.value = mainItem.text;
       if (typeof toast === 'function') toast('已合并 ' + selectedIds.length + ' 条素材');
       loadReviewItem();
     });
