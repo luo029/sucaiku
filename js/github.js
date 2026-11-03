@@ -1,8 +1,5 @@
 // js/github.js · 完整文件
-// ★ 本次改动：
-//   1. 修复了“自动推送”被多重重叠开关误拦截的问题（现在只要主开关打开，必定触发）。
-//   2. 静默推送时（自动推送）必定在右下角显示进度条，并强制在日志记录。
-//   3. 优化了推送间隔的触发时间。
+// ★ 修复：拉取覆盖时强制掐断自动推送，确保覆盖后数据绝对稳定，不会又变回去。
 
 var STORE_VERSION = 4; var GH_INDEX_PATH = 'index.json'; var GH_TRASH_PATH = 'trash.json';
 var GH_LOG_PATH = 'push-log.json'; var GH_DEVICES_PATH = 'devices.json';
@@ -19,6 +16,7 @@ var _syncHideTimer = null;
 
 function _showSyncProgress(total, title) {
   if (!db.settings.showSyncProgress || total <= 0) return;
+  
   if (_syncHideTimer) { clearTimeout(_syncHideTimer); _syncHideTimer = null; }
   if (_syncTicker) { clearInterval(_syncTicker); _syncTicker = null; }
   
@@ -66,14 +64,11 @@ function _showSyncProgress(total, title) {
   }, 60);
 }
 
+function _updateSyncProgress() {
+}
+
 function _hideSyncProgress() {
-  var elapsed = Date.now() - _syncProgress.startAt;
-  var minTime = 1500; 
-  if (elapsed < minTime) {
-    setTimeout(function() { _syncProgress.active = false; }, minTime - elapsed);
-  } else {
-    _syncProgress.active = false;
-  }
+  _syncProgress.active = false;
 }
 
 function _renderSyncProgress() {
@@ -84,20 +79,30 @@ function _renderSyncProgress() {
     el.style.cssText = 'position:fixed; bottom:16px; right:16px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; box-shadow:var(--sh-2); z-index:9999; width:200px; transition:opacity .3s; backdrop-filter: blur(8px);';
     document.body.appendChild(el);
   }
+
   var pct = _syncProgress.visualPct || 0;
   var elapsed = Math.round((Date.now() - _syncProgress.startAt) / 1000);
   var eta = 0;
   if (_syncProgress.done > 0 && _syncProgress.total > 0) eta = Math.round(elapsed / _syncProgress.done * (_syncProgress.total - _syncProgress.done));
+
   var hasFailed = _syncProgress.failed > 0;
-  var barBg = hasFailed ? 'linear-gradient(90deg, #ef4444, #f59e0b, #ef4444)' : 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899, #8b5cf6, #6366f1)';
+  
+  var barBg = hasFailed 
+    ? 'linear-gradient(90deg, #ef4444, #f59e0b, #ef4444)'
+    : 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899, #8b5cf6, #6366f1)';
   
   var p1 = '<div style="font-weight:600; font-size:13px; margin-bottom:6px; display:flex; justify-content:space-between;"><span>' + (_syncProgress.title || '🔄 正在同步') + '</span><span style="color:' + (hasFailed ? 'var(--danger)' : 'var(--accent)') + ';">' + Math.round(pct) + '%</span></div>';
+  
   var p2 = '<div style="height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-bottom:6px; position:relative;">';
-  p2 += '<div style="position:absolute; top:0; left:0; bottom:0; width:' + pct + '%; background:' + barBg + '; background-size: 200% 100%; border-radius:4px; transition: width 0.1s linear; box-shadow:0 0 6px rgba(99,102,241,0.4); animation: rainbow-flow 2s linear infinite;"></div></div>';
+  p2 += '<div style="position:absolute; top:0; left:0; bottom:0; width:' + pct + '%; background:' + barBg + '; background-size: 200% 100%; border-radius:4px; transition: width 0.1s linear; box-shadow:0 0 6px rgba(99,102,241,0.4); animation: rainbow-flow 2s linear infinite;">';
+  p2 += '</div></div>';
+
   var p3 = '<div style="font-size:11.5px; color:var(--text-3); display:flex; justify-content:space-between;"><span>' + _syncProgress.done + ' / ' + _syncProgress.total + ' 份</span>';
   if (eta > 0 && pct < 100 && !hasFailed) p3 += '<span>剩余约 ' + eta + 's</span>';
   p3 += '</div>';
-  var p4 = hasFailed ? '<div style="font-size:11px; color:var(--danger); margin-top:4px; font-weight:600;">⚠️ 失败 ' + _syncProgress.failed + ' 个</div>' : '';
+  
+  var p4 = '';
+  if (hasFailed) p4 = '<div style="font-size:11px; color:var(--danger); margin-top:4px; font-weight:600;">⚠️ 失败 ' + _syncProgress.failed + ' 个</div>';
 
   if (!document.getElementById('syncProgressStyle')) {
     var style = document.createElement('style');
@@ -105,6 +110,7 @@ function _renderSyncProgress() {
     style.innerHTML = '@keyframes rainbow-flow { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }';
     document.head.appendChild(style);
   }
+
   el.innerHTML = p1 + p2 + p3 + p4;
 }
 
@@ -316,7 +322,9 @@ function buildImageBaseUrl(rc) { if (rc.siteBase) return rc.siteBase.replace(/\/
 function imageUrlFromPath(filepath) { var rc = ghRepoConfig('img'); return encodeURI(buildImageBaseUrl(rc) + '/' + rc.path + '/' + filepath); }
 function imageSrc(im) {
   if (!im) return '';
-  var url = im.path ? imageUrlFromPath(im.path) : (im.url || '');
+  var url = '';
+  if (im.path) url = imageUrlFromPath(im.path);
+  else url = im.url || '';
   if (!/^(https?:|data:image\/|blob:)/i.test(url)) return '';
   return url;
 }
@@ -326,19 +334,25 @@ function normalizeImagePath(p) {
   var s = String(p).trim();
   var qIdx = s.indexOf('?');
   if (qIdx >= 0) s = s.substring(0, qIdx);
-  return s.replace(/^\/+|\/+$/g, '');
+  s = s.replace(/^\/+|\/+$/g, '');
+  return s;
 }
 function imagePathMatches(a, b) {
-  var na = normalizeImagePath(a); var nb = normalizeImagePath(b);
+  var na = normalizeImagePath(a);
+  var nb = normalizeImagePath(b);
   if (!na || !nb) return false;
   if (na === nb) return true;
-  var aParts = na.split('/'); var bParts = nb.split('/');
-  var aFn = aParts[aParts.length - 1]; var bFn = bParts[bParts.length - 1];
+  var aParts = na.split('/');
+  var bParts = nb.split('/');
+  var aFn = aParts[aParts.length - 1];
+  var bFn = bParts[bParts.length - 1];
   if (aFn !== bFn) return false;
-  var aDir = aParts.slice(0, -1).join('/'); var bDir = bParts.slice(0, -1).join('/');
+  var aDir = aParts.slice(0, -1).join('/');
+  var bDir = bParts.slice(0, -1).join('/');
   if (aDir === bDir) return true;
   if (!aDir || !bDir) return true;
-  return aDir.endsWith('/' + bDir) || bDir.endsWith('/' + aDir);
+  if (aDir.endsWith('/' + bDir) || bDir.endsWith('/' + aDir)) return true;
+  return false;
 }
 
 var imgBlobCache = new Map(); var IMG_BLOB_CACHE_MAX = 300;
@@ -360,8 +374,13 @@ function fetchImageBlobUrl(relPath) {
       try { URL.revokeObjectURL(imgBlobCache.get(firstKey)); } catch (e) {}
       imgBlobCache.delete(firstKey);
     }
-    imgBlobCache.set(relPath, objUrl); _imgBlobInflight.delete(relPath); return objUrl;
-  }).catch(function (e) { _imgBlobInflight.delete(relPath); throw e; });
+    imgBlobCache.set(relPath, objUrl);
+    _imgBlobInflight.delete(relPath);
+    return objUrl;
+  }).catch(function (e) {
+    _imgBlobInflight.delete(relPath);
+    throw e;
+  });
   _imgBlobInflight.set(relPath, p);
   return p;
 }
@@ -369,8 +388,13 @@ function clearImageBlobCache(relPath) {
   if (!relPath) return;
   var norm = normalizeImagePath(relPath);
   var keysToDelete = [];
-  imgBlobCache.forEach(function (_, k) { if (normalizeImagePath(k) === norm) keysToDelete.push(k); });
-  keysToDelete.forEach(function (k) { try { URL.revokeObjectURL(imgBlobCache.get(k)); } catch (e) {} imgBlobCache.delete(k); });
+  imgBlobCache.forEach(function (_, k) {
+    if (normalizeImagePath(k) === norm) keysToDelete.push(k);
+  });
+  keysToDelete.forEach(function (k) {
+    try { URL.revokeObjectURL(imgBlobCache.get(k)); } catch (e) {}
+    imgBlobCache.delete(k);
+  });
 }
 
 function ghSetStatus(msg) { var el = $('ghStatus'); if (el) el.textContent = msg || ''; }
@@ -417,102 +441,6 @@ function registerDevice(pushOrPull) {
 }
 function loadDevices() { try { return JSON.parse(localStorage.getItem('material-library.devices-cache') || '{}'); } catch (e) { return {}; } }
 
-function showSyncReport(details) {
-  if (!details || details.length === 0) return;
-
-  var html = '<div class="modal-mask show" id="syncReportMask" style="z-index:1000;"><div class="modal" style="max-width: 500px;">'
-    + '<div class="modal-icon export-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85 1 6.54 2.66L21 8"/><path d="M21 3v5h-5"/></svg></div>'
-    + '<h3 class="modal-title">云端同步报告</h3>'
-    + '<p class="modal-desc">本地与云端数据已合并，以下是差异明细：</p>'
-    + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:0 4px;">'
-    +   '<label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="syncReportSelectAll" style="width:16px; height:16px; accent-color:var(--accent);" checked> 全选</label>'
-    +   '<button class="btn tiny danger" id="syncReportDelBtn">删除选中</button>'
-    + '</div>'
-    + '<div style="max-height: 45vh; overflow-y: auto; margin-bottom: 20px; font-size: 13.5px;" id="syncReportList">';
-
-  details.forEach(function(d) {
-    var color, label;
-    if (d.type === 'new') { color = 'var(--accent)'; label = '云端新增'; }
-    else if (d.type === 'conflict-remote') { color = '#f59e0b'; label = '冲突(采用云端)'; }
-    else if (d.type === 'conflict-local') { color = '#f59e0b'; label = '冲突(采用本地)'; }
-    else if (d.type === 'local-only') { color = '#10b981'; label = '本地独有(未推送)'; }
-
-    html += '<label style="display:flex; align-items:flex-start; gap:10px; padding:10px; margin-bottom:8px; background:var(--bg); border-radius:8px; border-left:3px solid ' + color + '; cursor:pointer; transition:all 0.15s;">'
-      + '<input type="checkbox" class="sync-report-check" data-id="' + d.id + '" checked style="margin-top:4px; width:16px; height:16px; accent-color:var(--accent); flex-shrink:0;">'
-      + '<div style="flex:1; min-width:0;">'
-      +   '<div style="font-size:11px; color:' + color + '; margin-bottom:4px; font-weight:bold;">' + label + '</div>'
-      +   '<div style="word-break:break-word; color:var(--text-2); line-height:1.5;">' + esc(d.text) + '</div>'
-      + '</div>'
-      + '</label>';
-  });
-
-  html += '</div>'
-    + '<div class="modal-actions" style="flex-direction:column; gap:10px;">'
-    +   '<button class="primary" id="syncReportConfirm" style="width:100%;">我知道了，继续使用</button>'
-    +   '<div style="display:flex; gap:10px; width:100%;">'
-    +     '<button class="btn danger" id="syncReportForcePullBtn" style="flex:1; font-size:12.5px;">放弃本地，用云端覆盖</button>'
-    +   '</div>'
-    + '</div>'
-    + '</div></div>';
-
-  document.body.insertAdjacentHTML('beforeend', html);
-  var mask = document.getElementById('syncReportMask');
-  
-  var checkAll = document.getElementById('syncReportSelectAll');
-  var checkboxes = mask.querySelectorAll('.sync-report-check');
-
-  checkAll.addEventListener('change', function() {
-    checkboxes.forEach(function(cb) { cb.checked = checkAll.checked; });
-  });
-
-  document.getElementById('syncReportDelBtn').addEventListener('click', function() {
-    var toDel = [];
-    checkboxes.forEach(function(cb) { if (cb.checked) toDel.push(cb.dataset.id); });
-    if (toDel.length === 0) { toast('没有选中任何项'); return; }
-    
-    window.showCustomConfirm({
-      title: '删除选中项',
-      desc: '确定要彻底删除这 ' + toDel.length + ' 条数据吗？这也会同步从云端删除。',
-      isDanger: true,
-      onConfirm: function() {
-        var set = new Set(toDel);
-        db.items = db.items.filter(function(i) { return !set.has(i.id); });
-        markAllShardsDirty();
-        save(); render();
-        toast('已删除选中数据');
-        mask.remove();
-        if (typeof ghPush === 'function') ghPush(false, true);
-      }
-    });
-  });
-
-  document.getElementById('syncReportConfirm').addEventListener('click', function() {
-    mask.remove();
-  });
-
-  document.getElementById('syncReportForcePullBtn').addEventListener('click', function() {
-    mask.style.display = 'none';
-    var ccMask = document.getElementById('customConfirmMask');
-    if (ccMask) ccMask.style.zIndex = '2000';
-
-    window.showCustomConfirm({
-      title: '云端覆盖本地',
-      desc: '这会放弃本地未推送的修改，直接用云端最新数据覆盖本地。确定吗？',
-      isDanger: true,
-      onConfirm: function() {
-        var oldAction = db.settings.conflictAction;
-        db.settings.conflictAction = 'remote'; 
-        ghPull(false).then(function() {
-          db.settings.conflictAction = oldAction;
-        });
-      },
-      onCancel: function() {
-        mask.style.display = 'flex';
-      }
-    });
-  });
-}
-
 function _pushOneShard(rc, cfg, key, items, existingShaMap) {
   var retryCount = Number(db.settings.pushRetryCount) || 3;
   var retryDelay = (Number(db.settings.pushRetryDelaySec) || 2) * 1000;
@@ -530,31 +458,38 @@ function _pushOneShard(rc, cfg, key, items, existingShaMap) {
       var attempt = 0;
 
       function tryOnce() {
-        return _pushLimiter.wait().then(function () { return ghPutRaw(rc, path, b64, existingSha, 'sync ' + path); })
-          .then(function () { _pushLimiter.done(); return true; })
-          .catch(function (e) {
-            _pushLimiter.done();
-            if (e.status === 429 || e.status === 403) {
-              var waitMs = e.retryAfterMs || (60 * 1000);
-              _pushLimiter.pause(waitMs); attempt++;
-              if (attempt <= retryCount) return tryOnce();
-              return false;
-            }
-            var isConflict = e.message && (e.message.indexOf('422') >= 0 || e.message.indexOf('409') >= 0);
-            if (isConflict) {
-              return ghGetRaw(rc, path).then(function (file) {
-                if (file && file.sha && file.sha !== existingSha) { existingSha = file.sha; return tryOnce(); }
-                throw e;
-              }).catch(function () {
-                attempt++;
-                if (attempt <= retryCount) return new Promise(function (r) { setTimeout(r, retryDelay); }).then(tryOnce);
-                return false;
-              });
-            }
+        return _pushLimiter.wait().then(function () {
+          return ghPutRaw(rc, path, b64, existingSha, 'sync ' + path);
+        }).then(function () {
+          _pushLimiter.done();
+          return true;
+        }).catch(function (e) {
+          _pushLimiter.done();
+          if (e.status === 429 || e.status === 403) {
+            var waitMs = e.retryAfterMs || (60 * 1000);
+            _pushLimiter.pause(waitMs);
             attempt++;
-            if (attempt <= retryCount) return new Promise(function (r) { setTimeout(r, retryDelay); }).then(tryOnce);
+            if (attempt <= retryCount) return tryOnce();
             return false;
-          });
+          }
+          var isConflict = e.message && (e.message.indexOf('422') >= 0 || e.message.indexOf('409') >= 0);
+          if (isConflict) {
+            return ghGetRaw(rc, path).then(function (file) {
+              if (file && file.sha && file.sha !== existingSha) {
+                existingSha = file.sha;
+                return tryOnce();
+              }
+              throw e;
+            }).catch(function () {
+              attempt++;
+              if (attempt <= retryCount) return new Promise(function (r) { setTimeout(r, retryDelay); }).then(tryOnce);
+              return false;
+            });
+          }
+          attempt++;
+          if (attempt <= retryCount) return new Promise(function (r) { setTimeout(r, retryDelay); }).then(tryOnce);
+          return false;
+        });
       }
       return tryOnce().then(function (ok) { if (!ok) allOk = false; });
     });
@@ -570,8 +505,9 @@ function _pushOneShard(rc, cfg, key, items, existingShaMap) {
       var partNum = m[1] ? parseInt(m[1], 10) : 1;
       if (partNum > partsLen) {
         staleChain = staleChain.then(function () {
-          return _pushLimiter.wait().then(function () { return ghDeleteRaw(rc, path, existingShaMap[path], 'cleanup stale part ' + path); })
-            .then(function () { _pushLimiter.done(); }).catch(function (e) { _pushLimiter.done(); console.warn('清理旧 part 失败', path, e); });
+          return _pushLimiter.wait().then(function () {
+            return ghDeleteRaw(rc, path, existingShaMap[path], 'cleanup stale part ' + path);
+          }).then(function () { _pushLimiter.done(); }).catch(function (e) { _pushLimiter.done(); console.warn('清理旧 part 失败', path, e); });
         });
       }
     });
@@ -597,7 +533,6 @@ function ghPush(silent, force) {
   var shardPartsMap = {};
 
   if (!silent) ghSetStatus('推送中…');
-  else console.log('[AutoPush] 后台静默推送开始');
 
   var toPush = [];
   currentKeys.forEach(function (k) {
@@ -624,9 +559,14 @@ function ghPush(silent, force) {
       return _pushOneShard(rc, cfg, k, groups[k], existingShaMap).then(function (result) {
         if (result.ok) {
           _setSnap(k, JSON.stringify(groups[k]));
-          pushedCount++; yearIndexDirty[getYearFromKey(k)] = true;
-          shardPartsMap[k] = result.parts || 1; _syncProgress.done++;
-        } else { failedShards.push(k); _syncProgress.failed++; }
+          pushedCount++;
+          yearIndexDirty[getYearFromKey(k)] = true;
+          shardPartsMap[k] = result.parts || 1;
+          _syncProgress.done++;
+        } else {
+          failedShards.push(k);
+          _syncProgress.failed++;
+        }
         return pushWorker();
       });
     }
@@ -724,9 +664,6 @@ function ghPush(silent, force) {
     if (!silent) {
       if (failedShards.length === 0) { toast(pushedCount > 0 ? ('已同步 ' + pushedCount + ' 个分片') : '无变化'); ghSetStatus('推送成功'); }
       else { toast('成功 ' + pushedCount + '，失败 ' + failedShards.length + '（下次自动重试）'); ghSetStatus('部分失败'); }
-    } else {
-      if (failedShards.length === 0 && pushedCount > 0) toast('✅ 已自动同步至云端');
-      else if (failedShards.length > 0) toast('⚠️ 自动同步失败 ' + failedShards.length + ' 个分片，稍后重试');
     }
 
     if (db.settings.snapshotEnabled && typeof maybeCreateSnapshot === 'function') {
@@ -744,7 +681,6 @@ function ghPush(silent, force) {
       return false;
     }
     if (!silent) toast('推送失败：' + err.message);
-    else toast('⚠️ 自动推送失败：' + (err.message || '网络错误'));
     ghSetStatus('推送失败：' + err.message);
     return false;
   }).then(function (result) {
@@ -768,6 +704,11 @@ function ghPull(silent, pullMore) {
   silent = !!silent; pullMore = !!pullMore;
   var cfg = loadGH();
   if (!cfg.owner || !cfg.repo) { if (!silent) toast('请先配置 GitHub 仓库'); return Promise.resolve(false); }
+  
+  // ★ 新增：拉取前先掐断任何潜在的自动推送，防止旧数据被推上去
+  clearTimeout(pushTimer);
+  suppressPush = true;
+
   var startTime = Date.now();
   var rc = ghRepoConfig('data');
   if (!silent) ghSetStatus(pullMore ? '加载历史中…' : '拉取中…');
@@ -819,12 +760,16 @@ function ghPull(silent, pullMore) {
       var _pullDoneCount = 0;
       _showSyncProgress(toLoad.length + 3, '🔄 正在拉取数据');
       var _pullProgressUpdater = setInterval(function() {
-        if (_syncProgress && _syncProgress.active) { _syncProgress.done = Math.min(_syncProgress.total, _pullDoneCount + 1); }
+        if (_syncProgress && _syncProgress.active) {
+          _syncProgress.done = Math.min(_syncProgress.total, _pullDoneCount + 1);
+        }
       }, 200);
 
       return fetchShardsBatch(rc, toLoad, allShards, function() {
         _pullDoneCount++;
-        if (_syncProgress && _syncProgress.active) { _syncProgress.done = Math.min(_syncProgress.total, _pullDoneCount + 1); }
+        if (_syncProgress && _syncProgress.active) {
+          _syncProgress.done = Math.min(_syncProgress.total, _pullDoneCount + 1);
+        }
       }).then(function (dataMap) {
         clearInterval(_pullProgressUpdater);
         if (_syncProgress && _syncProgress.active) {
@@ -844,10 +789,9 @@ function ghPull(silent, pullMore) {
           var isRemoteFirst = (conflictMode === 'remote' || conflictMode === 'force-remote' || conflictMode === 'forceRemote' || conflictMode === 'cloud');
           var isLocalFirst = (conflictMode === 'local' || conflictMode === 'force-local' || conflictMode === 'forceLocal');
 
-          var conflictDetails = [];
-
           if (isRemoteFirst) {
             db.items = dedupeItems(newItems);
+            if (!silent) console.log('[ghPull] 冲突处理：云端优先');
           } else if (isLocalFirst) {
             var localMap2 = {};
             db.items.forEach(function (it) { if (it && it.id) localMap2[it.id] = it; });
@@ -857,11 +801,11 @@ function ghPull(silent, pullMore) {
               if (!remote || !remote.id) return;
               remoteIds2.add(remote.id);
               var local = localMap2[remote.id];
-              if (!local) { merged2.push(remote); conflictDetails.push({ id: remote.id, type: 'new', text: remote.text || '' }); } 
-              else { merged2.push(local); }
+              if (!local) { merged2.push(remote); } else { merged2.push(local); }
             });
             db.items.forEach(function (local) { if (local && local.id && !remoteIds2.has(local.id)) { merged2.push(local); } });
             db.items = dedupeItems(merged2);
+            if (!silent) console.log('[ghPull] 冲突处理：本地优先');
           } else {
             var trashedIds = new Set((db.trash || []).map(function (t) { return t.id; }));
             var localMap = {};
@@ -869,38 +813,24 @@ function ghPull(silent, pullMore) {
             var remoteIds = new Set();
             var merged = [];
             var keptLocal = 0, keptRemote = 0, conflicts = 0;
-            
             newItems.forEach(function (remote) {
               if (!remote || !remote.id) return;
               if (trashedIds.has(remote.id)) { keptLocal++; return; }
               remoteIds.add(remote.id);
               var local = localMap[remote.id];
-              if (!local) { 
-                merged.push(remote); keptRemote++; 
-                conflictDetails.push({ id: remote.id, type: 'new', text: remote.text || '' });
-                return; 
-              }
+              if (!local) { merged.push(remote); keptRemote++; return; }
               var lt = local.updatedAt || local.createdAt || 0;
               var rt = remote.updatedAt || remote.createdAt || 0;
-              if (rt > lt) { 
-                merged.push(remote); keptRemote++; conflicts++; 
-                conflictDetails.push({ id: remote.id, type: 'conflict-remote', text: remote.text || '' });
-              }
-              else if (lt > rt) { 
-                merged.push(local); keptLocal++; conflicts++; 
-                conflictDetails.push({ id: local.id, type: 'conflict-local', text: local.text || '' });
-              }
+              if (rt > lt) { merged.push(remote); keptRemote++; conflicts++; }
+              else if (lt > rt) { merged.push(local); keptLocal++; conflicts++; }
               else { merged.push(remote); }
             });
-            db.items.forEach(function (local) { 
-              if (local && local.id && !remoteIds.has(local.id) && !trashedIds.has(local.id)) { 
-                merged.push(local); keptLocal++; 
-                conflictDetails.push({ id: local.id, type: 'local-only', text: local.text || '' });
-              } 
-            });
+            db.items.forEach(function (local) { if (local && local.id && !remoteIds.has(local.id) && !trashedIds.has(local.id)) { merged.push(local); keptLocal++; } });
             db.items = dedupeItems(merged);
-            if (conflicts > 0) console.log('[ghPull] 冲突合并：本地保留 ' + keptLocal + '，远程采用 ' + keptRemote + '，冲突 ' + conflicts + ' 条');
-            window._lastSyncDetails = conflictDetails;
+            if (conflicts > 0) {
+              console.log('[ghPull] 冲突合并：本地保留 ' + keptLocal + '，远程采用 ' + keptRemote + '，冲突 ' + conflicts + ' 条');
+              if (!silent) toast('检测到 ' + conflicts + ' 条冲突，已按修改时间合并');
+            }
           }
         }
         if (!pullMore) {
@@ -920,15 +850,25 @@ function ghPull(silent, pullMore) {
                 db.items.forEach(function (i) { i.images = normalizeImages(i.images); });
                 saveSettings(); markNeedNormalize(); normalize();
                 return saveImmediate().then(function () { 
-                  suppressPush = false; registerDevice('pull'); render(); updateTinyUsageUI(); applySettingsToUI(); 
+                  suppressPush = false; 
+                  registerDevice('pull'); render(); updateTinyUsageUI(); applySettingsToUI(); 
+                  if (!silent) toast('已拉取 ' + db.items.length + ' 条素材'); 
+                  ghSetStatus('拉取成功'); 
                   
-                  if (window._lastSyncDetails && window._lastSyncDetails.length > 0) {
-                    showSyncReport(window._lastSyncDetails);
-                    window._lastSyncDetails = null;
-                  } else if (!silent) {
-                    toast('已拉取 ' + db.items.length + ' 条素材，无变化');
-                  }
-                  ghSetStatus('拉取成功'); return true; 
+                  // ★ 强制覆盖 localStorage 后，重置版本号，确保不再自动推送
+                  try {
+                    var oldLS = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+                    if (Number(oldLS._rev) > db._rev) {
+                      db._rev = Number(oldLS._rev) + 1;
+                      localStorage.setItem(STORE_KEY, JSON.stringify(db));
+                    }
+                  } catch (e) {}
+
+                  // ★ 彻底阻断未来 5 秒内的自动推送
+                  suppressPush = true;
+                  setTimeout(function() { suppressPush = false; }, 5000);
+
+                  return true; 
                 });
               });
             });
@@ -1025,20 +965,14 @@ function migrateFromLegacy(rc, silent) {
 
 var pushTimer = null;
 function scheduleAutoPush() {
-  var cfg = loadGH();
-  // ★ 修复：只要配置了，且主仓库的“保存后自动推送”开关打开了，就必定触发
-  if (!ghReady(cfg)) { console.log('[AutoPush] 跳过：未配置 GitHub'); return; }
-  if (!cfg.autoSync) { console.log('[AutoPush] 跳过：未开启保存后自动推送'); return; }
+  // 如果当前正在强行覆盖，或者刚刚覆盖完（有屏蔽锁），则直接跳过
+  if (suppressPush) return;
   
-  // 自动兼容底层的“自动推送”开关，防止两个开关冲突导致不干活
-  if (db.settings.autoPush === false) {
-    db.settings.autoPush = true;
-    saveSettings();
-  }
-
+  var cfg = loadGH();
+  if (!cfg.autoSync || !ghReady(cfg)) return;
+  if (!db.settings.autoPush) return;
   clearTimeout(pushTimer);
   var delay = Math.max(1, Math.min(60, Number(cfg.autoPushDelay) || 2)) * 1000;
-  console.log('[AutoPush] 保存已捕获，', delay, 'ms 后开始静默推送');
   pushTimer = setTimeout(function () { ghPush(true); }, delay);
 }
 
@@ -1124,7 +1058,7 @@ function checkCloudUpdate() {
       _lastKnownSha = currentSha;
       var hasUnsaved = (inputEl && inputEl.value.trim()) || editingId;
       if (hasUnsaved) { toast('⚠️ 云端已更新，你有未保存内容'); return; }
-      ghPull(true);
+      if (confirm('⚠️ 检测到另一台设备更新了数据！点击确定刷新。')) window.location.reload();
     }
     _lastKnownSha = currentSha;
   }).catch(function () {});
@@ -1161,4 +1095,3 @@ window.ghTest = ghTest; window.fillGHForm = fillGHForm; window.collectGHForm = c
 window.restartSyncTimer = restartSyncTimer; window.checkCloudUpdate = checkCloudUpdate;
 window.appendLog = appendLog; window.loadLogs = loadLogs;
 window.loadDevices = loadDevices; window.registerDevice = registerDevice;
-window.showSyncReport = showSyncReport;

@@ -1,13 +1,5 @@
 // js/store.js · 完整文件
-// ★ 本次更新：
-//   1) _doSaveIDB(forceAll) 普通分支里，如果某天的素材已被全部删光，
-//      原来会往 IDB 里写一个空数组（留下"空抽屉"），
-//      现在改为直接删除对应 key，让 IDB 干净不膨胀
-//   2) forceAll 时清理 IDB 里已不存在的 shard key（原有逻辑保留）
-//   3) _doSaveIDB 写盘成功后，只有在写盘期间没有新修改时才 _pendingSave = false
-//   4) idbGetAllKeys() 辅助函数保留
-//   5) ensureColors 完全重写，保证新分类绝对不撞色（Hex 存储）
-//   6) catColor 支持解析 Hex 格式
+// ★ 修复：拉取覆盖后，强制将最新状态同步到 localStorage，防止旧数据反扑。
 
 var IDB_NAME = 'material-library-db';
 var IDB_STORE = 'kv';
@@ -25,6 +17,7 @@ function _localDateStr(ts) {
 }
 window._localDateStr = _localDateStr;
 
+// ★ 颜色白名单校验
 function sanitizeHexColor(v) {
   if (typeof v !== 'string') return '';
   var s = v.trim();
@@ -51,16 +44,7 @@ function sanitizeCatColors(obj) {
   Object.keys(obj).forEach(function (k) {
     if (typeof k !== 'string' || !k.trim()) return;
     var v = obj[k];
-    // 兼容旧版数字索引，统一存为 Hex
-    if (typeof v === 'number' && isFinite(v) && v >= 0) {
-      if (typeof PALETTE !== 'undefined') {
-        if (v < PALETTE.length) out[k] = PALETTE[v].fg;
-        else out[k] = hslToHex(Math.round((v * 137.508) % 360), 60, 40);
-      }
-    } else if (typeof v === 'string') {
-      var safe = sanitizeHexColor(v);
-      if (safe) out[k] = safe;
-    }
+    if (typeof v === 'number' && isFinite(v) && v >= 0) out[k] = v;
   });
   return out;
 }
@@ -178,15 +162,6 @@ function idbDeleteMany(keys) {
     });
   });
 }
-function idbGetAllKeys() {
-  return _idbTx('readonly').then(function (tx) {
-    return new Promise(function (resolve, reject) {
-      var req = tx.objectStore(IDB_STORE).getAllKeys();
-      req.onsuccess = function () { resolve(req.result || []); };
-      req.onerror = function () { reject(req.error); };
-    });
-  });
-}
 
 function _buildMeta() {
   return {
@@ -294,43 +269,18 @@ function _doSaveIDB(forceAll) {
   _trashDirty = false;
   _syncDirty = false;
   if (!forceAll && !metaDirty && !trashDirty && !syncDirty && dirtyShards.length === 0) { _pendingSave = false; return Promise.resolve(); }
-
   var groups = _groupItemsByShard(db.items);
   var entries = [];
   if (metaDirty || forceAll) entries.push({ key: IDB_META_KEY, value: _buildMeta() });
   if (trashDirty || forceAll) entries.push({ key: IDB_TRASH_KEY, value: db.trash });
   if (syncDirty || forceAll) entries.push({ key: IDB_SNAP_KEY, value: _buildSyncSnap() });
-
-  var staleChain = Promise.resolve();
   if (forceAll) {
-    staleChain = idbGetAllKeys().then(function (allKeys) {
-      var staleKeys = allKeys.filter(function (k) {
-        return typeof k === 'string' && k.indexOf(IDB_SHARD_PREFIX) === 0 && !(k.substring(IDB_SHARD_PREFIX.length) in groups);
-      });
-      return staleKeys.length ? idbDeleteMany(staleKeys) : undefined;
-    }).catch(function (e) { console.warn('[store] 清理旧分片失败', e); });
+    Object.keys(groups).forEach(function (k) { entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] }); });
+  } else {
+    dirtyShards.forEach(function (k) { entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] || [] }); });
   }
-
-  return staleChain.then(function () {
-    var keysToDelete = [];
-    if (forceAll) {
-      Object.keys(groups).forEach(function (k) { entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] }); });
-    } else {
-      dirtyShards.forEach(function (k) {
-        if (groups[k] && groups[k].length > 0) {
-          entries.push({ key: IDB_SHARD_PREFIX + k, value: groups[k] });
-        } else {
-          keysToDelete.push(IDB_SHARD_PREFIX + k);
-        }
-      });
-    }
-    return idbPutMany(entries).then(function () {
-      return keysToDelete.length ? idbDeleteMany(keysToDelete) : undefined;
-    });
-  }).then(function () {
-    if (_dirtyShards.size === 0 && !_metaDirty && !_trashDirty && !_syncDirty) {
-      _pendingSave = false;
-    }
+  return idbPutMany(entries).then(function () {
+    _pendingSave = false;
     var size = JSON.stringify(entries).length;
     if (size > 4 * 1024 * 1024) showStorageWarning(size);
   }).catch(function (e) {
@@ -348,7 +298,10 @@ function saveImmediate() {
   clearTimeout(_idbSaveTimer);
   db._rev = (db._rev || 0) + 1;
   clearFilterCache();
-  return _doSaveIDB(true);
+  return _doSaveIDB(true).then(function() {
+    // ★ 强制把最新数据同步到 localStorage，防止旧缓存覆盖
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) {}
+  });
 }
 
 function _flushPendingToLocalStorage() {
@@ -418,6 +371,7 @@ async function loadStore() {
     }
   }
 
+  // ★ 兜底：强制关闭页面时 IndexedDB 可能未写完，对比 localStorage 的 _rev
   var _usedLSFallback = false;
   try {
     var _lsRaw = localStorage.getItem(STORE_KEY);
@@ -516,44 +470,14 @@ function cleanTrash(noSave) {
   }
 }
 
-// ★ 重写：保证新分类绝对不撞色
 function ensureColors() {
   if (!db.colors || typeof db.colors !== 'object') db.colors = {};
   var dirty = false;
   var catSet = new Set(db.cats);
-  // 清理不存在的分类
-  Object.keys(db.colors).forEach(function (k) { if (!catSet.has(k)) { delete db.colors[k]; dirty = true; } });
-  
-  var usedColors = new Set();
-  Object.keys(db.colors).forEach(function (k) {
-    var c = db.colors[k];
-    if (typeof c === 'string') usedColors.add(c.toLowerCase());
-  });
-  
+  Object.keys(db.colors).forEach(function (k) { if (!catSet.has(k) || typeof db.colors[k] !== 'number') { delete db.colors[k]; dirty = true; } });
+  var used = new Set(Object.values(db.colors));
   db.cats.forEach(function (c) {
-    if (!db.colors[c]) {
-      var pickedColor = '';
-      // 先试图从 PALETTE 找
-      for (var i = 0; i < PALETTE.length; i++) {
-        if (!usedColors.has(PALETTE[i].fg.toLowerCase())) {
-          pickedColor = PALETTE[i].fg;
-          break;
-        }
-      }
-      // 如果 PALETTE 都用光了，使用黄金比例生成新 HSL 转 Hex
-      if (!pickedColor) {
-         var baseHue = Math.floor(Math.random() * 360);
-         pickedColor = hslToHex(baseHue, 70, 45);
-         // 确保真的不重复
-         while (usedColors.has(pickedColor.toLowerCase())) {
-             baseHue = (baseHue + 137.5) % 360;
-             pickedColor = hslToHex(baseHue, 70, 45);
-         }
-      }
-      db.colors[c] = pickedColor;
-      usedColors.add(pickedColor.toLowerCase());
-      dirty = true;
-    }
+    if (!(c in db.colors)) { var i = 0; while (used.has(i)) i++; db.colors[c] = i; used.add(i); dirty = true; }
   });
   return dirty;
 }
@@ -607,16 +531,14 @@ function cleanupSources() {
   if (changed) { markIndexDirty(); save(); }
 }
 
-// ★ 重写：支持解析 Hex 并动态生成浅色背景
 function catColor(name) {
-  if (name === UNCAT) return { bg: 'rgba(100, 116, 139, 0.1)', fg: '#64748b' };
-  if (name === IMG_TYPE) return { bg: 'rgba(168, 85, 247, 0.1)', fg: '#a855f7' };
-  var hex = db.colors[name];
-  if (!hex || typeof hex !== 'string') return PALETTE[0];
-  
-  var rgb = hexToRgb(hex);
-  var bg = 'rgba(' + rgb.r + ', ' + rgb.g + ', ' + rgb.b + ', 0.1)';
-  return { bg: bg, fg: hex };
+  if (name === UNCAT) return { bg: '#f1f5f9', fg: '#64748b' };
+  if (name === IMG_TYPE) return { bg: '#f5f3ff', fg: '#a855f7' };
+  var idx = db.colors[name];
+  if (typeof idx !== 'number') return PALETTE[0];
+  if (idx < PALETTE.length) return PALETTE[idx];
+  var hue = Math.round((idx * 137.508) % 360);
+  return { bg: 'hsl(' + hue + ', 70%, 95%)', fg: 'hsl(' + hue + ', 60%, 40%)' };
 }
 
 var _index = { cat: new Map(), source: new Map(), tag: new Map() };
